@@ -124,7 +124,9 @@ public final class ParticleGpu {
         listOn = false;
         n = 0;
         nRot = 0;
-        if (!enabled || bb == null || !partsReady()) return;
+        // only with the particle shader patched and the draw hook seen working (PartDrawMixin's _drawWithShader): without
+        // either the records would never be drawn - the particles gone (an N100 run with most of the engine off)
+        if (!enabled || bb == null || !patched || !hookSeen || !partsReady()) return;
         if (((dev.lull.opt.BufferBuilderAccessor) bb).sleep$format() != DefaultVertexFormat.PARTICLE
                 || ((dev.lull.opt.BufferBuilderAccessor) bb).sleep$mode() != VertexFormat.Mode.QUADS) return;
         for (Particle p : queue)
@@ -242,7 +244,11 @@ public final class ParticleGpu {
         });
     }
 
+    /** the draw hook ran (PartDrawMixin applied): records can be drawn */
+    private static volatile boolean hookSeen;
+
     public static void beforeDraw(ShaderInstance shader, com.mojang.blaze3d.vertex.VertexBuffer vb) {
+        if (!hookSeen) hookSeen = true;
         if (!pending) return;
         pending = false;
         int[] st = program(shader);
