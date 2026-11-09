@@ -39,7 +39,8 @@ public abstract class EntityCollideMemoMixin {
      */
     @Unique
     private static Vec3 sleep$collide(@Nullable Entity entity, Vec3 vec, AABB collisionBox, AABB bb, Level level, List<VoxelShape> potentialHits) {
-        if (dev.lull.optsupport.CollideKernel.ON && dev.lull.optsupport.CollideKernel.usable() && BlockCollisionMemo.usable(level)) {
+        if (dev.lull.optsupport.CollideKernel.ON && dev.lull.optsupport.CollideKernel.usable()
+                && (BlockCollisionMemo.usable(level) || dev.lull.optsupport.ParticleWorkers.inWorker())) {
             if (dev.lull.optsupport.CollideKernel.CHECK && dev.lull.optsupport.CollideKernel.vanilla == null)
                 dev.lull.optsupport.CollideKernel.vanilla = (e, v, cb, b, l, ph) -> collideWithShapes(v, cb, collectColliders(e, l, ph, b));
             Vec3 r = dev.lull.optsupport.CollideKernel.of(level).collide(entity, vec, collisionBox, bb, level, potentialHits);

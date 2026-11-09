@@ -13,4 +13,10 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface ParticleEngineAccessor {
     @Accessor("particles")
     Map<ParticleRenderType, Queue<Particle>> sleep$particles();
+
+    @org.spongepowered.asm.mixin.gen.Invoker("tickParticle")
+    void sleep$tickParticle(Particle particle);
+
+    @org.spongepowered.asm.mixin.gen.Invoker("updateCount")
+    void sleep$updateCount(net.minecraft.core.particles.ParticleGroup group, int count);
 }

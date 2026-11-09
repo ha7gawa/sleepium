@@ -193,6 +193,7 @@
     "QuadGpuMixin",
     "ParticleShapeMemoMixin",
     "EntityShapeMemoMixin",
+    "ParallelParticlesMixin",
     "ParticleEngineAccessor",
     "SpriteImageAccessor",
     "ShaderStateShardAccessor",

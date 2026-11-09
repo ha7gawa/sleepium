@@ -61,8 +61,17 @@ public final class CollideKernel {
     }
 
     public static CollideKernel of(Level level) {
+        if (ParticleWorkers.inWorker()) return WORKERS.get();
         return level.isClientSide() ? CLIENT : SERVER;
     }
+
+    /** ParallelParticles' workers: a kernel each; non-static shapes come from the render thread, masks only when current */
+    private static final ThreadLocal<CollideKernel> WORKERS = ThreadLocal.withInitial(() -> {
+        CollideKernel k = new CollideKernel();
+        k.worker = true;
+        return k;
+    });
+    private boolean worker;
 
     // the collected shapes, in order: kind 0 a VoxelShape (shapes[i]), kind 1 a full block at (ox, oy, oz)[i]
     private byte[] kind = new byte[64];
@@ -228,6 +237,17 @@ public final class CollideKernel {
                         VoxelShape shape = state instanceof BlockCollisionMemo.StaticShape st ? st.sleep$staticCollision() : null;
                         Cell cell = null;
                         long key = 0;
+                        if (shape == null && worker) {   // a particle on a pool worker: the render thread's shape for this cell
+                            VoxelShape moved = ParticleWorkers.shape(state, level, x, y, z);
+                            if (moved == Shapes.block()) {
+                                if (bb.intersects((double) x, (double) y, (double) z, (double) x + 1.0, (double) y + 1.0, (double) z + 1.0))
+                                    addCube((double) x, (double) y, (double) z);
+                            } else if (!moved.isEmpty()) {
+                                if (entityShape == null) entityShape = Shapes.create(bb);
+                                if (Shapes.joinIsNotEmpty(moved, entityShape, BooleanOp.AND)) add(moved);
+                            }
+                            continue;
+                        }
                         // the windows are the client's (its render thread's): the server kernel never takes them
                         boolean window = this == CLIENT && (entity == null ? particleWindow : entityWindow);
                         if (shape == null && window) {
@@ -250,6 +270,7 @@ public final class CollideKernel {
                                 }
                                 moved = sh == Shapes.block() || sh.isEmpty() ? sh : sh.move((double) x, (double) y, (double) z);
                                 PARTICLE_SHAPES.put(key, new Cell(state, free ? moved : null));
+                                if (entity == null) ParticleWorkers.offer(state, x, y, z, moved);   // the workers of this tick may take it
                                 if (entity == null) particleShapeMisses++;
                                 else if (free) entityShapeMisses++;
                                 else entityShapeBound++;
@@ -304,7 +325,7 @@ public final class CollideKernel {
             maskSy = sy;
             int idx = lc.getSectionIndexFromSectionY(sy);
             LevelChunkSection s = idx >= 0 && idx < lc.getSections().length ? lc.getSection(idx) : null;
-            mask = s instanceof CollisionMask.Holder h ? h.sleep$mask() : null;
+            mask = s instanceof CollisionMask.Holder h ? (worker ? h.sleep$maskIfCurrent() : h.sleep$mask()) : null;
         }
         long[] m = mask;
         if (m == null) return false;
@@ -437,6 +458,6 @@ public final class CollideKernel {
     public static String report() {
         return String.format(java.util.Locale.ROOT, "collide kernel: calls %d, checked %d, MISMATCHES %d, particle shapes kept %d (asked %d), entity shapes kept %d (asked %d, bound to the context %d; blocks proven context-free %d, not %d), iterator shapes kept %d (asked %d)", calls, checked,
                 mismatches, particleShapeHits, particleShapeMisses, entityShapeHits, entityShapeMisses, entityShapeBound, ShapePurity.contextFree, ShapePurity.contextBound,
-                getterShapeHits, getterShapeMisses) + "; " + ParticleStats.report();
+                getterShapeHits, getterShapeMisses);
     }
 }

@@ -22,6 +22,9 @@ public final class CollisionMask {
     /** A chunk section's mask (SectionModCountMixin), current for its contents. */
     public interface Holder {
         long[] sleep$mask();
+
+        /** the mask only if it is built for the section as it is (no build: other threads may read it meanwhile), else null */
+        long[] sleep$maskIfCurrent();
     }
 
     private static Boolean usable;
