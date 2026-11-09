@@ -194,6 +194,8 @@
     "ParticleShapeMemoMixin",
     "EntityShapeMemoMixin",
     "ParallelParticlesMixin",
+    "ParticleCullNoAllocMixin",
+    "ParticlePosAccessor",
     "ParticleEngineAccessor",
     "SpriteImageAccessor",
     "ShaderStateShardAccessor",

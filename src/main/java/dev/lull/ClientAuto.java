@@ -397,6 +397,12 @@ public final class ClientAuto {
     static void register(IEventBus bus) {
         bus.addListener(ClientTickEvent.Post.class, e -> tick());
         log("enabled, label '" + LABEL + "'");
+        // -Dsleep.clientAuto.asPlayers=true: vanilla's development-only paths off, as in a player's game (e.g. the
+        // two warnings per sound that finds the channel pool full: a dev run measured their logging, not the game)
+        if (Boolean.getBoolean("sleep.clientAuto.asPlayers")) {
+            net.minecraft.SharedConstants.IS_RUNNING_IN_IDE = false;
+            log("development-only paths off (as in a player's game)");
+        }
     }
 
     private static void log(String s) {
