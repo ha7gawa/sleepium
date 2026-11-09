@@ -12,6 +12,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -45,6 +46,13 @@ public abstract class BlockCollisionsFastMixin {
             sleep$mode = (byte) (collisionGetter instanceof Level l && !l.isDebug() && OwnerThread.owns(l) && CollisionMask.usable() ? 1 : 2);
         if (sleep$mode == 1 && getter instanceof LevelChunk chunk && sleep$empty(chunk, pos)) return Blocks.AIR.defaultBlockState();
         return getter.getBlockState(pos);
+    }
+
+    /** in the client's entity tick: the position's shape kept for the tick when it does not depend on who asks (CollideKernel.windowShape) */
+    @Redirect(method = "computeNext", require = 0, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/level/block/state/BlockState;getCollisionShape(Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/phys/shapes/CollisionContext;)Lnet/minecraft/world/phys/shapes/VoxelShape;"))
+    private VoxelShape sleep$shape(BlockState state, BlockGetter getter, BlockPos pos, CollisionContext ctx) {
+        return dev.lull.optsupport.CollideKernel.windowShape(state, getter, pos, ctx, collisionGetter);
     }
 
     /** the cell's state can never collide (its section's mask bit is clear) */
