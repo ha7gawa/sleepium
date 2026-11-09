@@ -110,6 +110,7 @@ public final class QuadGpu {
         }
         runBb = bb;
         runType = type;
+        snapshot(pose);
         RUN_POSE.pose().set(pose.pose());
         RUN_POSE.normal().set(pose.normal());
         runLight = light;
@@ -128,8 +129,36 @@ public final class QuadGpu {
         return true;
     }
 
+    /** the run's pose as raw float bits (compared per quad: the translation first, where poses of other objects differ) */
+    private static int p30, p31, p32, p00, p01, p02, p03, p10, p11, p12, p13, p20, p21, p22, p23, p33;
+    private static int n00, n01, n02, n10, n11, n12, n20, n21, n22;
+
+    private static void snapshot(PoseStack.Pose pose) {
+        org.joml.Matrix4f m = pose.pose();
+        org.joml.Matrix3f n = pose.normal();
+        p30 = Float.floatToRawIntBits(m.m30()); p31 = Float.floatToRawIntBits(m.m31()); p32 = Float.floatToRawIntBits(m.m32());
+        p00 = Float.floatToRawIntBits(m.m00()); p01 = Float.floatToRawIntBits(m.m01()); p02 = Float.floatToRawIntBits(m.m02()); p03 = Float.floatToRawIntBits(m.m03());
+        p10 = Float.floatToRawIntBits(m.m10()); p11 = Float.floatToRawIntBits(m.m11()); p12 = Float.floatToRawIntBits(m.m12()); p13 = Float.floatToRawIntBits(m.m13());
+        p20 = Float.floatToRawIntBits(m.m20()); p21 = Float.floatToRawIntBits(m.m21()); p22 = Float.floatToRawIntBits(m.m22()); p23 = Float.floatToRawIntBits(m.m23());
+        p33 = Float.floatToRawIntBits(m.m33());
+        n00 = Float.floatToRawIntBits(n.m00()); n01 = Float.floatToRawIntBits(n.m01()); n02 = Float.floatToRawIntBits(n.m02());
+        n10 = Float.floatToRawIntBits(n.m10()); n11 = Float.floatToRawIntBits(n.m11()); n12 = Float.floatToRawIntBits(n.m12());
+        n20 = Float.floatToRawIntBits(n.m20()); n21 = Float.floatToRawIntBits(n.m21()); n22 = Float.floatToRawIntBits(n.m22());
+    }
+
+    /** the pose holds exactly the run's values (raw bits: stricter than equals, never looser) */
     private static boolean samePose(PoseStack.Pose pose) {
-        return pose.pose().equals(RUN_POSE.pose()) && pose.normal().equals(RUN_POSE.normal());
+        org.joml.Matrix4f m = pose.pose();
+        if (Float.floatToRawIntBits(m.m30()) != p30 || Float.floatToRawIntBits(m.m31()) != p31 || Float.floatToRawIntBits(m.m32()) != p32) return false;
+        if (Float.floatToRawIntBits(m.m00()) != p00 || Float.floatToRawIntBits(m.m01()) != p01 || Float.floatToRawIntBits(m.m02()) != p02
+                || Float.floatToRawIntBits(m.m10()) != p10 || Float.floatToRawIntBits(m.m11()) != p11 || Float.floatToRawIntBits(m.m12()) != p12
+                || Float.floatToRawIntBits(m.m20()) != p20 || Float.floatToRawIntBits(m.m21()) != p21 || Float.floatToRawIntBits(m.m22()) != p22
+                || Float.floatToRawIntBits(m.m03()) != p03 || Float.floatToRawIntBits(m.m13()) != p13 || Float.floatToRawIntBits(m.m23()) != p23
+                || Float.floatToRawIntBits(m.m33()) != p33) return false;
+        org.joml.Matrix3f n = pose.normal();
+        return Float.floatToRawIntBits(n.m00()) == n00 && Float.floatToRawIntBits(n.m01()) == n01 && Float.floatToRawIntBits(n.m02()) == n02
+                && Float.floatToRawIntBits(n.m10()) == n10 && Float.floatToRawIntBits(n.m11()) == n11 && Float.floatToRawIntBits(n.m12()) == n12
+                && Float.floatToRawIntBits(n.m20()) == n20 && Float.floatToRawIntBits(n.m21()) == n21 && Float.floatToRawIntBits(n.m22()) == n22;
     }
 
     /**
