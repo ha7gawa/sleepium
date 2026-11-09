@@ -58,8 +58,14 @@ def check(ids):
     with Server([]) as srv:
         srv.wait_for(r'Done \(')
         for b in ids:
-            m = srv.ask('setblock 0 -50 0 ' + b, r'Changed the block|Could not set the block|Unknown block type|Incorrect argument|Unknown or incomplete|threw an exception')
-            r = srv.ask('setblock 0 -50 0 minecraft:air', r'Changed the block|Could not set the block|threw an exception')
+            try:
+                m = srv.ask('setblock 0 -50 0 ' + b, r'Changed the block|Could not set the block|Unknown block type|Incorrect argument|Unknown or incomplete|threw an exception', 20)
+                r = srv.ask('setblock 0 -50 0 minecraft:air', r'Changed the block|Could not set the block|threw an exception', 20)
+            except SystemExit as e:   # an answer of another kind (or none): the id stays out, the check goes on
+                if srv.p.poll() is not None:
+                    raise
+                print('  skipped %s: %s' % (b, e), flush=True)
+                continue
             # a block whose placing or removing throws (a mod's own bug, e.g. PneumaticCraft's programmable controller) stays out
             if m.group(0) in ('Changed the block', 'Could not set the block') and r.group(0) != 'threw an exception':
                 good.append(b)
@@ -108,6 +114,10 @@ try:
         cmd.append('--flags=' + a.flags)
     if a.offoff:
         cmd.append('--offoff')
+    for mode in ('off', 'on'):   # no rows of an earlier run may stand in for a run that did not happen
+        stale = os.path.join(RUN, 'exactness-mods-%s-berows.txt' % mode)
+        if os.path.exists(stale):
+            os.remove(stale)
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding='utf-8', errors='replace')
     out = r.stdout + r.stderr
 finally:
@@ -118,6 +128,9 @@ finally:
     if os.path.exists(SCENE):
         os.remove(SCENE)
 print(out.strip()[-1500:])
+if 'stopped before' in out or not all(os.path.exists(os.path.join(RUN, 'exactness-mods-%s-berows.txt' % m)) for m in ('off', 'on')):
+    print('VERDICT: NO RESULT - a server did not start or did not finish (see run/exactness-mods-off.log / -on.log)')
+    sys.exit(2)
 
 
 def berows(mode):

@@ -112,6 +112,7 @@
 -Dlab.opt.ReactorTickMixin=true
 -Dlab.opt.RenderCacheBlockEntityMixin=true
 -Dlab.opt.RenderCacheClockMixin=true
+-Dlab.opt.RenderPriorityMixin=true
 -Dlab.opt.RenderCacheMixin=true
 # the render cache learns which fields change without changing what is drawn and leaves them out of the hash: another
 # mod's per-tick field on every entity (Collections Of Optimizations' coo$fireImmuneTime) re-recorded every entity
