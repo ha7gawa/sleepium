@@ -239,6 +239,30 @@ public final class SleepEngine {
     }
 
     /** the NonNullList fields (item lists) of a block-entity class and its superclasses */
+    /** types whose instances never change: a field of such a type is state the snapshot of the field itself covers */
+    private static boolean immutableType(Class<?> t) {
+        if (t.isPrimitive() || t.isEnum() || t == String.class || Number.class.isAssignableFrom(t) && t.getName().startsWith("java.lang.")
+                || t == Boolean.class || t == Character.class || t == java.util.UUID.class || t == Class.class) return true;
+        String n = t.getName();
+        return n.equals("net.minecraft.core.BlockPos") || n.equals("net.minecraft.world.level.block.state.BlockState") || n.equals("net.minecraft.core.Direction")
+                || n.equals("net.minecraft.resources.ResourceLocation") || n.equals("net.minecraft.resources.ResourceKey") || n.equals("net.minecraft.core.Holder")
+                || n.equals("net.minecraft.network.chat.Component") || n.equals("net.minecraft.world.level.block.entity.BlockEntityType")
+                || n.equals("net.minecraft.world.level.Level") || n.equals("net.minecraft.server.level.ServerLevel") || n.equals("net.minecraft.world.phys.AABB")
+                || n.equals("net.minecraft.world.phys.Vec3");
+    }
+
+    /** the first field of the class chain (below BlockEntity) holding a changeable object other than an item list; null when none */
+    static String unverifiedState(Class<?> beClass) {
+        for (Class<?> c = beClass; c != null && c != Object.class && !c.getName().equals("net.minecraft.world.level.block.entity.BlockEntity"); c = c.getSuperclass())
+            for (Field f : c.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                Class<?> t = f.getType();
+                if (immutableType(t) || net.minecraft.core.NonNullList.class.isAssignableFrom(t)) continue;
+                return c.getSimpleName() + "." + f.getName() + " (" + t.getSimpleName() + ")";
+            }
+        return null;
+    }
+
     static Field[] listsOf(Class<?> beClass) {
         return LISTS.computeIfAbsent(beClass, k -> {
             List<Field> ls = new ArrayList<>();
@@ -467,6 +491,11 @@ public final class SleepEngine {
             // its contents live where value verification cannot see them (a mod's item handler object): no proof, no sleep
             if (bypass != null && p.eligible() && listsOf(c).length == 0 && !observedModSleep())
                 p = new SleepAnalysis.Plan(false, bypass + "; no item list to verify it by value", p.clocks(), p.conds());
+            // and nothing it owns may change unseen: with the probes blind, value verification covers its item lists only - another
+            // object it holds (an energy storage, a tank, a handler) filled through a capability while it sleeps would not wake
+            // it (Immersive Engineering's turret: energy 5 760 awake, 16 000 asleep - 11-09)
+            String unseen = bypass != null && p.eligible() && !observedModSleep() ? unverifiedState(c) : null;
+            if (unseen != null) p = new SleepAnalysis.Plan(false, bypass + "; owned state outside value verification: " + unseen, p.clocks(), p.conds());
             boolean deep = p.eligible() && ("all".equals(DEEP) || bypass != null);
             ClassInfo ci = new ClassInfo(p, deep, c);
             System.out.println("[sleep/sleep] " + name + ": " + (p.eligible() ? "ELIGIBLE " : "no: ") + p.reason()
