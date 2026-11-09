@@ -83,7 +83,7 @@ public final class ParticlePurity {
 
     private static String check(ClassLoader loader, String concrete, String owner, MethodNode m, int depth) {
         if (depth > MAX_DEPTH) return "too deep";
-        if (dev.lull.ClassBytes.unseen(owner, m.name)) return owner + "." + m.name + " mixin-changed";
+        if (touched(owner, m.name)) return owner + "." + m.name + " mixin-changed";
         if ((m.access & (Opcodes.ACC_NATIVE | Opcodes.ACC_ABSTRACT | Opcodes.ACC_SYNCHRONIZED)) != 0) return m.name + " native/abstract/synchronized";
         for (AbstractInsnNode in = m.instructions.getFirst(); in != null; in = in.getNext()) {
             int op = in.getOpcode();
@@ -117,7 +117,7 @@ public final class ParticlePurity {
                     if (VALUE_OWNERS.contains(mi.owner) || PURE_CALLS.contains(key)) continue;
                     if (mi.owner.equals(RANDOM) && op == Opcodes.INVOKEINTERFACE) continue;   // obtained from the particle's own field (shared ones refused above)
                     if (LEVEL_OWNERS.contains(mi.owner) && LEVEL_READS.contains(mi.name)) {
-                        if (dev.lull.ClassBytes.unseen(mi.owner, mi.name) || MixinTouch.touched(mi.owner, mi.name)) return m.name + " level read " + mi.name + " mixin-changed";
+                        if (touched(mi.owner, mi.name) || MixinTouch.touched(mi.owner, mi.name)) return m.name + " level read " + mi.name + " mixin-changed";
                         continue;
                     }
                     if (op == Opcodes.INVOKESPECIAL && mi.name.equals("<init>") && throwable(loader, mi.owner)) continue;
@@ -133,6 +133,16 @@ public final class ParticlePurity {
             }
         }
         return null;
+    }
+
+    /**
+     * MixinTouch under either name of the method (1.20.1 production: the analysed bytecode carries Mojang's names, while
+     * overwritten / merged methods of reobfuscated mixins carry SRG names) - as ShapePurity.touched.
+     */
+    private static boolean touched(String owner, String name) {
+        if (dev.lull.ClassBytes.unseen(owner, name)) return true;
+        String official = dev.lull.Names.official(name);
+        return !official.equals(name) && dev.lull.ClassBytes.unseen(owner, official);
     }
 
     /** owner is the particle's class or one of its superclasses up to Particle */
@@ -180,7 +190,7 @@ public final class ParticlePurity {
     private static boolean finalField(ClassLoader loader, String owner, String name) {
         try {
             for (Class<?> k = Class.forName(owner.replace('/', '.'), false, loader); k != null; k = k.getSuperclass())
-                for (Field f : k.getDeclaredFields()) if (f.getName().equals(name)) return Modifier.isFinal(f.getModifiers());
+                for (Field f : k.getDeclaredFields()) if (dev.lull.Names.official(f.getName()).equals(name)) return Modifier.isFinal(f.getModifiers());   // 1.20.1: SRG at runtime in production
         } catch (Throwable ignored) {
         }
         return false;

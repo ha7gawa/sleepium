@@ -1,6 +1,7 @@
 {
   "required": true,
   "minVersion": "0.8",
+  "refmap": "sleepium.refmap.json",
   "package": "testmods.stimulate",
   "plugin": "testmods.stimulate.StimulatePlugin",
   "compatibilityLevel": "JAVA_17",

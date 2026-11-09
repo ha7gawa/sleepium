@@ -1,6 +1,7 @@
 {
   "required": true,
   "minVersion": "0.8",
+  "refmap": "sleepium.refmap.json",
   "package": "testmods.poseleak",
   "plugin": "testmods.poseleak.PoseLeakPlugin",
   "compatibilityLevel": "JAVA_17",
