@@ -144,6 +144,7 @@ final class GenBench {
                 carv.append(x0 + dx).append(' ').append(z0 + dz).append(' ').append(c == null ? "0" : Long.toHexString(c)).append('\n');
             }
         try {
+            Files.createDirectories(server.getServerDirectory().resolve(dev.lull.SleepOut.ROOT));   // a fresh run directory has none yet
             Files.writeString(server.getServerDirectory().resolve(dev.lull.SleepOut.ROOT).resolve("genhash-" + label + "-carvers.txt"), carv.toString());
         } catch (IOException e) {
             SleepMod.LOGGER.error("Cannot write carvers hashes", e);
