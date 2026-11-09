@@ -162,6 +162,50 @@ public final class SleepCommand {
                     }
                     return 1;
                 }))
+                .then(Commands.literal("placeall")   // test only: every block of a mod placed in a grid (testmods.ieform.IeForm.placeAll)
+                        .then(Commands.argument("ns", com.mojang.brigadier.arguments.StringArgumentType.word())
+                        .then(Commands.argument("x", IntegerArgumentType.integer()).then(Commands.argument("y", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer()).then(Commands.argument("step", IntegerArgumentType.integer(1))
+                        .executes(ctx -> {
+                            String r = testmods.ieform.IeForm.placeAll(ctx.getSource().getLevel(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "ns"),
+                                    new net.minecraft.core.BlockPos(IntegerArgumentType.getInteger(ctx, "x"), IntegerArgumentType.getInteger(ctx, "y"), IntegerArgumentType.getInteger(ctx, "z")),
+                                    IntegerArgumentType.getInteger(ctx, "step"));
+                            System.out.println("[sleep] " + r);
+                            say(ctx, r);
+                            return 1;
+                        })))))))
+                .then(Commands.literal("useitem")   // test only: an item used the way a player places it, count times along (dx, dz)
+                        .then(Commands.argument("item", net.minecraft.commands.arguments.ResourceLocationArgument.id())
+                        .then(Commands.argument("x", IntegerArgumentType.integer()).then(Commands.argument("y", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer()).then(Commands.argument("dx", IntegerArgumentType.integer())
+                        .then(Commands.argument("dz", IntegerArgumentType.integer()).then(Commands.argument("count", IntegerArgumentType.integer(1))
+                        .executes(ctx -> {
+                            String r = testmods.ieform.IeForm.useItem(ctx.getSource().getLevel(), net.minecraft.commands.arguments.ResourceLocationArgument.getId(ctx, "item").toString(),
+                                    new net.minecraft.core.BlockPos(IntegerArgumentType.getInteger(ctx, "x"), IntegerArgumentType.getInteger(ctx, "y"), IntegerArgumentType.getInteger(ctx, "z")),
+                                    IntegerArgumentType.getInteger(ctx, "dx"), IntegerArgumentType.getInteger(ctx, "dz"), IntegerArgumentType.getInteger(ctx, "count"));
+                            System.out.println("[sleep] " + r);
+                            say(ctx, r);
+                            return 1;
+                        })))))))))
+                .then(Commands.literal("ieform")   // test only: every Immersive Engineering multiblock formed in a row (testmods.ieform)
+                        .then(Commands.argument("x", IntegerArgumentType.integer()).then(Commands.argument("y", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer()).executes(ctx -> {
+                            String r = testmods.ieform.IeForm.formAll(ctx.getSource().getLevel(), new net.minecraft.core.BlockPos(
+                                    IntegerArgumentType.getInteger(ctx, "x"), IntegerArgumentType.getInteger(ctx, "y"), IntegerArgumentType.getInteger(ctx, "z")));
+                            System.out.println("[sleep] " + r);
+                            say(ctx, r);
+                            return 1;
+                        })
+                        .then(Commands.argument("only", com.mojang.brigadier.arguments.StringArgumentType.word())
+                        .then(Commands.argument("copies", IntegerArgumentType.integer(1)).then(Commands.argument("step", IntegerArgumentType.integer(1)).executes(ctx -> {
+                            String r = testmods.ieform.IeForm.formAll(ctx.getSource().getLevel(), new net.minecraft.core.BlockPos(
+                                    IntegerArgumentType.getInteger(ctx, "x"), IntegerArgumentType.getInteger(ctx, "y"), IntegerArgumentType.getInteger(ctx, "z")),
+                                    com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "only"), IntegerArgumentType.getInteger(ctx, "copies"),
+                                    IntegerArgumentType.getInteger(ctx, "step"));
+                            System.out.println("[sleep] " + r);
+                            say(ctx, r);
+                            return 1;
+                        }))))))))
                 .then(Commands.literal("reseed").executes(ctx -> {
                     // exactness tests: vanilla's clock-seeded randoms to fixed seeds, right before a scene is built
                     TestSeeds.reseed(ctx.getSource().getServer());
