@@ -21,7 +21,7 @@ OUT = os.path.join(ROOT, 'src', 'main', 'resources', 'assets', 'sleepium', 'opti
 GROUPS = [
     ('lighting', r'^(Light|ShaderLight|ClientLight)'),
     ('chunks', r'^(Chunk(Multi|Section|Shader|Upload)|Section(Layer|Lists|ModCount)|BlockMesh|VertexSort|SamplerUnit|Uniform|ShaderSampler|Frame|RenderCache|RenderCall|OverworldFog|AmbientParticle|ItemFrame|Texture|ParallelReload|ClientBiome|ClientChunkCacheBiome)'),
-    ('entities_render', r'^(EntityBatch|ItemGpu|Part|ModelPart|PoseStack|EntityCull|EntityLight|BlockEntityCull|Vec3FromRgb)'),
+    ('entities_render', r'^(EntityBatch|ItemGpu|QuadGpu|Part|ModelPart|PoseStack|EntityCull|EntityLight|BlockEntityCull|Vec3FromRgb)'),
     ('animation', r'^(Geo|Molang|Keyframe|AnimStream)'),
     ('threads', r'^(MainReactor|Reactor|ParallelEntities|LabPools|PersistentPools|MailboxBatch|ForgeBus|RenderPriority)'),
     ('network', r'^Net'),
@@ -39,6 +39,7 @@ META = {'universal'}
 
 # flags that switch several mixins (no class of their own), described here
 DESCRIPTIONS = {
+    'QuadGpuMixin': "Baked models that block entities and other renderers write every frame (machines' moving parts: Immersive Engineering's crushers, turrets...) drawn from GPU memory: a pose per part instead of its vertices, the same picture. About 1.5-1.7x fps with hundreds of working machines.",
     'ItemGpuMixin': 'Items in the world (on the ground, in frames, in hands) drawn from GPU memory: a pose per item each frame instead of its vertices, no sorting of their quads. About 2x fps with a thousand dropped items.',
     'FrameGarbageMixin': 'The per-frame garbage fixes in one switch: fog colour, frustum and light checks of entities and block entities, item frames, memoized lookups - without allocating every frame.',
     'GeoParallelMixin': 'GeckoLib models rendered on Sleepium\'s render workers (with ParallelEntities): their model and Molang work off the render thread.',

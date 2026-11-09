@@ -76,6 +76,34 @@ public final class MixinYield {
         return out;
     }
 
+    /** an interface of the target (or of its superclasses, and their super-interfaces) whose method name + desc another mod's mixin changes */
+    private static String changedDefault(String target, String name, String desc) {
+        java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (String k = target; k != null && !k.equals("java/lang/Object"); ) {
+            ClassNode cn = node(k);
+            if (cn == null) break;
+            if (cn.interfaces != null) todo.addAll(cn.interfaces);
+            k = cn.superName;
+        }
+        while (!todo.isEmpty()) {
+            String i = todo.poll();
+            if (!seen.add(i)) continue;
+            if (MixinTouch.touched(i, name, desc)) return i;
+            ClassNode cn = node(i);
+            if (cn != null && cn.interfaces != null) todo.addAll(cn.interfaces);
+        }
+        return null;
+    }
+
+    private static ClassNode node(String internal) {
+        try {
+            return org.spongepowered.asm.service.MixinService.getService().getBytecodeProvider().getClassNode(internal.replace('/', '.'));
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     private static boolean yields0(String targetClassName, String mixinClassName) {
         ClassNode cn;
         try {
@@ -123,6 +151,14 @@ public final class MixinYield {
                 yielded++;
                 System.out.println("[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: "
                         + targetClassName + "#" + m.name + " is added by another mod's mixin too (one of the two would be skipped)");
+                return true;
+            }            // an override of an interface default another mod's mixin changes there (VertexConsumer.putBulkData): ours would
+            // run instead of their changed default
+            String iface = changedDefault(target, m.name, m.desc);
+            if (iface != null) {
+                yielded++;
+                System.out.println("[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: "
+                        + iface.replace('/', '.') + "#" + m.name + " is changed by another mod's mixin (our override in " + targetClassName + " would skip it)");
                 return true;
             }
         }

@@ -19,4 +19,12 @@ public interface BufferSourceAccessor {
 
     @Accessor("fixedBuffers")
     Map<RenderType, BufferBuilder> sleep$fixed();
+
+    /** the shared builder of the types without a fixed one (QuadGpu) */
+    @Accessor("builder")
+    BufferBuilder sleep$builder();
+
+    /** the type the shared builder holds now */
+    @Accessor("lastState")
+    java.util.Optional<RenderType> sleep$lastState();
 }

@@ -81,6 +81,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParticleShapeMemoMixin") || Boolean.getBoolean("lab.opt.ParallelParticlesMixin");
         else if (simple.equals("EntityShapeMemoMixin"))   // part of the tick shape memo (the entity tick)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParticleShapeMemoMixin");
+        if (simple.equals("QuadGpuMixin"))   // draws through PartBatch's item queues, shader patch and draw hooks
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.QuadGpuMixin") && Boolean.getBoolean("lab.opt.PartBatchMixin");
         if (simple.equals("ItemGpuMixin"))   // draws through PartBatch's queues, shader patch and draw hooks
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ItemGpuMixin") && Boolean.getBoolean("lab.opt.PartBatchMixin");
         if (simple.equals("CompositeRenderTypeAccessor") || simple.equals("CompositeStateAccessor"))
