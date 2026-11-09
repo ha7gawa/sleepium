@@ -18,6 +18,24 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class IeForm {
     private IeForm() {}
 
+    /** every block of namespace ns (the registry's order) placed in its default state, a square grid step blocks apart from base */
+    public static String placeAll(ServerLevel level, String ns, BlockPos base, int step) {
+        java.util.List<net.minecraft.world.level.block.Block> blocks = new java.util.ArrayList<>();
+        for (var e : net.minecraft.core.registries.BuiltInRegistries.BLOCK.entrySet())
+            if (e.getKey().location().getNamespace().equals(ns)) blocks.add(e.getValue());
+        int wide = Math.max(1, (int) Math.ceil(Math.sqrt(blocks.size())));
+        int placed = 0;
+        for (int i = 0; i < blocks.size(); i++) {
+            BlockPos at = base.offset(i % wide * step, 0, i / wide * step);
+            try {
+                if (level.setBlock(at, blocks.get(i).defaultBlockState(), 3)) placed++;
+            } catch (RuntimeException e) {
+                // a block that cannot stand alone: left out
+            }
+        }
+        return "placeall: " + ns + " " + placed + " of " + blocks.size() + " blocks, a grid " + wide + " wide";
+    }
+
     /** count copies of an item used as a player uses it on the top of the block below base + i * (dx, 0, dz), looking along +z */
     public static String useItem(ServerLevel level, String id, BlockPos base, int dx, int dz, int count) {
         var item = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(net.minecraft.resources.ResourceLocation.parse(id));

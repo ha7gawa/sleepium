@@ -81,6 +81,7 @@ public final class QuadGpu {
         if (t != renderThread) {
             if (renderThread != null || !RenderSystem.isOnRenderThread()) {
                 notRender++;
+                if (STATS) tally("off the render thread", bb);
                 return false;
             }
             renderThread = t;
@@ -88,6 +89,7 @@ public final class QuadGpu {
         int light = lightmap[0];
         if (lightmap[1] != light || lightmap[2] != light || lightmap[3] != light || quad.getVertices().length != 32) {
             notOneLight++;
+            if (STATS) tally(quad.getVertices().length != 32 ? "not a whole BLOCK-format quad" : "light per vertex", bb);
             close();
             return false;
         }
@@ -104,6 +106,7 @@ public final class QuadGpu {
         RenderType type = typeOf(bb);
         if (type == null) {
             noType++;
+            if (STATS) tally("refused type", bb);
             return false;
         }
         runBb = bb;
@@ -410,9 +413,34 @@ public final class QuadGpu {
         }
     }
 
+    // ------------------------------------------------------------------ statistics (-Dlab.quadgpu.stats): what is not taken, by reason and type
+
+    private static final boolean STATS = Boolean.getBoolean("lab.quadgpu.stats");
+    private static final Map<String, long[]> TALLY = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static void tally(String why, BufferBuilder bb) {
+        String type = "?";
+        try {
+            MultiBufferSource.BufferSource src = Minecraft.getInstance().renderBuffers().bufferSource();
+            for (Map.Entry<RenderType, BufferBuilder> e : ((dev.lull.opt.BufferSourceAccessor) src).sleep$started().entrySet())
+                if (e.getValue() == bb) type = e.getKey().toString().replaceAll("RenderType\\[([^:]+):.*", "$1");
+            if (type.equals("?")) type = bb.getClass().getSimpleName();
+        } catch (RuntimeException ex) {
+            // off the render thread: the source is not ours to read
+        }
+        TALLY.computeIfAbsent(why + " / " + type, k -> new long[1])[0]++;
+    }
+
+    public static String stats() {
+        StringBuilder sb = new StringBuilder("quad gpu not taken (quads):");
+        TALLY.entrySet().stream().sorted((a, b) -> Long.compare(b.getValue()[0], a.getValue()[0])).limit(25)
+                .forEach(e -> sb.append("\n    ").append(e.getKey()).append(": ").append(e.getValue()[0]));
+        return sb.toString();
+    }
+
     public static String report() {
         return String.format(java.util.Locale.ROOT, "quad gpu: puts %d (off the render thread %d, light per vertex %d, builder not taken %d %s), runs %d, recorded %d (%d quads), vanilla quads %d (first seen %d, again in the frame %d, small %d, full %d, sizes %s), geometries %d, seen %d",
                 puts, notRender, notOneLight, noType, java.util.Arrays.toString(WHY_TYPE), runs, recorded, quadsRecorded, quadsVanilla, firstSeen, sameFrame, small, full,
-                java.util.Arrays.toString(VAN_SIZES), built, SEEN.size());
+                java.util.Arrays.toString(VAN_SIZES), built, SEEN.size()) + (STATS ? "\n" + stats() : "");
     }
 }

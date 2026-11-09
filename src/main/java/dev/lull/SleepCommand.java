@@ -175,6 +175,18 @@ final class SleepCommand {
                                         return 0;
                                     }
                                 }))))
+                .then(Commands.literal("placeall")   // test only: every block of a mod placed in a grid (testmods.ieform.IeForm.placeAll)
+                        .then(Commands.argument("ns", com.mojang.brigadier.arguments.StringArgumentType.word())
+                        .then(Commands.argument("x", IntegerArgumentType.integer()).then(Commands.argument("y", IntegerArgumentType.integer())
+                        .then(Commands.argument("z", IntegerArgumentType.integer()).then(Commands.argument("step", IntegerArgumentType.integer(1))
+                        .executes(ctx -> {
+                            String r = testmods.ieform.IeForm.placeAll(ctx.getSource().getLevel(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "ns"),
+                                    new net.minecraft.core.BlockPos(IntegerArgumentType.getInteger(ctx, "x"), IntegerArgumentType.getInteger(ctx, "y"), IntegerArgumentType.getInteger(ctx, "z")),
+                                    IntegerArgumentType.getInteger(ctx, "step"));
+                            System.out.println("[sleep] " + r);
+                            say(ctx, r);
+                            return 1;
+                        })))))))
                 .then(Commands.literal("useitem")   // test only: an item used the way a player places it, count times along (dx, dz)
                         .then(Commands.argument("item", net.minecraft.commands.arguments.ResourceLocationArgument.id())
                         .then(Commands.argument("x", IntegerArgumentType.integer()).then(Commands.argument("y", IntegerArgumentType.integer())
