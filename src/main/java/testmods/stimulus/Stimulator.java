@@ -31,11 +31,16 @@ import net.neoforged.neoforge.items.IItemHandler;
  * 200-600 fed (an item every 10 ticks from the top, energy every tick, water every 20), 600-800 quiet, 800-1100 drained
  * (an item out of every slot every 5 ticks from the bottom) and a redstone block east of it switched every 40 ticks,
  * 1100-1200 quiet. Positions in sorted order: the same actions in the same order every run.
+ *
+ * <p>-Dsleep.test.stimulate.work=true instead: the machines kept working (client scenes of working machines, such as
+ * sleep:client_ie) - fed from every side from the start and all the time, never drained, no redstone.
  */
 public final class Stimulator {
     private Stimulator() {}
 
     private static final int[] AREA = area(System.getProperty("sleep.test.stimulate", ""));
+    private static final boolean WORK = Boolean.getBoolean("sleep.test.stimulate.work");
+    private static final Direction[] SIDES = Direction.values();
     private static final Item[] ITEMS = {Items.COAL, Items.RAW_IRON, Items.IRON_ORE, Items.COBBLESTONE, Items.OAK_LOG, Items.WHEAT_SEEDS,
             Items.BONE_MEAL, Items.SAND, Items.WHEAT, Items.REDSTONE, Items.IRON_INGOT, Items.GLASS_BOTTLE, Items.BLAZE_POWDER, Items.DIAMOND};
     private static long inserted, energy, fluid, extracted, toggles, ticks;
@@ -52,9 +57,9 @@ public final class Stimulator {
         if (AREA == null) return;
         ServerLevel level = server.overworld();
         long t = level.getGameTime() - 300;
-        if (t < 0) return;
-        int p = (int) (t % 1200);
-        boolean feed = p >= 200 && p < 600, drain = p >= 800 && p < 1100;
+        if (t < 0 && !WORK) return;
+        int p = WORK ? (int) (level.getGameTime() % 1200) : (int) (t % 1200);
+        boolean feed = WORK || p >= 200 && p < 600, drain = !WORK && p >= 800 && p < 1100;
         if (!feed && !drain) return;
         List<BlockEntity> bes = blockEntities(level);
         seen = Math.max(seen, bes.size());
@@ -68,7 +73,9 @@ public final class Stimulator {
             BlockEntity be = bes.get(i);
             BlockPos pos = be.getBlockPos();
             if (be.isRemoved()) continue;
-            if (feed) {
+            if (WORK) {
+                for (Direction d : SIDES) feed(level, pos, d, p, i);
+            } else if (feed) {
                 if (p % 10 == 0) {
                     IItemHandler h = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, Direction.UP);
                     if (h != null) insert(h, new ItemStack(ITEMS[(p / 10 + i) % ITEMS.length]));
@@ -97,6 +104,19 @@ public final class Stimulator {
                     }
                 }
             }
+        }
+    }
+
+    private static void feed(ServerLevel level, BlockPos pos, Direction d, int p, int i) {
+        if (p % 10 == 0) {
+            IItemHandler h = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, d);
+            if (h != null) insert(h, new ItemStack(ITEMS[(p / 10 + i + d.ordinal()) % ITEMS.length]));
+        }
+        IEnergyStorage e = level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, d);
+        if (e != null) energy += e.receiveEnergy(2000, false);
+        if (p % 20 == 0) {
+            IFluidHandler f = level.getCapability(Capabilities.FluidHandler.BLOCK, pos, d);
+            if (f != null) fluid += f.fill(new FluidStack(Fluids.WATER, 250), IFluidHandler.FluidAction.EXECUTE);
         }
     }
 

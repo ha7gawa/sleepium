@@ -160,9 +160,10 @@ classes = sorted(set(cls_at.values()) | set(bad))
 # the mods' own nondeterminism: an --offoff run remembers the classes that differ without any optimisation; other runs
 # show them as "noise" (still listed: a real difference could hide under the noise of the same class)
 NOISE = os.path.join(RUN, 'modexact-noise.txt')
-if a.offoff:
+if a.offoff:   # added to the list kept over the runs of every mod group
+    known = set(l.strip() for l in open(NOISE, encoding='utf-8') if l.strip()) if os.path.exists(NOISE) else set()
     with open(NOISE, 'w', encoding='utf-8') as f:
-        f.write(''.join(c + '\n' for c in sorted(bad)))
+        f.write(''.join(c + '\n' for c in sorted(known | set(bad))))
 noise = set(l.strip() for l in open(NOISE, encoding='utf-8')) if os.path.exists(NOISE) and not a.offoff else set()
 print('\n' + (stim[0] if stim else 'no stimulus report'))
 print('%-60s %-9s %8s %10s %7s  %s' % ('class', 'rows', 'sleeps', 'skipped', 'wakes', 'analysis'))

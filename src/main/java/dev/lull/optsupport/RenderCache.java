@@ -48,7 +48,7 @@ public final class RenderCache {
     /** ticks an animated / unsupported object is drawn the vanilla way before it is probed again */
     private static final int VOLATILE_TICKS = 40;
     public static long translations, residentSegments;
-    public static long hits, records, animated, unsupported, verified, mismatches, replayedVertices, vanilla;
+    public static long hits, records, animated, unsupported, verified, mismatches, replayedVertices, vanilla, empty;
     private static final Map<Class<?>, long[]> BY_CLASS = new HashMap<>();   // hits, records, animated, unsupported, mismatches, learned
     /** RenderCacheClockMixin: the thread whose Blaze3D.getTime() is moved by CLOCK_SHIFT seconds (the probe's third look) */
     public static volatile Thread clockShiftThread;
@@ -246,7 +246,7 @@ public final class RenderCache {
     private static final String[] TIME_ANIMATED_LIBS = {"software.bernie.geckolib.renderer.GeoRenderer"};
 
     private static long[] classCounters(Class<?> rendererClass) {
-        long[] cs = new long[6];
+        long[] cs = new long[7];
         for (String lib : TIME_ANIMATED_LIBS) if (ParallelRender.implementsNamed(rendererClass, lib)) cs[5] = 1;
         // players: few, always moving, and mods replace their rendering inside PlayerRenderer (RenderPlayerEvent, e.g. a
         // GeckoLib model driven by a controller) where the probe would move that animation's state too
@@ -517,6 +517,21 @@ public final class RenderCache {
         }
         records++;
         cs[1]++;
+        if (rec.size == 0) {
+            // nothing written into the buffers: the renderer draws nothing (cheap to call) or draws elsewhere - its own
+            // vertex buffers drawn at a later render stage (Immersive Engineering's water wheels, windmills, bucket
+            // wheels queue a job there), GL calls of its own - which only calling it every frame keeps. Its class is
+            // drawn the vanilla way from now on (no more recordings: each one would queue such work once more)
+            rec.recorded = false;
+            empty++;
+            if (cs[6]++ == 0 && cs[5] == 0) {
+                cs[5] = 1;
+                System.out.println("[sleep/opt] render cache: " + rendererClass.getSimpleName()
+                        + " wrote nothing into the buffers: drawn the vanilla way from now on (it may draw elsewhere)");
+            }
+            d.draw(pose, buffers, pt);
+            return;
+        }
         // observation, when the state changed (and now and then): another partial tick, a turned camera, another tick
         // count; any difference = drawn per frame (vanilla) for a while
         if (changed || tick - rec.probedAt >= PROBE_EVERY) {
@@ -778,8 +793,8 @@ public final class RenderCache {
                 .forEach(e -> w.append("\n    changed ").append(e.getValue()[0]).append("x ").append(e.getKey()));
         StringBuilder sb = new StringBuilder(w.length() > 0 ? "render cache field changes:" + w + "\n" : "");
         sb.append(String.format(java.util.Locale.ROOT,
-                "render cache: hits %d, records %d, animated %d, unsupported %d, vanilla %d, deferred to next frames %d, replayed vertices %d%s%s", hits, records,
-                animated, unsupported, vanilla, deferred, replayedVertices, VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "",
+                "render cache: hits %d, records %d, animated %d, empty %d, unsupported %d, vanilla %d, deferred to next frames %d, replayed vertices %d%s%s", hits, records,
+                animated, empty, unsupported, vanilla, deferred, replayedVertices, VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "",
                 StateHash.LEARN ? ", same after a state change " + sameAfterChange + ", fields left out " + StateHash.learned : ""));
         if (TIME && tFrames > 0) {
             double f = tFrames;
