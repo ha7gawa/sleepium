@@ -150,6 +150,8 @@
     "LightTimingMixin"
   ],
   "client": [
+    "RenderPriorityMixin",
+    "RenderPriorityServerMixin",
     "SpriteInterpolateMixin",
     "SectionLayerMaskMixin",
     "AmbientChunksMixin",
