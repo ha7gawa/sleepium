@@ -33,7 +33,9 @@ ap.add_argument('--mods', help='a folder of released mods put on the dev run (bu
 a = ap.parse_args()
 name = os.path.basename(os.path.normpath(a.world)).replace(' ', '_') if a.world else None   # JVM flags split on spaces
 label = a.label or '%s-%s' % ((name or a.scene).replace(' ', '_'), a.mode)
-jvm = ['-Xms' + a.heap, '-Xmx' + a.heap, '-XX:+AlwaysPreTouch', '-Dsleep.clientAuto=' + label,
+# as in a player's game: vanilla's development-only paths off (a dev client logs warnings players never see - 11-09: a
+# full sound pool logged 472 k lines in 15 s, 130 fps instead of 246); -Dsleep.clientAuto.asPlayers=false to keep them
+jvm = ['-Xms' + a.heap, '-Xmx' + a.heap, '-XX:+AlwaysPreTouch', '-Dsleep.clientAuto=' + label, '-Dsleep.clientAuto.asPlayers=true',
        '-Dsleep.clientAuto.steady=true', '-Dsleep.clientAuto.steadySeconds=%d' % a.secs, '-Dsleep.clientAuto.settle=%d' % a.settle]
 if a.world:
     saves = os.path.join(ROOT, 'run', 'saves')

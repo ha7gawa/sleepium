@@ -35,6 +35,12 @@ public abstract class SectionModCountMixin implements BlockCollisionMemo.Counted
     }
 
     @Override
+    public long[] sleep$maskIfCurrent() {
+        long[] m = sleep$maskBits;
+        return m != null && sleep$maskAt == sleep$mod ? m : null;
+    }
+
+    @Override
     public int sleep$mod() {
         return sleep$mod;
     }

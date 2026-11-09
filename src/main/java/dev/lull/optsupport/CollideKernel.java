@@ -61,8 +61,17 @@ public final class CollideKernel {
     }
 
     public static CollideKernel of(Level level) {
+        if (ParticleWorkers.inWorker()) return WORKERS.get();
         return level.isClientSide() ? CLIENT : SERVER;
     }
+
+    /** ParallelParticles' workers: a kernel each; non-static shapes come from the render thread, masks only when current */
+    private static final ThreadLocal<CollideKernel> WORKERS = ThreadLocal.withInitial(() -> {
+        CollideKernel k = new CollideKernel();
+        k.worker = true;
+        return k;
+    });
+    private boolean worker;
 
     // the collected shapes, in order: kind 0 a VoxelShape (shapes[i]), kind 1 a full block at (ox, oy, oz)[i]
     private byte[] kind = new byte[64];
@@ -134,6 +143,75 @@ public final class CollideKernel {
         }
     }
 
+    /**
+     * ParticleShapeMemoMixin: while ParticleEngine.tick runs the client level does not change (packets are handled
+     * outside it) and particles collide without an entity (the empty context), so a block whose shape is not static
+     * gives the same shape at a position for every particle of that tick: asked once, kept moved to its cell (Shapes.block()
+     * kept as itself: the cube path). Hundreds of working machines' particles asked Immersive Engineering's multiblock
+     * parts for their shape - a block entity lookup each time - 84 % of the client thread.
+     */
+    private static boolean particleWindow;
+    /**
+     * The client's entity tick likewise (EntityShapeMemoMixin): entities ask with their own context, so only blocks
+     * whose shape never reads it (ShapePurity.contextFree) are kept for them - Immersive Engineering's multiblock parts
+     * under thousands of items a crusher dropped.
+     */
+    private static boolean entityWindow;
+    /** per position: the state the shape was asked for and the shape moved to its cell (a block change there: asked again) */
+    private record Cell(BlockState state, VoxelShape moved) {}
+    private static final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<Cell> PARTICLE_SHAPES = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+    public static long particleShapeHits, particleShapeMisses, entityShapeHits, entityShapeMisses, entityShapeBound;
+
+    public static void particleTick(boolean starting) {
+        particleWindow = starting;
+        if (!PARTICLE_SHAPES.isEmpty()) PARTICLE_SHAPES.clear();
+        if (!GETTER_SHAPES.isEmpty()) GETTER_SHAPES.clear();
+    }
+
+    public static void entityTick(boolean starting) {
+        entityWindow = starting;
+        if (!PARTICLE_SHAPES.isEmpty()) PARTICLE_SHAPES.clear();
+        if (!GETTER_SHAPES.isEmpty()) GETTER_SHAPES.clear();
+    }
+
+    /** shapes asked through BlockCollisions (findSupportingBlock and the other vanilla iterators) with the chunk as getter */
+    private static final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<Cell> GETTER_SHAPES = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+    public static long getterShapeHits, getterShapeMisses;
+
+    /**
+     * BlockCollisionsFastMixin, in place of BlockCollisions' getCollisionShape call: in the client's entity tick (its
+     * owner thread) the position's shape kept as the kernel keeps it - asked once with a WatchedContext (or plainly when
+     * ShapePurity proves the block context-free) and kept only if the context was not asked; otherwise vanilla's call.
+     */
+    public static VoxelShape windowShape(BlockState state, net.minecraft.world.level.BlockGetter getter, BlockPos pos, CollisionContext context,
+                                         net.minecraft.world.level.CollisionGetter collisionGetter) {
+        // (no client classes named: this is reached on dedicated servers too, where the window never opens)
+        if (!entityWindow || !(collisionGetter instanceof net.minecraft.world.level.Level cl) || !cl.isClientSide() || !OwnerThread.owns(cl))
+            return state.getCollisionShape(getter, pos, context);
+        if (state instanceof BlockCollisionMemo.StaticShape st) {
+            VoxelShape s = st.sleep$staticCollision();
+            if (s != null) return s;
+        }
+        long key = pos.asLong();
+        Cell cell = GETTER_SHAPES.get(key);
+        if (cell != null && cell.state == state) {
+            if (cell.moved == null) return state.getCollisionShape(getter, pos, context);
+            getterShapeHits++;
+            return cell.moved;
+        }
+        VoxelShape sh;
+        boolean free = true;
+        if (ShapePurity.contextFree(state.getBlock())) sh = state.getCollisionShape(getter, pos, context);
+        else {
+            WatchedContext w = new WatchedContext(context);
+            sh = state.getCollisionShape(getter, pos, w);
+            free = !w.asked;
+        }
+        GETTER_SHAPES.put(key, new Cell(state, free ? sh : null));   // (here unmoved: BlockCollisions moves it itself)
+        getterShapeMisses++;
+        return sh;
+    }
+
     /** BlockCollisions over bb (onlySuffocatingBlocks false): its cursor, its checks, its shapes, in its order. */
     private void scan(Entity entity, Level level, AABB bb) {
         int x0 = net.minecraft.util.Mth.floor(bb.minX - 1.0E-7) - 1, x1 = net.minecraft.util.Mth.floor(bb.maxX + 1.0E-7) + 1;
@@ -157,6 +235,59 @@ public final class CollideKernel {
                     else state = g.getBlockState(pos);
                     if ((type != 1 || state.hasLargeCollisionShape()) && (type != 2 || state.is(Blocks.MOVING_PISTON))) {
                         VoxelShape shape = state instanceof BlockCollisionMemo.StaticShape st ? st.sleep$staticCollision() : null;
+                        Cell cell = null;
+                        long key = 0;
+                        if (shape == null && worker) {   // a particle on a pool worker: the render thread's shape for this cell
+                            VoxelShape moved = ParticleWorkers.shape(state, level, x, y, z);
+                            if (moved == Shapes.block()) {
+                                if (bb.intersects((double) x, (double) y, (double) z, (double) x + 1.0, (double) y + 1.0, (double) z + 1.0))
+                                    addCube((double) x, (double) y, (double) z);
+                            } else if (!moved.isEmpty()) {
+                                if (entityShape == null) entityShape = Shapes.create(bb);
+                                if (Shapes.joinIsNotEmpty(moved, entityShape, BooleanOp.AND)) add(moved);
+                            }
+                            continue;
+                        }
+                        // the windows are the client's (its render thread's): the server kernel never takes them
+                        boolean window = this == CLIENT && (entity == null ? particleWindow : entityWindow);
+                        if (shape == null && window) {
+                            key = BlockPos.asLong(x, y, z);
+                            cell = PARTICLE_SHAPES.get(key);
+                            if (cell != null && (cell.state != state || cell.moved == null && entity == null)) cell = null;
+                        }
+                        if (shape == null && window && (cell == null || cell.moved != null)) {
+                            // a particle, or an entity where the shape does not depend on who asks: the tick's shape at this cell, moved
+                            VoxelShape moved;
+                            if (cell == null) {
+                                if (context == null) context = entity == null ? CollisionContext.empty() : CollisionContext.of(entity);
+                                VoxelShape sh;
+                                boolean free = true;
+                                if (entity == null || ShapePurity.contextFree(state.getBlock())) sh = state.getCollisionShape(level, pos, context);
+                                else {   // watched: kept only if the context was not asked anything
+                                    WatchedContext w = new WatchedContext(context);
+                                    sh = state.getCollisionShape(level, pos, w);
+                                    free = !w.asked;
+                                }
+                                moved = sh == Shapes.block() || sh.isEmpty() ? sh : sh.move((double) x, (double) y, (double) z);
+                                PARTICLE_SHAPES.put(key, new Cell(state, free ? moved : null));
+                                if (entity == null) ParticleWorkers.offer(state, x, y, z, moved);   // the workers of this tick may take it
+                                if (entity == null) particleShapeMisses++;
+                                else if (free) entityShapeMisses++;
+                                else entityShapeBound++;
+                            } else {
+                                moved = cell.moved;
+                                if (entity == null) particleShapeHits++;
+                                else entityShapeHits++;
+                            }
+                            if (moved == Shapes.block()) {
+                                if (bb.intersects((double) x, (double) y, (double) z, (double) x + 1.0, (double) y + 1.0, (double) z + 1.0))
+                                    addCube((double) x, (double) y, (double) z);
+                            } else if (!moved.isEmpty()) {
+                                if (entityShape == null) entityShape = Shapes.create(bb);
+                                if (Shapes.joinIsNotEmpty(moved, entityShape, BooleanOp.AND)) add(moved);
+                            }
+                            continue;
+                        }
                         if (shape == null) {   // not static: the context is read
                             if (context == null) context = entity == null ? CollisionContext.empty() : CollisionContext.of(entity);
                             shape = state.getCollisionShape(level, pos, context);
@@ -194,7 +325,7 @@ public final class CollideKernel {
             maskSy = sy;
             int idx = lc.getSectionIndexFromSectionY(sy);
             LevelChunkSection s = idx >= 0 && idx < lc.getSections().length ? lc.getSection(idx) : null;
-            mask = s instanceof CollisionMask.Holder h ? h.sleep$mask() : null;
+            mask = s instanceof CollisionMask.Holder h ? (worker ? h.sleep$maskIfCurrent() : h.sleep$mask()) : null;
         }
         long[] m = mask;
         if (m == null) return false;
@@ -325,6 +456,8 @@ public final class CollideKernel {
     }
 
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "collide kernel: calls %d, checked %d, MISMATCHES %d", calls, checked, mismatches);
+        return String.format(java.util.Locale.ROOT, "collide kernel: calls %d, checked %d, MISMATCHES %d, particle shapes kept %d (asked %d), entity shapes kept %d (asked %d, bound to the context %d; blocks proven context-free %d, not %d), iterator shapes kept %d (asked %d)", calls, checked,
+                mismatches, particleShapeHits, particleShapeMisses, entityShapeHits, entityShapeMisses, entityShapeBound, ShapePurity.contextFree, ShapePurity.contextBound,
+                getterShapeHits, getterShapeMisses);
     }
 }

@@ -77,6 +77,10 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkMultiDrawMixin") || Boolean.getBoolean("lab.opt.PartBatchMixin");
         if (simple.equals("PartDrawMixin") || simple.equals("PartTypeMixin") || simple.equals("PartShardMixin") || simple.equals("PartFrameMixin") || simple.equals("ShaderStateShardAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.PartBatchMixin") || Boolean.getBoolean("lab.opt.ItemGpuMixin");
+        if (simple.equals("ParticleEngineAccessor"))   // the particle shape memo's measurement, parallel particles' invokers
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParticleShapeMemoMixin") || Boolean.getBoolean("lab.opt.ParallelParticlesMixin");
+        else if (simple.equals("EntityShapeMemoMixin"))   // part of the tick shape memo (the entity tick)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParticleShapeMemoMixin");
         if (simple.equals("ItemGpuMixin"))   // draws through PartBatch's queues, shader patch and draw hooks
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ItemGpuMixin") && Boolean.getBoolean("lab.opt.PartBatchMixin");
         if (simple.equals("CompositeRenderTypeAccessor") || simple.equals("CompositeStateAccessor"))
