@@ -74,8 +74,11 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkMultiDrawMixin") || Boolean.getBoolean("lab.opt.PartBatchMixin");
         if (simple.equals("PartDrawMixin") || simple.equals("PartTypeMixin") || simple.equals("PartShardMixin") || simple.equals("PartFrameMixin") || simple.equals("ShaderStateShardAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.PartBatchMixin") || Boolean.getBoolean("lab.opt.ItemGpuMixin");
-        if (simple.equals("ParticleEngineAccessor"))   // the particle shape memo's measurement, parallel particles' invokers
-            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParticleShapeMemoMixin") || Boolean.getBoolean("lab.opt.ParallelParticlesMixin");
+        if (simple.equals("ParticleGpuAccessor") || simple.equals("ParticleUvInvoker") || simple.equals("ParticleLightMemoMixin"))   // part of the particle records
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParticleGpuMixin");
+        if (simple.equals("ParticleEngineAccessor"))   // the particle shape memo's measurement, parallel particles' invokers, particle records' lists
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParticleShapeMemoMixin") || Boolean.getBoolean("lab.opt.ParallelParticlesMixin")
+                    || Boolean.getBoolean("lab.opt.ParticleGpuMixin");
         else if (simple.equals("EntityShapeMemoMixin"))   // part of the tick shape memo (its measurement, the entity tick)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParticleShapeMemoMixin");
         if (simple.equals("QuadGpuMixin"))   // draws through PartBatch's item queues, shader patch and draw hooks
@@ -94,6 +97,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntitiesMixin");
         if (simple.equals("BufferBuilderAccessor") || simple.equals("BufferSourceAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.RenderCacheMixin") || Boolean.getBoolean("lab.opt.ParallelEntitiesMixin")
+                    || Boolean.getBoolean("lab.opt.ParticleGpuMixin")
                     || Boolean.getBoolean("lab.opt.PartBatchMixin") || Boolean.getBoolean("lab.opt.BlockMeshMemoMixin") || Boolean.getBoolean("lab.opt.ShaderLightMixin");
         if (simple.equals("VertexSortDirectMixin") || simple.equals("MeshDataAccessor"))   // part of the radix sort flag
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.VertexSortRadixMixin");

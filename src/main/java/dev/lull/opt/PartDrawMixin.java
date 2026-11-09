@@ -21,5 +21,6 @@ public abstract class PartDrawMixin {
     @Inject(method = "_drawWithShader", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/VertexBuffer;draw()V"))
     private void sleep$items(Matrix4f modelView, Matrix4f projection, ShaderInstance shader, CallbackInfo ci) {
         PartBatch.beforeDraw(shader, (VertexBuffer) (Object) this);
+        dev.lull.optsupport.ParticleGpu.beforeDraw(shader, (VertexBuffer) (Object) this);   // a particle list's records, right before its batch
     }
 }

@@ -29,7 +29,7 @@ public final class ClientCounters {
     private ClientCounters() {}
 
     public static String report() {
-        return String.format(Locale.ROOT, "client opts: ambient biome lookups skipped %d, sampler locations from cache %d; collision memo hits %d, misses %d; " + CollisionMask.report() + "; " + CollideKernel.report() + "; " + ParticleStats.report() + "; " + ParallelParticles.report() + "; %s",
+        return String.format(Locale.ROOT, "client opts: ambient biome lookups skipped %d, sampler locations from cache %d; collision memo hits %d, misses %d; " + CollisionMask.report() + "; " + CollideKernel.report() + "; " + ParticleStats.report() + "; " + ParallelParticles.report() + "; " + ParticleGpu.report() + "; " + ParticleLightMemo.report() + "; %s",
                 biomeSkips, samplerHits, BlockCollisionMemo.hits, BlockCollisionMemo.misses, EventSites.report())
                 + (Boolean.getBoolean("lab.opt.ChunkMultiDrawMixin") ? "; " + ChunkMultiDraw.report() : "")
                 + (Boolean.getBoolean("lab.opt.VertexSortRadixMixin") ? "; " + QuadSort.report() : "")
