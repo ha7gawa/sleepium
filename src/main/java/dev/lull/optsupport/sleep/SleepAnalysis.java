@@ -615,6 +615,10 @@ final class SleepAnalysis {
                 }
             }
         }
+        if (tickers.isEmpty()) {   // a ticker made by a helper: followed from getTicker through the calls returning a ticker
+            Plan refused = helperTickers(blockClass, beClass, beChain, tickers);
+            if (refused != null) return refused;
+        }
         if (tickers.isEmpty()) return new Plan(false, "no ticker found in " + blockClass.getSimpleName(), List.of(), List.of());
         Set<String> seen = new HashSet<>();
         for (String[] t : tickers) {
@@ -723,6 +727,80 @@ final class SleepAnalysis {
     }
 
     /** A ticker made as an object: the class (or a superclass) implements BlockEntityTicker; its tick taking this BE. */
+    /**
+     * Tickers a block makes through helpers (Immersive Engineering: getTicker -> its class data's makeBaseTicker ->
+     * IEServerTickableBE.makeTicker, a lambda casting the block entity to the interface and calling tickServer): from
+     * the block's getTicker, every call whose result is a BlockEntityTicker is followed into its method, three calls
+     * deep, and each method reached is searched as the block's own are - a lambda over (Level, BlockPos, BlockState,
+     * the block entity or a supertype) or a ticker object. A lambda that first casts the block entity to a type it does
+     * not have (another block entity's ticker the same helper makes, a client ticker for a server-only one) can never
+     * run for this block entity and is left out. A helper method changed by another mod's mixin refuses the class.
+     */
+    private Plan helperTickers(Class<?> blockClass, Class<?> beClass, Set<String> beChain, List<String[]> tickers) {
+        java.util.ArrayDeque<String[]> todo = new java.util.ArrayDeque<>();
+        Set<String> visited = new HashSet<>();
+        for (Class<?> c : blockTypes(blockClass)) {
+            ClassNode cn = node(internal(c));
+            if (cn == null) continue;
+            for (MethodNode m : cn.methods)
+                if (m.name.equals("getTicker") || m.desc.endsWith(TICKER_RET)) todo.add(new String[] {internal(c), m.name, m.desc, "0"});
+        }
+        while (!todo.isEmpty()) {
+            String[] cur = todo.poll();
+            if (!visited.add(cur[0] + "." + cur[1] + cur[2])) continue;
+            int depth = Integer.parseInt(cur[3]);
+            MethodNode m = method(cur[0], cur[1], cur[2]);
+            if (m == null || m.instructions == null) continue;
+            if (depth > 0 && changed(cur[0], cur[1])) return new Plan(false, "mixin-changed " + cur[0] + "." + cur[1], List.of(), List.of());
+            for (AbstractInsnNode in : m.instructions) {
+                String[] t = null;
+                if (in instanceof InvokeDynamicInsnNode indy && indy.desc.endsWith(TICKER_RET) && indy.bsmArgs.length >= 2 && indy.bsmArgs[1] instanceof Handle h) {
+                    Type[] args = Type.getArgumentTypes(h.getDesc());
+                    if (args.length == 4 && beChain.contains(args[3].getInternalName()) && castFits(h, beClass)) t = new String[] {h.getOwner(), h.getName(), h.getDesc()};
+                } else if (in.getOpcode() == Opcodes.NEW && in instanceof TypeInsnNode ti && m.desc.endsWith(TICKER_RET)) {
+                    t = tickerObject(ti.desc, beChain);
+                } else if (in instanceof MethodInsnNode mi && mi.desc.endsWith(TICKER_RET) && depth < 3) {
+                    todo.add(new String[] {mi.owner, mi.name, mi.desc, String.valueOf(depth + 1)});
+                }
+                if (t == null) continue;
+                final String[] found = t;
+                if (tickers.stream().noneMatch(x -> Arrays.equals(x, found))) tickers.add(found);
+            }
+        }
+        return null;
+    }
+
+    /** a ticker lambda whose body starts by casting its block entity (4th parameter) to a type this block entity has, or does not cast it */
+    private boolean castFits(Handle h, Class<?> beClass) {
+        MethodNode m = method(h.getOwner(), h.getName(), h.getDesc());
+        if (m == null || m.instructions == null) return true;
+        boolean inst = h.getTag() != Opcodes.H_INVOKESTATIC;
+        Type[] a = Type.getArgumentTypes(h.getDesc());
+        int slot = inst ? 1 : 0;
+        for (int k = 0; k < 3; k++) slot += a[k].getSize();
+        boolean loaded = false;
+        for (AbstractInsnNode in : m.instructions) {
+            if (in.getOpcode() < 0) continue;   // labels, line numbers, frames
+            if (!loaded) {
+                if (in instanceof VarInsnNode v && v.getOpcode() == Opcodes.ALOAD && v.var == slot) {
+                    loaded = true;
+                    continue;
+                }
+                return true;   // something else first: no cast to judge by
+            }
+            if (in.getOpcode() == Opcodes.CHECKCAST && in instanceof TypeInsnNode ti) {
+                try {
+                    Class<?> cast = Class.forName(ti.desc.replace('/', '.'), false, beClass.getClassLoader());
+                    return cast.isAssignableFrom(beClass);
+                } catch (ClassNotFoundException | LinkageError e) {
+                    return true;
+                }
+            }
+            return true;
+        }
+        return true;
+    }
+
     private String[] tickerObject(String type, Set<String> beChain) {
         for (String c = type; c != null && !c.equals("java/lang/Object"); ) {
             ClassNode cn = node(c);
