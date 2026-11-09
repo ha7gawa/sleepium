@@ -12,10 +12,12 @@ public abstract class ParticleShapeMemoMixin {
     @Inject(method = "tick", at = @At("HEAD"))
     private void sleep$start(CallbackInfo ci) {
         dev.lull.optsupport.CollideKernel.particleTick(true);
+        dev.lull.optsupport.ParticleStats.start();
     }
 
     @Inject(method = "tick", at = @At("RETURN"))
     private void sleep$end(CallbackInfo ci) {
         dev.lull.optsupport.CollideKernel.particleTick(false);
+        dev.lull.optsupport.ParticleStats.end((ParticleEngine) (Object) this);
     }
 }

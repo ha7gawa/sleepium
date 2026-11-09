@@ -192,6 +192,8 @@
     "ItemGpuMixin",
     "QuadGpuMixin",
     "ParticleShapeMemoMixin",
+    "EntityShapeMemoMixin",
+    "ParticleEngineAccessor",
     "SpriteImageAccessor",
     "ShaderStateShardAccessor",
     "VertexSortDirectMixin",

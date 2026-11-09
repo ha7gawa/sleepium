@@ -278,6 +278,62 @@ public final class ShapePurity {
     }
 
 
+    // ---------------------------------------------------------------- context-free shapes
+
+    private static final Map<Class<?>, Boolean> CONTEXT_FREE = new ConcurrentHashMap<>();
+    public static volatile int contextFree, contextBound;
+
+    /**
+     * The block's collision shape does not depend on the collision context (who asks): the resolved getCollisionShape
+     * - and every method it calls on itself with the same (state, level, pos, context) signature, the context passed as
+     * that argument - never loads the context argument otherwise. Level, position and block entity may be read: the
+     * shape at a position is then the same for every entity and particle while the level does not change. Methods a
+     * foreign mixin changes, or calls that cannot be resolved, count as reading it.
+     */
+    public static boolean contextFree(net.minecraft.world.level.block.Block block) {
+        return CONTEXT_FREE.computeIfAbsent(block.getClass(), ShapePurity::analyseContext);
+    }
+
+    private static boolean analyseContext(Class<?> c) {
+        String why;
+        try {
+            ClassLoader loader = c.getClassLoader();
+            String cname = Type.getInternalName(c);
+            Resolved col = resolve(loader, cname, "getCollisionShape", SHAPE_DESC);
+            why = col == null ? "getCollisionShape not resolved" : ctxFree(loader, cname, col, 0);
+        } catch (Throwable t) {
+            why = "error " + t;
+        }
+        if (why == null) contextFree++;
+        else contextBound++;
+        if (LOG) System.out.println("[sleep/opt] shape context " + c.getName() + ": " + (why == null ? "FREE" : "read (" + why + ")"));
+        return why == null;
+    }
+
+    private static String ctxFree(ClassLoader loader, String concrete, Resolved r, int depth) {
+        if (depth > MAX_DEPTH) return "too deep";
+        MethodNode m = r.method;
+        if (dev.lull.ClassBytes.unseen(r.owner, m.name)) return r.owner + "." + m.name + " mixin-changed";
+        if ((m.access & (Opcodes.ACC_NATIVE | Opcodes.ACC_ABSTRACT)) != 0) return m.name + " native/abstract";
+        boolean statik = (m.access & Opcodes.ACC_STATIC) != 0;
+        int ctxSlot = statik ? 3 : 4;
+        for (AbstractInsnNode in = m.instructions.getFirst(); in != null; in = in.getNext()) {
+            if (in.getOpcode() == Opcodes.ASTORE && ((VarInsnNode) in).var == ctxSlot) return m.name + " overwrites the context slot";
+            if (in.getOpcode() != Opcodes.ALOAD || ((VarInsnNode) in).var != ctxSlot) continue;
+            // allowed only as the last argument of a call on this with the shape signature: getShape(state, level, pos, context)
+            AbstractInsnNode next = in.getNext();
+            while (next != null && next.getOpcode() == -1) next = next.getNext();
+            if (!(next instanceof MethodInsnNode mi) || !mi.desc.equals(SHAPE_DESC) || mi.getOpcode() == Opcodes.INVOKESTATIC)
+                return m.name + " uses the context";
+            if (!isSuperOf(loader, mi.owner, concrete)) return m.name + " passes the context to " + mi.owner + "." + mi.name;
+            Resolved callee = mi.getOpcode() == Opcodes.INVOKESPECIAL ? resolve(loader, mi.owner, mi.name, mi.desc) : resolve(loader, concrete, mi.name, mi.desc);
+            if (callee == null) return m.name + " calls unresolved " + mi.name;
+            String why = ctxFree(loader, concrete, callee, depth + 1);
+            if (why != null) return why;
+        }
+        return null;
+    }
+
     private static ClassNode node(ClassLoader loader, String k) {
         ClassNode cached = NODES.get(k);
         if (cached != null) return cached;
