@@ -32,6 +32,10 @@ import net.minecraftforge.eventbus.api.IEventBus;
 final class ClientMeter {
     private static final int CAPACITY = 1 << 17;   // ~36 min at 60 fps
     private static final long[] frames = new long[CAPACITY];
+    /** -Dsleep.meter.frameLog=true: per frame the level's game time and the client tick that ran in it (frames-<label>.csv) */
+    private static final boolean FRAME_LOG = Boolean.getBoolean("sleep.meter.frameLog");
+    private static final long[] frameGameTime = FRAME_LOG ? new long[CAPACITY] : null, frameTick = FRAME_LOG ? new long[CAPACITY] : null;
+    private static long lastTickNanos;
     private static final long[] renders = new long[CAPACITY];
     private static final long[] allocs = new long[CAPACITY];
     private static final long[] ticks = new long[CAPACITY / 4];   // Minecraft.tick durations (ClientTickEvent Pre -> Post)
@@ -59,6 +63,7 @@ final class ClientMeter {
         });
         bus.addListener(EventPriority.LOWEST, false, TickEvent.ClientTickEvent.class, e -> {
             if (e.phase == TickEvent.Phase.END && stopAtNanos > 0 && tickStart != 0 && nt < ticks.length) ticks[nt++] = System.nanoTime() - tickStart;
+            if (e.phase == TickEvent.Phase.END && FRAME_LOG && tickStart != 0) lastTickNanos = System.nanoTime() - tickStart;
             if (stopAtNanos > 0) {   // a screen over the world in the window
                 var m = net.minecraft.client.Minecraft.getInstance();
                 if (m.level != null && m.screen != null && !(m.screen instanceof net.minecraft.client.gui.screens.ChatScreen)) {
@@ -177,6 +182,12 @@ final class ClientMeter {
         }
         if (lastPre != 0 && n < CAPACITY) {
             frames[n] = now - lastPre;
+            if (FRAME_LOG) {
+                var lv = Minecraft.getInstance().level;
+                frameGameTime[n] = lv == null ? -1 : lv.getGameTime();
+                frameTick[n] = lastTickNanos;
+                lastTickNanos = 0;
+            }
             allocs[n] = ThreadAlloc.supported() ? ThreadAlloc.current() - allocAtPre : 0;
             n++;
         }
@@ -234,6 +245,17 @@ final class ClientMeter {
         Path dir = mc.gameDirectory.toPath().resolve(dev.lull.SleepOut.ROOT);
         String ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
         Path file = dir.resolve("report-client-" + label + "-" + ts + ".txt");
+        if (FRAME_LOG) {
+            StringBuilder fl = new StringBuilder("frame_ms,game_time,tick_ms\n");
+            for (int i = 0; i < n; i++)
+                fl.append(String.format(Locale.ROOT, "%.3f,%d,%.3f%n", frames[i] / 1e6, frameGameTime[i], frameTick[i] / 1e6));
+            try {
+                Files.createDirectories(dir);
+                Files.writeString(dir.resolve("frames-" + label + ".csv"), fl.toString());
+            } catch (java.io.IOException e) {
+                System.out.println("[sleep] frame log not written: " + e);
+            }
+        }
         Path csv = dir.resolve("summary-client.csv");
         String row = String.format(Locale.ROOT, "%s,%s,%d,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.1f,%d%n",
                 LocalDateTime.now().withNano(0), label, n, n / secs, f.p50() / 1e6, f.p99() / 1e6, f.max() / 1e6,
