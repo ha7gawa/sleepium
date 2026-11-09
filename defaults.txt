@@ -59,6 +59,7 @@
 -Dlab.opt.GoalSelectorMixin=true
 -Dlab.opt.ItemFrameOffsetMixin=true
 -Dlab.opt.ItemGpuMixin=true
+-Dlab.opt.QuadGpuMixin=true
 -Dlab.opt.KeyframeJournalMixin=true
 -Dlab.opt.LabPoolsMixin=true
 -Dlab.opt.LightLayerCacheMixin=true
