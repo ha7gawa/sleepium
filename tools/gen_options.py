@@ -23,7 +23,7 @@ GROUPS = [
     ('chunks', r'^(Chunk(Multi|Section|Shader|Upload)|Section(Layer|Lists|ModCount)|BlockMesh|VertexSort|SamplerUnit|Uniform|ShaderSampler|Frame|RenderCache|RenderCall|OverworldFog|AmbientParticle|ItemFrame|Texture|ParallelReload|ClientBiome|ClientChunkCacheBiome)'),
     ('entities_render', r'^(EntityBatch|ItemGpu|Part|ModelPart|PoseStack|EntityCull|EntityLight|BlockEntityCull|Vec3FromRgb)'),
     ('animation', r'^(Geo|Molang|Keyframe|AnimStream)'),
-    ('threads', r'^(MainReactor|Reactor|ParallelEntities|LabPools|PersistentPools|MailboxBatch|ForgeBus)'),
+    ('threads', r'^(MainReactor|Reactor|ParallelEntities|LabPools|PersistentPools|MailboxBatch|ForgeBus|RenderPriority)'),
     ('network', r'^Net'),
     ('worldgen', r'^(Worldgen|GenScout|CubicSampler|ParallelWorldgen|StructurePlace|OffThreadEntity)'),
     ('saving', r'^(AsyncChunkSave|ChunkIo|ChunkCache|UnloadRecheck|AllocTrim|PoiColumn|SectionStorage)'),

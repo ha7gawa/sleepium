@@ -194,3 +194,4 @@
 -Dlab.opt.EntityDataNoLockMixin=true
 -Dlab.opt.EntityFluidLoopMixin=true
 -Dlab.opt.OffThreadEntity=true
+-Dlab.opt.RenderPriorityMixin=true
