@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "testmods.stimulate",
+  "plugin": "testmods.stimulate.StimulatePlugin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "StimulateMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
