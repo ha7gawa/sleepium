@@ -102,6 +102,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.UniformDedupeMixin");
         if (simple.equals("ModelPartIterMixin"))   // part of the model-part allocation flag
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ModelPartQuatMixin");
+        if (simple.equals("RenderPriorityServerMixin"))   // part of the render priority flag
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.RenderPriorityMixin");
         // exp/frame-garbage: one flag for the per-frame garbage fixes
         if (simple.equals("Vec3FromRgbMixin") || simple.equals("OverworldFogMixin") || simple.equals("EntityCullNoAllocMixin") || simple.equals("FrustumInvoker")
                 || simple.equals("ItemFrameOffsetMixin") || simple.equals("EntityLightNoAllocMixin") || simple.equals("BlockEntityCullNoAllocMixin")

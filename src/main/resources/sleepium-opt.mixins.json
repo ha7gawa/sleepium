@@ -154,6 +154,8 @@
     "EntityFluidLoopMixin"
   ],
   "client": [
+    "RenderPriorityMixin",
+    "RenderPriorityServerMixin",
     "SpriteInterpolateMixin",
     "SectionLayerMaskMixin",
     "AmbientChunksMixin",
