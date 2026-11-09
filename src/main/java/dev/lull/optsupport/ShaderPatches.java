@@ -19,8 +19,10 @@ public final class ShaderPatches {
                 if (Boolean.getBoolean("lab.opt.ChunkMultiDrawMixin") && ChunkMultiDraw.capable()) src = ChunkMultiDraw.patch(name, src);
             } else if (ChunkMultiDraw.SUPPORTED.contains(name)) {
                 if (Boolean.getBoolean("lab.opt.ChunkMultiDrawMixin") && ChunkMultiDraw.capable()) src = ChunkMultiDraw.patch(name, src);
-                // SuperByteBuffer parts (SbbPartsMixin) draw into the opaque block types too: their shaders take part records as well
-                if (Boolean.getBoolean("lab.opt.SbbPartsMixin") && Boolean.getBoolean("lab.opt.PartBatchMixin") && !"rendertype_translucent".equals(name)
+                // SuperByteBuffer parts (SbbPartsMixin) and baked-quad runs (QuadGpuMixin) draw into the opaque block types too:
+                // their shaders take part records as well
+                if ((Boolean.getBoolean("lab.opt.SbbPartsMixin") || Boolean.getBoolean("lab.opt.QuadGpuMixin")) && Boolean.getBoolean("lab.opt.PartBatchMixin")
+                        && !"rendertype_translucent".equals(name)
                         && PartBatch.capable()) src = PartBatch.patch(name, src);
             } else if (Boolean.getBoolean("lab.opt.PartBatchMixin") && (name.startsWith("rendertype_entity") || name.startsWith("rendertype_armor")
                     || name.startsWith("rendertype_item_entity"))

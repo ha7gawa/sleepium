@@ -419,7 +419,9 @@ public final class PartBatch {
     private static boolean itemTypeOk(RenderType t) {
         Boolean ok = ITEM_TYPE_OK.get(t);
         if (ok == null) {
-            ok = t.format() == DefaultVertexFormat.NEW_ENTITY && t.mode() == VertexFormat.Mode.QUADS && (EntityBatch.commutes(t) || ItemGpu.sortedOk(t))
+            // BLOCK: QuadGpu's runs (block entities' baked quads into the block layers), drawn with their own vertex array
+            ok = (t.format() == DefaultVertexFormat.NEW_ENTITY || t.format() == DefaultVertexFormat.BLOCK) && t.mode() == VertexFormat.Mode.QUADS
+                    && (EntityBatch.commutes(t) || t.format() == DefaultVertexFormat.NEW_ENTITY && ItemGpu.sortedOk(t))
                     && typeOk(t) && capable();
             ITEM_TYPE_OK.put(t, ok);
         }
@@ -465,6 +467,26 @@ public final class PartBatch {
                 && t.canConsolidateConsecutiveGeometry() && itemTypeOk(t);
     }
 
+    /**
+     * Render thread, QuadGpu: the builder is the level source's started builder of a type that takes item records - fixed
+     * or not: a run is closed into its builder right before the builder is built, so its record is queued before the
+     * type's next draw and drawn there (beforeDraw), whenever the source ends that batch.
+     */
+    static boolean quadTarget(RenderType t, BufferBuilder bb, net.minecraft.client.renderer.MultiBufferSource.BufferSource src) {
+        return ((dev.lull.opt.BufferSourceAccessor) src).sleep$started().get(t) == bb && itemTypeOk(t);
+    }
+
+    /** why itemTarget refuses (QuadGpu's diagnosis, -Dlab.quadgpu.why) */
+    static String itemWhy(RenderType t, BufferBuilder bb, net.minecraft.client.renderer.MultiBufferSource buffers) {
+        ShaderInstance sh = EntityBatch.shaderOf(t);
+        dev.lull.opt.BufferSourceAccessor a = (dev.lull.opt.BufferSourceAccessor) buffers;
+        return t + ": level source " + (buffers == net.minecraft.client.Minecraft.getInstance().renderBuffers().bufferSource()) + ", fixed "
+                + a.sleep$fixed().containsKey(t) + ", started " + (a.sleep$started().get(t) == bb) + ", commutes " + EntityBatch.commutes(t)
+                + ", shader " + (sh == null ? null : sh.getName()) + " patched " + (sh != null && PATCHED.contains(sh.getName())) + " uniform "
+                + (sh == null ? -2 : GL20C.glGetUniformLocation(sh.getId(), "ProbePartMode")) + ", capable " + capable() + ", parts allowed " + partsAllowed()
+                + ", patched shaders " + PATCHED;
+    }
+
     /** -Dlab.itemgpu.otherSources=false: item records only with vanilla's level buffer source (as before 1.1.9) */
     static final boolean ITEM_OTHER_SOURCES = !"false".equals(System.getProperty("lab.itemgpu.otherSources"));
 
@@ -503,6 +525,7 @@ public final class PartBatch {
         if (t == null || ITEM_QUEUES.isEmpty()) return;
         Queue q = ITEM_QUEUES.get(t);
         if (q == null || q.n == 0) return;
+        itemBlock = t.format() == DefaultVertexFormat.BLOCK;
         drawQueue(shader, q, 7);
         q.n = 0;   // drawn (the records were copied to the driver): a later draw of the type this frame does not repeat them
         vb.bind();
@@ -1432,9 +1455,9 @@ public final class PartBatch {
             if (vaoStale || blockVao == 0) setupVao();
             GL30C.glBindVertexArray(blockVao);
             lightUniforms(st);
-        } else if (mode == 7) {   // item geometry: its own colour and baked light (ItemGpu)
+        } else if (mode == 7) {   // item geometry: its own colour and baked light (ItemGpu; QuadGpu into BLOCK types: their attribute order)
             if (vaoStale || itemVao == 0) setupVao();
-            GL30C.glBindVertexArray(itemVao);
+            GL30C.glBindVertexArray(itemBlock ? itemBlockVao : itemVao);
         } else if (mode != 2) {   // part geometry (modes 1, 3); mode 2 draws resident recordings
             if (vaoStale || vao == 0) setupVao();
             GL30C.glBindVertexArray(vao);
@@ -1480,7 +1503,9 @@ public final class PartBatch {
         q.maxIndices = 0;
     }
 
-    private static int blockVao, auxSsbo, itemVao;
+    private static int blockVao, auxSsbo, itemVao, itemBlockVao;
+    /** the item records being drawn go to a BLOCK-format type (QuadGpu) */
+    private static boolean itemBlock;
     private static final org.joml.Vector3f L0 = new org.joml.Vector3f(), L1 = new org.joml.Vector3f();
 
     /** Attribute indices as the entity shaders bind them (NEW_ENTITY order): Position 0, UV0 2, Normal 5; and for BLOCK
@@ -1527,6 +1552,21 @@ public final class PartBatch {
         GL20C.glVertexAttribPointer(5, 3, GL11C.GL_BYTE, true, STRIDE, 20);
         GL20C.glEnableVertexAttribArray(15);
         GL20C.glVertexAttribPointer(15, 1, GL11C.GL_UNSIGNED_BYTE, false, STRIDE, 23);
+        if (itemBlockVao == 0) itemBlockVao = GL30C.glGenVertexArrays();   // the same geometry for BLOCK shaders (QuadGpu): Position 0, Color 1, UV0 2, UV2 3, Normal 4
+        GL30C.glBindVertexArray(itemBlockVao);
+        GL15C.glBindBuffer(GL15C.GL_ARRAY_BUFFER, vbo);
+        GL20C.glEnableVertexAttribArray(0);
+        GL20C.glVertexAttribPointer(0, 3, GL11C.GL_FLOAT, false, STRIDE, 0);
+        GL20C.glEnableVertexAttribArray(1);
+        GL20C.glVertexAttribPointer(1, 4, GL11C.GL_UNSIGNED_BYTE, true, STRIDE, 24);
+        GL20C.glEnableVertexAttribArray(2);
+        GL20C.glVertexAttribPointer(2, 2, GL11C.GL_FLOAT, false, STRIDE, 12);
+        GL20C.glEnableVertexAttribArray(3);
+        GL30C.glVertexAttribIPointer(3, 2, GL11C.GL_SHORT, STRIDE, 28);
+        GL20C.glEnableVertexAttribArray(4);
+        GL20C.glVertexAttribPointer(4, 3, GL11C.GL_BYTE, true, STRIDE, 20);
+        GL20C.glEnableVertexAttribArray(15);
+        GL20C.glVertexAttribPointer(15, 1, GL11C.GL_UNSIGNED_BYTE, false, STRIDE, 23);
         vaoStale = false;
     }
 
@@ -1537,6 +1577,7 @@ public final class PartBatch {
         ASKED_GEO.clear();
         ASKED_ITEM.clear();
         ItemGpu.endFrame();
+        QuadGpu.endFrame();
         for (Queue q : RESIDENT.values()) {
             if (q.n > 0) fallbacks += q.n;
             q.n = 0;
@@ -1558,7 +1599,7 @@ public final class PartBatch {
 
     public static String report() {
         SbbRecorder rcd = sbbRecorder;
-        return (rcd != null ? rcd.report() + "; " : "") + ItemGpu.report() + "; " + String.format(java.util.Locale.ROOT, "part batch: SuperByteBuffer calls %d, parts %d (not taken %d %s %s %s, UV shift %d, level light %d); shaders patched %s, parts %d (EMF %d), GeckoLib bones %d (from workers %d, jobs refused at merge %d), multi-draws %d, geometries %d (%.1f MB), lost %d; resident draws %d, uploads %d (arena %.1f MB); persistent records %d, draws %d, uploads %d; level-lit parts %d (refused %d); %s",
+        return (rcd != null ? rcd.report() + "; " : "") + ItemGpu.report() + "; " + QuadGpu.report() + "; " + String.format(java.util.Locale.ROOT, "part batch: SuperByteBuffer calls %d, parts %d (not taken %d %s %s %s, UV shift %d, level light %d); shaders patched %s, parts %d (EMF %d), GeckoLib bones %d (from workers %d, jobs refused at merge %d), multi-draws %d, geometries %d (%.1f MB), lost %d; resident draws %d, uploads %d (arena %.1f MB); persistent records %d, draws %d, uploads %d; level-lit parts %d (refused %d); %s",
                 sbbCalls, sbbParts, sbbRefused, java.util.Arrays.toString(SBB_WHY), SBB_CONSUMERS, SBB_TYPES, sbbShift, sbbLevelLight, PATCHED, parts, emfParts, geoParts, jobMerged, jobRefused, draws, geometries, (double) used * STRIDE / 1048576.0, fallbacks, residentDraws, residentUploads,
                 (double) RES_ARENA.capacity * RES_ARENA.stride / 1048576.0, pUsed - pFreeN, persistDraws, persistUploads, litParts, litRefused,
                 LightBoxes.report()) + (RESIDENT_WHY ? System.lineSeparator() + residentWhyReport() : "");

@@ -11,22 +11,14 @@ fill -8 249 10 112 249 70 minecraft:smooth_stone
 fill -8 250 19 64 250 19 minecraft:stone_bricks
 fill -8 250 21 64 250 21 minecraft:stone_bricks
 setblock -4 250 20 minecraft:stone_bricks
-setblock 0 254 19 minecraft:stone
 setblock 4 250 20 minecraft:stone_bricks
-setblock 8 254 19 minecraft:stone
 setblock 12 250 20 minecraft:stone_bricks
-setblock 16 254 19 minecraft:stone
 setblock 20 250 20 minecraft:stone_bricks
-setblock 24 254 19 minecraft:stone
 setblock 28 250 20 minecraft:stone_bricks
-setblock 32 254 19 minecraft:stone
 setblock 36 250 20 minecraft:stone_bricks
-setblock 40 254 19 minecraft:stone
 setblock 44 250 20 minecraft:stone_bricks
-setblock 48 254 19 minecraft:stone
 setblock 52 250 20 minecraft:stone_bricks
-setblock 56 254 19 minecraft:stone
-sleep useitem immersiveengineering:watermill 0 254 20 8 0 8
+sleep useitem immersiveengineering:watermill 0 253 20 8 0 8
 setblock -3 250 20 minecraft:water
 setblock 5 250 20 minecraft:water
 setblock 13 250 20 minecraft:water
@@ -38,22 +30,14 @@ setblock 53 250 20 minecraft:water
 fill -8 250 26 64 250 26 minecraft:stone_bricks
 fill -8 250 28 64 250 28 minecraft:stone_bricks
 setblock -4 250 27 minecraft:stone_bricks
-setblock 0 254 26 minecraft:stone
 setblock 4 250 27 minecraft:stone_bricks
-setblock 8 254 26 minecraft:stone
 setblock 12 250 27 minecraft:stone_bricks
-setblock 16 254 26 minecraft:stone
 setblock 20 250 27 minecraft:stone_bricks
-setblock 24 254 26 minecraft:stone
 setblock 28 250 27 minecraft:stone_bricks
-setblock 32 254 26 minecraft:stone
 setblock 36 250 27 minecraft:stone_bricks
-setblock 40 254 26 minecraft:stone
 setblock 44 250 27 minecraft:stone_bricks
-setblock 48 254 26 minecraft:stone
 setblock 52 250 27 minecraft:stone_bricks
-setblock 56 254 26 minecraft:stone
-sleep useitem immersiveengineering:watermill 0 254 27 8 0 8
+sleep useitem immersiveengineering:watermill 0 253 27 8 0 8
 setblock -3 250 27 minecraft:water
 setblock 5 250 27 minecraft:water
 setblock 13 250 27 minecraft:water
@@ -65,22 +49,14 @@ setblock 53 250 27 minecraft:water
 fill -8 250 33 64 250 33 minecraft:stone_bricks
 fill -8 250 35 64 250 35 minecraft:stone_bricks
 setblock -4 250 34 minecraft:stone_bricks
-setblock 0 254 33 minecraft:stone
 setblock 4 250 34 minecraft:stone_bricks
-setblock 8 254 33 minecraft:stone
 setblock 12 250 34 minecraft:stone_bricks
-setblock 16 254 33 minecraft:stone
 setblock 20 250 34 minecraft:stone_bricks
-setblock 24 254 33 minecraft:stone
 setblock 28 250 34 minecraft:stone_bricks
-setblock 32 254 33 minecraft:stone
 setblock 36 250 34 minecraft:stone_bricks
-setblock 40 254 33 minecraft:stone
 setblock 44 250 34 minecraft:stone_bricks
-setblock 48 254 33 minecraft:stone
 setblock 52 250 34 minecraft:stone_bricks
-setblock 56 254 33 minecraft:stone
-sleep useitem immersiveengineering:watermill 0 254 34 8 0 8
+sleep useitem immersiveengineering:watermill 0 253 34 8 0 8
 setblock -3 250 34 minecraft:water
 setblock 5 250 34 minecraft:water
 setblock 13 250 34 minecraft:water
@@ -92,22 +68,14 @@ setblock 53 250 34 minecraft:water
 fill -8 250 40 64 250 40 minecraft:stone_bricks
 fill -8 250 42 64 250 42 minecraft:stone_bricks
 setblock -4 250 41 minecraft:stone_bricks
-setblock 0 254 40 minecraft:stone
 setblock 4 250 41 minecraft:stone_bricks
-setblock 8 254 40 minecraft:stone
 setblock 12 250 41 minecraft:stone_bricks
-setblock 16 254 40 minecraft:stone
 setblock 20 250 41 minecraft:stone_bricks
-setblock 24 254 40 minecraft:stone
 setblock 28 250 41 minecraft:stone_bricks
-setblock 32 254 40 minecraft:stone
 setblock 36 250 41 minecraft:stone_bricks
-setblock 40 254 40 minecraft:stone
 setblock 44 250 41 minecraft:stone_bricks
-setblock 48 254 40 minecraft:stone
 setblock 52 250 41 minecraft:stone_bricks
-setblock 56 254 40 minecraft:stone
-sleep useitem immersiveengineering:watermill 0 254 41 8 0 8
+sleep useitem immersiveengineering:watermill 0 253 41 8 0 8
 setblock -3 250 41 minecraft:water
 setblock 5 250 41 minecraft:water
 setblock 13 250 41 minecraft:water

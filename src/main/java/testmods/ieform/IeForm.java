@@ -56,6 +56,11 @@ public final class IeForm {
     }
 
     public static String formAll(ServerLevel level, BlockPos base) {
+        return formAll(level, base, "", 1, 14);
+    }
+
+    /** only: multiblocks whose name contains it ("" all); copies of each, in a grid (6 wide, or square for many), step blocks apart */
+    public static String formAll(ServerLevel level, BlockPos base, String only, int copies, int step) {
         try {
             Class<?> handler = Class.forName("blusunrize.immersiveengineering.api.multiblocks.MultiblockHandler");
             Class<?> imb = Class.forName("blusunrize.immersiveengineering.api.multiblocks.MultiblockHandler$IMultiblock");
@@ -66,8 +71,12 @@ public final class IeForm {
             List<?> mbs = (List<?>) all.invoke(null);
             StringBuilder sb = new StringBuilder();
             int formed = 0, i = 0;
-            for (Object mb : mbs) {
-                BlockPos origin = base.offset(i % 6 * 14, 0, i / 6 * 14);
+            int total = 0;
+            for (Object mb : mbs) if (only.isEmpty() || String.valueOf(name.invoke(mb)).contains(only)) total += copies;
+            int wide = Math.max(6, (int) Math.ceil(Math.sqrt(total)));
+            for (Object mb : mbs) for (int copy = 0; copy < copies; copy++) {
+                if (!only.isEmpty() && !String.valueOf(name.invoke(mb)).contains(only)) continue;
+                BlockPos origin = base.offset(i % wide * step, 0, i / wide * step);
                 i++;
                 List<?> blocks = (List<?>) structure.invoke(mb, level);
                 for (Object info : blocks) {
@@ -92,7 +101,7 @@ public final class IeForm {
                 formed += ok ? 1 : 0;
                 sb.append(name.invoke(mb)).append(ok ? " formed; " : " NOT formed; ");
             }
-            return "ieform: " + formed + " of " + mbs.size() + " formed: " + sb;
+            return "ieform: " + formed + " of " + i + " formed: " + (sb.length() > 600 ? sb.substring(0, 600) + "..." : sb);
         } catch (ClassNotFoundException e) {
             return "ieform: Immersive Engineering is not installed";
         } catch (ReflectiveOperationException | RuntimeException e) {

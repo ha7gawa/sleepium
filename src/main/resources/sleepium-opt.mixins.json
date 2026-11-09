@@ -190,6 +190,8 @@
     "PartShardMixin",
     "PartFrameMixin",
     "ItemGpuMixin",
+    "QuadGpuMixin",
+    "ParticleShapeMemoMixin",
     "SpriteImageAccessor",
     "ShaderStateShardAccessor",
     "VertexSortDirectMixin",

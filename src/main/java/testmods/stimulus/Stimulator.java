@@ -33,13 +33,15 @@ import net.neoforged.neoforge.items.IItemHandler;
  * 1100-1200 quiet. Positions in sorted order: the same actions in the same order every run.
  *
  * <p>-Dsleep.test.stimulate.work=true instead: the machines kept working (client scenes of working machines, such as
- * sleep:client_ie) - fed from every side from the start and all the time, never drained, no redstone.
+ * sleep:client_ie) - fed from every side from the start and all the time, never drained, no redstone; what they drop
+ * as items (a crusher's output) removed every second, or thousands of item entities would measure their physics instead
+ * (-Dsleep.test.stimulate.keepItems=true keeps them: the client's entity collisions under that load).
  */
 public final class Stimulator {
     private Stimulator() {}
 
     private static final int[] AREA = area(System.getProperty("sleep.test.stimulate", ""));
-    private static final boolean WORK = Boolean.getBoolean("sleep.test.stimulate.work");
+    private static final boolean WORK = Boolean.getBoolean("sleep.test.stimulate.work"), KEEP_ITEMS = Boolean.getBoolean("sleep.test.stimulate.keepItems");
     private static final Direction[] SIDES = Direction.values();
     private static final Item[] ITEMS = {Items.COAL, Items.RAW_IRON, Items.IRON_ORE, Items.COBBLESTONE, Items.OAK_LOG, Items.WHEAT_SEEDS,
             Items.BONE_MEAL, Items.SAND, Items.WHEAT, Items.REDSTONE, Items.IRON_INGOT, Items.GLASS_BOTTLE, Items.BLAZE_POWDER, Items.DIAMOND};
@@ -75,6 +77,10 @@ public final class Stimulator {
             if (be.isRemoved()) continue;
             if (WORK) {
                 for (Direction d : SIDES) feed(level, pos, d, p, i);
+                if (i == 0 && p % 20 == 0 && !KEEP_ITEMS) {
+                    var box = new net.minecraft.world.phys.AABB(AREA[0], level.getMinBuildHeight(), AREA[1], AREA[2] + 1, level.getMaxBuildHeight(), AREA[3] + 1);
+                    for (var e : level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, box)) e.discard();
+                }
             } else if (feed) {
                 if (p % 10 == 0) {
                     IItemHandler h = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, Direction.UP);

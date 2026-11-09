@@ -196,7 +196,17 @@ final class SleepCommand {
                             System.out.println("[sleep] " + r);
                             say(ctx, r);
                             return 1;
-                        })))))
+                        })
+                        .then(Commands.argument("only", com.mojang.brigadier.arguments.StringArgumentType.word())
+                        .then(Commands.argument("copies", IntegerArgumentType.integer(1)).then(Commands.argument("step", IntegerArgumentType.integer(1)).executes(ctx -> {
+                            String r = testmods.ieform.IeForm.formAll(ctx.getSource().getLevel(), new net.minecraft.core.BlockPos(
+                                    IntegerArgumentType.getInteger(ctx, "x"), IntegerArgumentType.getInteger(ctx, "y"), IntegerArgumentType.getInteger(ctx, "z")),
+                                    com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "only"), IntegerArgumentType.getInteger(ctx, "copies"),
+                                    IntegerArgumentType.getInteger(ctx, "step"));
+                            System.out.println("[sleep] " + r);
+                            say(ctx, r);
+                            return 1;
+                        }))))))))
                 .then(Commands.literal("reseed").executes(ctx -> {
                     // exactness tests: vanilla's clock-seeded randoms to fixed seeds, right before a scene is built
                     TestSeeds.reseed(ctx.getSource().getServer());
