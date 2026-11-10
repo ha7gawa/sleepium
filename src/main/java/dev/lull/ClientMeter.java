@@ -36,6 +36,17 @@ final class ClientMeter {
     private static final boolean FRAME_LOG = Boolean.getBoolean("sleep.meter.frameLog");
     private static final long[] frameGameTime = FRAME_LOG ? new long[CAPACITY] : null, frameTick = FRAME_LOG ? new long[CAPACITY] : null;
     private static long lastTickNanos;
+    /**
+     * the frame log's other columns, per frame: client ticks run in it, the particle ticks' time (with the particle shape
+     * memo's measurement on), GC time (all collectors, ms), sounds started, entities added to the client level, and the
+     * integrated server's longest tick finished in it
+     */
+    private static final long[][] FL = FRAME_LOG ? new long[6][CAPACITY] : null;
+    /** -Dsleep.meter.tickSplit=true (test mixin testmods.ticksplit): Minecraft.tick's large calls, a column each */
+    private static final long[][] FLS = FRAME_LOG && testmods.meter.TickSplit.ON ? new long[testmods.meter.TickSplit.PARTS.length][CAPACITY] : null;
+    private static int tickCount, sounds, added, lastServerTick = -1;
+    private static long lastGcMs = -1;
+    private static final java.util.List<java.lang.management.GarbageCollectorMXBean> GCS = FRAME_LOG ? java.lang.management.ManagementFactory.getGarbageCollectorMXBeans() : null;
     private static final long[] renders = new long[CAPACITY];
     private static final long[] allocs = new long[CAPACITY];
     private static final long[] ticks = new long[CAPACITY / 4];   // Minecraft.tick durations (ClientTickEvent Pre -> Post)
@@ -55,7 +66,10 @@ final class ClientMeter {
         bus.addListener(EventPriority.HIGHEST, net.neoforged.neoforge.client.event.ClientTickEvent.Pre.class, e -> tickStart = System.nanoTime());
         bus.addListener(EventPriority.LOWEST, net.neoforged.neoforge.client.event.ClientTickEvent.Post.class, e -> {
             if (stopAtNanos > 0 && tickStart != 0 && nt < ticks.length) ticks[nt++] = System.nanoTime() - tickStart;
-            if (FRAME_LOG && tickStart != 0) lastTickNanos = System.nanoTime() - tickStart;
+            if (FRAME_LOG && tickStart != 0) {   // a frame may run several ticks (vanilla's catch-up)
+                lastTickNanos += System.nanoTime() - tickStart;
+                tickCount++;
+            }
             if (stopAtNanos > 0) {   // a screen over the world in the window
                 var m = net.minecraft.client.Minecraft.getInstance();
                 if (m.level != null && m.screen != null && !(m.screen instanceof net.minecraft.client.gui.screens.ChatScreen)) {
@@ -64,6 +78,12 @@ final class ClientMeter {
                 }
             }
         });
+        if (FRAME_LOG) {   // the frame log's counters: sounds started, entities added to the client level
+            bus.addListener(net.neoforged.neoforge.client.event.sound.PlaySoundEvent.class, e -> sounds++);
+            bus.addListener(net.neoforged.neoforge.event.entity.EntityJoinLevelEvent.class, e -> {
+                if (e.getLevel().isClientSide()) added++;
+            });
+        }
         bus.addListener(RegisterClientCommandsEvent.class, e -> e.getDispatcher().register(
                 Commands.literal(SleepMod.DEV ? "sleepclient" : "sleepiumclient").then(Commands.literal("run")
                         .then(Commands.argument("seconds", IntegerArgumentType.integer(5, 3600))
@@ -166,6 +186,36 @@ final class ClientMeter {
                 ? os.getProcessCpuTime() : -1;
     }
 
+    /** the frame log's counters for frame i, taken and reset */
+    private static void frameColumns(int i) {
+        FL[0][i] = tickCount;
+        tickCount = 0;
+        FL[1][i] = dev.lull.optsupport.ParticleStats.frameNanos;
+        dev.lull.optsupport.ParticleStats.frameNanos = 0;
+        long gc = 0;
+        for (var b : GCS) gc += Math.max(0, b.getCollectionTime());
+        FL[2][i] = lastGcMs < 0 ? 0 : gc - lastGcMs;
+        lastGcMs = gc;
+        FL[3][i] = sounds;
+        sounds = 0;
+        FL[4][i] = added;
+        added = 0;
+        var srv = Minecraft.getInstance().getSingleplayerServer();
+        long max = 0;
+        if (srv != null) {   // tick t's time sits at [t % 100] once tickCount reached t
+            int tc = srv.getTickCount();
+            long[] tt = srv.getTickTimesNanos();
+            for (int t = Math.max(lastServerTick + 1, tc - 99); lastServerTick >= 0 && t <= tc; t++) max = Math.max(max, tt[t % 100]);
+            lastServerTick = tc;
+        }
+        FL[5][i] = max;
+        if (FLS != null)
+            for (int k = 0; k < FLS.length; k++) {
+                FLS[k][i] = testmods.meter.TickSplit.ACC[k];
+                testmods.meter.TickSplit.ACC[k] = 0;
+            }
+    }
+
     private static void onPre() {
         dev.lull.optsupport.OwnerThread.client = Thread.currentThread();
         long now = System.nanoTime();
@@ -179,6 +229,7 @@ final class ClientMeter {
                 frameGameTime[n] = lv == null ? -1 : lv.getGameTime();
                 frameTick[n] = lastTickNanos;
                 lastTickNanos = 0;
+                frameColumns(n);
             }
             allocs[n] = ThreadAlloc.supported() ? ThreadAlloc.current() - allocAtPre : 0;
             n++;
@@ -259,9 +310,16 @@ final class ClientMeter {
         String ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
         Path file = dir.resolve("report-client-" + label + "-" + ts + ".txt");
         if (FRAME_LOG) {
-            StringBuilder fl = new StringBuilder("frame_ms,game_time,tick_ms\n");
-            for (int i = 0; i < n; i++)
-                fl.append(String.format(Locale.ROOT, "%.3f,%d,%.3f%n", frames[i] / 1e6, frameGameTime[i], frameTick[i] / 1e6));
+            // other_ms: the frame's time outside the ticks and GameRenderer.render - queued tasks (packets), sound, swap, waits
+            StringBuilder fl = new StringBuilder("frame_ms,game_time,ticks,tick_ms,render_ms,other_ms,particle_ms,alloc_kib,gc_ms,sounds,entities_added,server_ms");
+            if (FLS != null) for (String p : testmods.meter.TickSplit.PARTS) fl.append(",t_").append(p).append("_ms");
+            fl.append('\n');
+            for (int i = 0; i < n; i++) {
+                fl.append(String.format(Locale.ROOT, "%.3f,%d,%d,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%.3f", frames[i] / 1e6, frameGameTime[i], FL[0][i], frameTick[i] / 1e6,
+                        renders[i] / 1e6, (frames[i] - renders[i] - frameTick[i]) / 1e6, FL[1][i] / 1e6, allocs[i] >> 10, FL[2][i], FL[3][i], FL[4][i], FL[5][i] / 1e6));
+                if (FLS != null) for (long[] col : FLS) fl.append(String.format(Locale.ROOT, ",%.3f", col[i] / 1e6));
+                fl.append('\n');
+            }
             try {
                 Files.createDirectories(dir);
                 Files.writeString(dir.resolve("frames-" + label + ".csv"), fl.toString());

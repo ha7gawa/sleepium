@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "testmods.ticksplit",
+  "plugin": "testmods.ticksplit.TickSplitPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "TickSplitMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

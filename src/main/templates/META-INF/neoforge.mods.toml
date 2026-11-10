@@ -53,6 +53,9 @@ config="sleepium-latency-test.mixins.json"
 config="sleepium-stimulate-test.mixins.json"
 
 [[mixins]]
+config="sleepium-ticksplit-test.mixins.json"
+
+[[mixins]]
 config="sleepium-offthread-test.mixins.json"
 
 [[mixins]]
