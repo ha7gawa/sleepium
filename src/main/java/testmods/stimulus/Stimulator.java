@@ -126,14 +126,22 @@ public final class Stimulator {
         }
     }
 
+    /**
+     * Work mode: each machine fed on its own phase ((tick + index) % 10), as pipes feed - not all in one tick (that made a
+     * server spike every 10 ticks the harness's own). The buffers stay full, so machines started together keep their
+     * cycles in step. -Dsleep.test.stimulate.stagger=false: all in one tick as before.
+     */
+    private static final boolean STAGGER = !"false".equals(System.getProperty("sleep.test.stimulate.stagger"));
+
     private static void feed(ServerLevel level, BlockEntity be, Direction d, int p, int i) {
-        if (p % 10 == 0) {
+        int q = STAGGER ? p + i : p;
+        if (q % 10 == 0) {
             IItemHandler h = be.getCapability(ForgeCapabilities.ITEM_HANDLER, d).resolve().orElse(null);
-            if (h != null) insert(h, new ItemStack(ITEMS[(p / 10 + i + d.ordinal()) % ITEMS.length]));
+            if (h != null) insert(h, new ItemStack(ITEMS[(q / 10 + i + d.ordinal()) % ITEMS.length]));
         }
         IEnergyStorage e = be.getCapability(ForgeCapabilities.ENERGY, d).resolve().orElse(null);
         if (e != null) energy += e.receiveEnergy(2000, false);
-        if (p % 20 == 0) {
+        if (q % 20 == 0) {
             IFluidHandler f = be.getCapability(ForgeCapabilities.FLUID_HANDLER, d).resolve().orElse(null);
             if (f != null) fluid += f.fill(new FluidStack(Fluids.WATER, 250), IFluidHandler.FluidAction.EXECUTE);
         }
