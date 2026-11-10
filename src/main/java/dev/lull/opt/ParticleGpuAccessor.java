@@ -19,6 +19,7 @@ public abstract class ParticleGpuAccessor implements dev.lull.optsupport.Particl
     @Shadow protected float gCol;
     @Shadow protected float bCol;
     @Shadow protected float alpha;
+    @Shadow @org.spongepowered.asm.mixin.Final protected net.minecraft.client.multiplayer.ClientLevel level;
 
     @Shadow
     protected abstract int getLightColor(float partialTick);
@@ -36,4 +37,5 @@ public abstract class ParticleGpuAccessor implements dev.lull.optsupport.Particl
     @Override public float sleep$b() { return bCol; }
     @Override public float sleep$a() { return alpha; }
     @Override public int sleep$light(float partialTicks) { return getLightColor(partialTicks); }
+    @Override public net.minecraft.client.multiplayer.ClientLevel sleep$level() { return level; }
 }

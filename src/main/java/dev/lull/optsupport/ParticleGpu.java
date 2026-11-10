@@ -83,6 +83,8 @@ public final class ParticleGpu {
         float sleep$a();
 
         int sleep$light(float partialTicks);
+
+        net.minecraft.client.multiplayer.ClientLevel sleep$level();
     }
 
     public interface Uv {
@@ -101,6 +103,21 @@ public final class ParticleGpu {
     public static boolean plain(Particle p) {
         if (TOUCHED || !(p instanceof SingleQuadParticle)) return false;
         return PLAIN.computeIfAbsent(p.getClass(), c -> declares(c, "render"));
+    }
+
+    private static final java.util.function.UnaryOperator<String> NAME = dev.lull.Names::official;   // method names as Mojang's
+    private static final Map<Class<?>, Boolean> OWN_LIGHT = new ConcurrentHashMap<>();
+    private static final boolean LIGHT_TOUCHED = MixinTouch.touched("net/minecraft/client/particle/Particle", "getLightColor")
+            || MixinTouch.touched("net/minecraft/client/renderer/LevelRenderer", "getLightColor");
+
+    /** the class gets its light from Particle.getLightColor (no override below Particle, no other mod's mixin on it or LevelRenderer's) */
+    private static boolean ownLight(Class<?> c) {
+        if (LIGHT_TOUCHED) return false;
+        return OWN_LIGHT.computeIfAbsent(c, k -> {
+            for (Class<?> x = k; x != null && x != Particle.class; x = x.getSuperclass())
+                for (java.lang.reflect.Method m : x.getDeclaredMethods()) if (NAME.apply(m.getName()).equals("getLightColor")) return false;
+            return true;
+        });
     }
 
     private static boolean declares(Class<?> c, String name) {
@@ -171,7 +188,9 @@ public final class ParticleGpu {
         float size = p.getQuadSize(pt);
         Uv uv = (Uv) p;
         float u0 = uv.sleep$u0(), u1 = uv.sleep$u1(), v0 = uv.sleep$v0(), v1 = uv.sleep$v1();
-        int light = a.sleep$light(pt);
+        // Particle.getLightColor itself (not overridden): its value per block position, once per render window (ParticleLightMemo)
+        int light = ParticleLightMemo.open() && ownLight(p.getClass()) ? ParticleLightMemo.particleLight(a.sleep$level(), a.sleep$px(), a.sleep$py(), a.sleep$pz())
+                : a.sleep$light(pt);
         if ((long) (n + 1) * REC > rec.capacity()) {
             ByteBuffer b = MemoryUtil.memRealloc(rec, rec.capacity() * 2);
             rec = b;
