@@ -6,6 +6,7 @@
   "compatibilityLevel": "JAVA_21",
   "overwrites": { "conformVisibility": true },
   "mixins": [
+    "FluidScanDryMixin",
     "FireCheckLoopMixin",
     "NeighbourWakeMixin",
     "OffThreadEntityAddMixin",

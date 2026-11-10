@@ -40,6 +40,19 @@ public abstract class SectionModCountMixin implements BlockCollisionMemo.Counted
         return m != null && sleep$maskAt == sleep$mod ? m : null;
     }
 
+    /** sleep$fluidFree's answer and the counter value it was made at (MIN_VALUE: never) */
+    @Unique private boolean sleep$dry;
+    @Unique private int sleep$dryAt = Integer.MIN_VALUE;
+
+    @Override
+    public boolean sleep$fluidFree() {
+        if (sleep$dryAt != sleep$mod) {
+            sleep$dry = !((net.minecraft.world.level.chunk.LevelChunkSection) (Object) this).maybeHas(s -> !s.getFluidState().isEmpty());
+            sleep$dryAt = sleep$mod;
+        }
+        return sleep$dry;
+    }
+
     @Override
     public int sleep$mod() {
         return sleep$mod;

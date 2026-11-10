@@ -25,6 +25,9 @@ public final class CollisionMask {
 
         /** the mask only if it is built for the section as it is (no build: other threads may read it meanwhile), else null */
         long[] sleep$maskIfCurrent();
+
+        /** no block state in the section's palette has a fluid (FluidScanDryMixin), kept per modification count */
+        boolean sleep$fluidFree();
     }
 
     private static Boolean usable;
