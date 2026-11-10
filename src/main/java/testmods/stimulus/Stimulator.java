@@ -42,10 +42,14 @@ public final class Stimulator {
 
     private static final int[] AREA = area(System.getProperty("sleep.test.stimulate", ""));
     private static final boolean WORK = Boolean.getBoolean("sleep.test.stimulate.work"), KEEP_ITEMS = Boolean.getBoolean("sleep.test.stimulate.keepItems");
+    /** -Dsleep.test.stimulate.itemCap=N with keepItems: only the oldest beyond N removed every second - a pile that stops growing */
+    private static final int ITEM_CAP = Integer.getInteger("sleep.test.stimulate.itemCap", 0);
     private static final Direction[] SIDES = Direction.values();
     private static final Item[] ITEMS = {Items.COAL, Items.RAW_IRON, Items.IRON_ORE, Items.COBBLESTONE, Items.OAK_LOG, Items.WHEAT_SEEDS,
             Items.BONE_MEAL, Items.SAND, Items.WHEAT, Items.REDSTONE, Items.IRON_INGOT, Items.GLASS_BOTTLE, Items.BLAZE_POWDER, Items.DIAMOND};
     private static long inserted, energy, fluid, extracted, toggles, ticks;
+    /** the item entities in the area at the last count (keepItems) */
+    public static volatile int pile;
     private static int seen;
     private static boolean listed;
 
@@ -77,9 +81,18 @@ public final class Stimulator {
             if (be.isRemoved()) continue;
             if (WORK) {
                 for (Direction d : SIDES) feed(level, be, d, p, i);
-                if (i == 0 && p % 20 == 0 && !KEEP_ITEMS) {
+                if (i == 0 && p % 20 == 0 && (!KEEP_ITEMS || ITEM_CAP > 0)) {
                     var box = new net.minecraft.world.phys.AABB(AREA[0], level.getMinBuildHeight(), AREA[1], AREA[2] + 1, level.getMaxBuildHeight(), AREA[3] + 1);
-                    for (var e : level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, box)) e.discard();
+                    var items = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, box);
+                    if (!KEEP_ITEMS) for (var e : items) e.discard();
+                    else if (items.size() > ITEM_CAP) {   // the oldest (lowest id) beyond the cap
+                        items.sort(java.util.Comparator.comparingInt(net.minecraft.world.entity.Entity::getId));
+                        for (int k = 0; k < items.size() - ITEM_CAP; k++) items.get(k).discard();
+                    }
+                    if (KEEP_ITEMS) {
+                        pile = items.size();
+                        if (p % 200 == 0) System.out.println("[sleep/stimulus] item pile " + pile + " at " + level.getGameTime());
+                    }
                 }
             } else if (feed) {
                 if (p % 10 == 0) {

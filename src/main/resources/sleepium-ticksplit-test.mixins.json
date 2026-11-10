@@ -8,6 +8,9 @@
   "client": [
     "TickSplitMixin"
   ],
+  "mixins": [
+    "ItemSplitMixin"
+  ],
   "injectors": {
     "defaultRequire": 1
   }
