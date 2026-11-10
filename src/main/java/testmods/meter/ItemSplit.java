@@ -23,13 +23,17 @@ public final class ItemSplit {
     }
 
     public static void begin(net.minecraft.world.entity.Entity e) {
-        if (client(e)) t0 = System.nanoTime();
+        if (client(e)) {
+            EntityCensus.itemBegin((net.minecraft.world.entity.item.ItemEntity) e);
+            t0 = System.nanoTime();
+        }
     }
 
     public static void end(net.minecraft.world.entity.Entity e) {
         if (!client(e) || t0 == 0) return;
         all += System.nanoTime() - t0;
         t0 = 0;
+        EntityCensus.itemEnd((net.minecraft.world.entity.item.ItemEntity) e);
         ticked++;
         long gt = e.level().getGameTime();
         if (gt != lastTime) {
@@ -40,6 +44,7 @@ public final class ItemSplit {
                         PART[1] / 200 / 1e6, PART[2] / 200 / 1e6, PART[3] / 200 / 1e6, (PART[0] - PART[1] - PART[2] - PART[3]) / 200 / 1e6);
                 all = move = sup = fluid = ticked = moved = 0;
                 java.util.Arrays.fill(PART, 0);
+                EntityCensus.print();
             }
         }
     }

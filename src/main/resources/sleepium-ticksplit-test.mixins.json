@@ -5,11 +5,15 @@
   "plugin": "testmods.ticksplit.TickSplitPlugin",
   "compatibilityLevel": "JAVA_21",
   "client": [
-    "TickSplitMixin"
+    "TickSplitMixin",
+    "CensusWalkMixin",
+    "CensusFxMixin",
+    "CensusSoundMixin"
   ],
   "mixins": [
     "ItemSplitMixin",
-    "MoveSplitMixin"
+    "MoveSplitMixin",
+    "CensusQueryMixin"
   ],
   "injectors": {
     "defaultRequire": 1
