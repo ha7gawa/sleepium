@@ -124,7 +124,12 @@ public final class ParallelParticles {
     private static volatile Particle failed;
     private static int jobN;
 
+    /** -Dlab.particles.serveOnly=N: a list asked more than N shapes last tick - the render thread answers, takes no chunks (0: off) */
+    private static final int SERVE_ONLY = Integer.getInteger("lab.particles.serveOnly", 0);
+    private static final java.util.Map<Object, Integer> ASKED = new java.util.IdentityHashMap<>();
+
     private static void runPure(int np, Object list) {
+        long askedAtStart = ParticleWorkers.requests;
         ParticleWorkers.renderThread = Thread.currentThread();
         LabRuntime pool = FrameReactor.pool();
         jobN = np;
@@ -141,7 +146,10 @@ public final class ParallelParticles {
             if (level != null) ParticleWorkers.prefill(level, list);   // while the workers start: this list's last tick's shapes, in this tick's level
             long b1 = BURST_LOG ? System.nanoTime() : 0;
             ownChunks = 0;
-            drain(true);
+            // a list whose workers asked many shapes in its last tick: the render thread only answers (its own chunks
+            // delayed every waiting worker - a generation of particles in new places)
+            Integer lastAsked = ASKED.get(list);
+            if (SERVE_ONLY <= 0 || lastAsked == null || lastAsked <= SERVE_ONLY || helpers == 0) drain(true);
             long b2 = BURST_LOG ? System.nanoTime() : 0;
             if (BURST_LOG) {
                 prefillNs = b1 - b0;
@@ -157,6 +165,7 @@ public final class ParallelParticles {
             }
             ParticleWorkers.serve();
             ParticleWorkers.keepDemand(list);
+            ASKED.put(list, (int) (ParticleWorkers.requests - askedAtStart));
         } finally {
             ParticleWorkers.active = false;
         }
