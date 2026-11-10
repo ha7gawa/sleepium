@@ -30,7 +30,7 @@ public final class ClientCounters {
 
     public static String report() {
         // 1.20.1: the event sites' report (the event bus step) comes over with its part (port-pending.txt)
-        return String.format(Locale.ROOT, "client opts: ambient biome lookups skipped %d, sampler locations from cache %d; collision memo hits %d, misses %d; " + CollisionMask.report() + "; " + CollideKernel.report() + "; " + ParticleStats.report() + "; " + ParallelParticles.report(),
+        return String.format(Locale.ROOT, "client opts: ambient biome lookups skipped %d, sampler locations from cache %d; collision memo hits %d, misses %d; " + CollisionMask.report() + "; " + CollideKernel.report() + "; " + ParticleStats.report() + "; " + ParallelParticles.report() + "; " + ParticleGpu.report() + "; " + ParticleLightMemo.report(),
                 biomeSkips, samplerHits, BlockCollisionMemo.hits, BlockCollisionMemo.misses)
                 + (Boolean.getBoolean("lab.opt.EntityBatchMixin") ? "; " + EntityBatch.report() : "")
                 + (Boolean.getBoolean("lab.opt.RenderCacheMixin") ? "; " + RenderCache.report() : "")
