@@ -19,14 +19,14 @@ public abstract class EventSourcesMixin {
     @Inject(method = "blockEvent", at = @At("HEAD"))
     private void sleep$blockEvent(BlockPos pos, Block block, int id, int param, CallbackInfo ci) {
         EventSources.blockEvents++;
-        dev.lull.BeTickStats.writes++;
+        dev.lull.BeTickStats.write();
     }
 
     // 1.20.1: gameEvent takes the GameEvent itself (1.21: a Holder<GameEvent>)
     @Inject(method = "gameEvent(Lnet/minecraft/world/level/gameevent/GameEvent;Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/level/gameevent/GameEvent$Context;)V", at = @At("HEAD"))
     private void sleep$gameEvent(GameEvent event, Vec3 pos, GameEvent.Context ctx, CallbackInfo ci) {
         EventSources.gameEvents++;
-        dev.lull.BeTickStats.writes++;
+        dev.lull.BeTickStats.write();
     }
 
     @Inject(method = "tickNonPassenger", at = @At("HEAD"))

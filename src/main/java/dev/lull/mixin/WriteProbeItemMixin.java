@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class WriteProbeItemMixin {
     @Inject(method = "setItem", at = @At("HEAD"))
     private void sleep$setItem(ItemStack stack, CallbackInfo ci) {
-        BeTickStats.writes++;
+        BeTickStats.write();
         if (dev.lull.optsupport.sleep.SleepEngine.HOOKS) dev.lull.optsupport.sleep.SleepEngine.onEntity((net.minecraft.world.entity.Entity) (Object) this, "item-changed");
     }
 }

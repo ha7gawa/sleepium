@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class WriteProbeEntityMixin {
     @Inject(method = "setRemoved", at = @At("HEAD"))
     private void sleep$removed(Entity.RemovalReason reason, CallbackInfo ci) {
-        BeTickStats.writes++;
+        BeTickStats.write();
         if (dev.lull.optsupport.sleep.SleepEngine.HOOKS) dev.lull.optsupport.sleep.SleepEngine.onEntity((Entity) (Object) this, "entity-removed");
     }
 }

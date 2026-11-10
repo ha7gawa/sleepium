@@ -14,6 +14,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class WriteProbeLivingMixin {
     @Inject(method = "addEffect(Lnet/minecraft/world/effect/MobEffectInstance;Lnet/minecraft/world/entity/Entity;)Z", at = @At("HEAD"))
     private void sleep$addEffect(MobEffectInstance effect, Entity source, CallbackInfoReturnable<Boolean> cir) {
-        BeTickStats.writes++;
+        BeTickStats.write();
     }
 }

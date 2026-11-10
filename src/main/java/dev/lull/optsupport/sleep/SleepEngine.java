@@ -192,13 +192,13 @@ public final class SleepEngine {
 
     public static void unobservedRead() {
         unobservedAll++;
-        if (EntitySleep.obs != null && Thread.currentThread() == EntitySleep.obsThread) EntitySleep.unobservedRead();
+        if (EntitySleep.S().obs != null && Thread.currentThread() == EntitySleep.S().obsThread) EntitySleep.unobservedRead();
         if (obs != null && Thread.currentThread() == obsThread) unobserved++;
     }
 
     /** the level's weather read: a mob being observed may sleep on it while there is none (a change wakes it) */
     public static void weatherRead(net.minecraft.world.level.Level level) {
-        if (EntitySleep.obs != null && Thread.currentThread() == EntitySleep.obsThread && EntitySleep.weatherRead(level)) {
+        if (EntitySleep.S().obs != null && Thread.currentThread() == EntitySleep.S().obsThread && EntitySleep.weatherRead(level)) {
             unobservedAll++;
             return;
         }
@@ -207,7 +207,7 @@ public final class SleepEngine {
 
     /** the level's player list read: a mob being observed may sleep on it while it is empty (a player arriving wakes it) */
     public static void playersRead(net.minecraft.server.level.ServerLevel level, java.util.List<?> players) {
-        if (EntitySleep.obs != null && Thread.currentThread() == EntitySleep.obsThread && EntitySleep.playersRead(players)) {
+        if (EntitySleep.S().obs != null && Thread.currentThread() == EntitySleep.S().obsThread && EntitySleep.playersRead(players)) {
             unobservedAll++;
             return;
         }
@@ -708,7 +708,7 @@ public final class SleepEngine {
     // ------------------------------------------------------------------ reads (from ReadProbeMixin)
 
     public static void readPos(char kind, BlockPos pos) {
-        if (EntitySleep.obs != null && Thread.currentThread() == EntitySleep.obsThread) EntitySleep.readPos(kind, pos.asLong());
+        if (EntitySleep.S().obs != null && Thread.currentThread() == EntitySleep.S().obsThread) EntitySleep.readPos(kind, pos.asLong());
         Sleeper s = obs;
         if (s == null || Thread.currentThread() != obsThread) return;
         long p = pos.asLong();
@@ -718,11 +718,11 @@ public final class SleepEngine {
 
     /** Block collision / support queries over a box (from the collision memo overrides). */
     public static void readRegion(AABB box) {
-        if (EntitySleep.obs != null && Thread.currentThread() == EntitySleep.obsThread) EntitySleep.readRegion(box);
+        if (EntitySleep.S().obs != null && Thread.currentThread() == EntitySleep.S().obsThread) EntitySleep.readRegion(box);
     }
 
     public static void readBox(char kind, AABB box) {
-        if (EntitySleep.obs != null && Thread.currentThread() == EntitySleep.obsThread) EntitySleep.readBox(kind, box);
+        if (EntitySleep.S().obs != null && Thread.currentThread() == EntitySleep.S().obsThread) EntitySleep.readBox(kind, box);
         Sleeper s = obs;
         if (s == null || Thread.currentThread() != obsThread) return;
         s.readBoxes.add(box);
@@ -810,7 +810,7 @@ public final class SleepEngine {
                 if (t != null && TEST_BYPASS.contains(t.getClass().getSimpleName())) return;
             }
         }
-        if (EntitySleep.ON && level != null && !level.isClientSide) EntitySleep.onPos(level, pos);
+        if (EntitySleep.ON && level != null && (!level.isClientSide || EntitySleep.CLIENT_ON)) EntitySleep.onPos(level, pos);
         if (BY_POS.isEmpty() || level == null || level.isClientSide) return;
         List<Sleeper> l = BY_POS.get(pos.asLong());
         if (l == null) return;
@@ -832,6 +832,7 @@ public final class SleepEngine {
      * position change saw the old one, and a boat stopping in a sleeping item's box never woke it).
      */
     public static void onMove(Entity e, AABB from, AABB to) {
+        if (from.equals(to)) return;   // the same box set again (a position packet with the place it had): nothing any box query sees moved
         double ax = Math.min(from.minX, to.minX), ay = Math.min(from.minY, to.minY), az = Math.min(from.minZ, to.minZ),
                 bx = Math.max(from.maxX, to.maxX), by = Math.max(from.maxY, to.maxY), bz = Math.max(from.maxZ, to.maxZ);
         // A move changes which entities are in the boxes that meet the old box or the new one, nothing else: both boxes

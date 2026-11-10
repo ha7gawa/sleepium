@@ -160,6 +160,8 @@ final class SleepAnalysis {
 
     /** entity mode: the engine snapshots every field of the entity, so owned objects whose state it sees are allowed */
     private boolean entityMode;
+    /** an entity class analysed for the client's levels: isClientSide is true (the server's: false) */
+    private boolean clientMode;
     /** diagnostics (-Dlab.sleep.allReasons): keep going after a refusal and collect every reason */
     private static final boolean ALL_REASONS = Boolean.getBoolean("lab.sleep.allReasons");
     private static final boolean TRACE = NULL_WHY_OR_TRACE();
@@ -279,7 +281,41 @@ final class SleepAnalysis {
     }
 
     /** Frames plus the instructions that can run under the null assumptions (all reachable ones without assumptions). */
-    private record Flow(Frame<SourceValue>[] fr, boolean[] live) {}
+    /** decided: per jump the only successor the liveness pass followed (-2: not decided) */
+    /**
+     * A condition whose two successors meet before anything happens: from the fall-through, loads, Entity.level() and
+     * branches the liveness pass decided (isClientSide, zero clocks) lead to the jump's target (or the other way round).
+     * Its outcome changes nothing - e.g. on the client `tickCount % i == 0 && !level().isClientSide && ...`.
+     */
+    private static boolean deadCondition(AbstractInsnNode[] in, int i, MethodNode m, Flow flow) {
+        if (flow.decided() == null) return false;
+        int target = m.instructions.indexOf(((JumpInsnNode) in[i]).label);
+        return reaches(in, i + 1, target, m, flow) || reaches(in, target, i + 1, m, flow);
+    }
+
+    private static boolean reaches(AbstractInsnNode[] in, int from, int to, MethodNode m, Flow flow) {
+        int at = from;
+        for (int steps = 0; steps < 64 && at >= 0 && at < in.length; steps++) {
+            if (at == to) return true;
+            AbstractInsnNode x = in[at];
+            int op = x.getOpcode();
+            int d = flow.decided()[at];
+            if (op < 0 || op == Opcodes.ALOAD || op == Opcodes.ILOAD || op == Opcodes.LLOAD || op == Opcodes.GETFIELD || op == Opcodes.NOP) {
+                at++;
+            } else if (x instanceof MethodInsnNode mi && op == Opcodes.INVOKEVIRTUAL && dev.lull.Names.official(mi.name).equals("level") && mi.desc.startsWith("()")) {
+                at++;   // Entity.level(): the level field, nothing else
+            } else if (op == Opcodes.GOTO) {
+                at = m.instructions.indexOf(((JumpInsnNode) x).label);
+            } else if (x instanceof JumpInsnNode && d >= 0) {
+                at = d;   // decided: the only way on (its operands were loads)
+            } else {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private record Flow(Frame<SourceValue>[] fr, boolean[] live, int[] decided) {}
 
     private record Frames(Frame<SourceValue>[] fr, List<int[]> edges) {}
 
@@ -307,9 +343,11 @@ final class SleepAnalysis {
         List<int[]> edges = cached.edges();
         Frame<SourceValue>[] fr = cached.fr();
         boolean[] live = new boolean[n];
+        int[] decided = new int[n];
+        java.util.Arrays.fill(decided, -2);
         if (nullFields.isEmpty() && zeroFields.isEmpty() && !entityMode) {
             for (int i = 0; i < n; i++) live[i] = fr[i] != null;
-            return new Flow(fr, live);
+            return new Flow(fr, live, null);
         }
         int[] cnt = new int[n + 1];
         for (int[] e : edges) cnt[e[0] + 1]++;
@@ -353,9 +391,17 @@ final class SleepAnalysis {
                 only = op == Opcodes.IFNULL ? target : i + 1;
             } else if (entityMode && op >= Opcodes.IFEQ && op <= Opcodes.IFLE && fr[i] != null
                     && (zeroField(operand(fr[i], 1, fr, m, 0)) || clientSide(operand(fr[i], 1, fr, m, 0)))) {
-                // the value is 0 (a zero clock, isClientSide false): the branch is decided
+                // the value is known: 0 for a zero clock and for isClientSide on the server, 1 for isClientSide on the client
                 int target = m.instructions.indexOf(((JumpInsnNode) in[i]).label);
-                boolean taken = op == Opcodes.IFEQ || op == Opcodes.IFGE || op == Opcodes.IFLE;
+                int v = clientMode && !zeroField(operand(fr[i], 1, fr, m, 0)) ? 1 : 0;
+                boolean taken = switch (op) {
+                    case Opcodes.IFEQ -> v == 0;
+                    case Opcodes.IFNE -> v != 0;
+                    case Opcodes.IFLT -> v < 0;
+                    case Opcodes.IFGE -> v >= 0;
+                    case Opcodes.IFGT -> v > 0;
+                    default -> v <= 0;
+                };
                 only = taken ? target : i + 1;
             } else if (in[i] instanceof MethodInsnNode mi && op != Opcodes.INVOKESTATIC
                     && nullField(operand(fr[i], Type.getArgumentTypes(mi.desc).length + 1, fr, m, 0))) {
@@ -365,6 +411,7 @@ final class SleepAnalysis {
             } else if (op == Opcodes.PUTFIELD && nullField(operand(fr[i], 2, fr, m, 0))) {
                 only = -1;
             }
+            decided[i] = only;
             for (int k = cnt[i]; k < cnt[i + 1]; k++) {
                 int t = adj[k];
                 if (exc[k] == 0 && only != -2 && t != only) continue;
@@ -374,7 +421,7 @@ final class SleepAnalysis {
                 }
             }
         }
-        return new Flow(fr, live);
+        return new Flow(fr, live, decided);
     }
 
     private SleepAnalysis(ClassLoader loader) {
@@ -391,8 +438,14 @@ final class SleepAnalysis {
 
     /** with a sample instance: its AI objects (controls, navigation, goal selectors, goals) are followed (notes/47) */
     static Plan analyzeEntity(Class<?> entityClass, Object sample) {
+        return analyzeEntity(entityClass, sample, false);
+    }
+
+    /** client: for the client's levels - every isClientSide branch takes the client's side */
+    static Plan analyzeEntity(Class<?> entityClass, Object sample, boolean client) {
         SleepAnalysis a = new SleepAnalysis(entityClass.getClassLoader());
         a.entityMode = true;
+        a.clientMode = client;
         a.sample = sample;
         a.ctxObj = sample;
         a.collect = sample != null;
@@ -1090,6 +1143,7 @@ final class SleepAnalysis {
                     drawCond(x, y, op, 0, owner, m);
                     continue;
                 }
+                if (deadCondition(in, i, m, flow)) continue;   // both paths meet before anything happens (the client: a server-only branch)
                 condition(x, y, beChain, beClass);
             } else if (in[i] instanceof MethodInsnNode mb && mb.getOpcode() == Opcodes.INVOKESTATIC && PURE_BOUNDS.contains(mb.owner + "." + mb.name)
                     && clockArgument(fr, i, mb, m)) {

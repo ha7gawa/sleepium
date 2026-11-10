@@ -18,16 +18,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class WriteProbeServerLevelMixin {
     @Inject(method = "addFreshEntity", at = @At("HEAD"))
     private void sleep$addEntity(Entity entity, CallbackInfoReturnable<Boolean> cir) {
-        BeTickStats.writes++;
+        BeTickStats.write();
     }
 
     @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/player/Player;DDDLnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V", at = @At("HEAD"))
     private void sleep$soundAt(Player p, double x, double y, double z, Holder<SoundEvent> s, SoundSource c, float v, float pi, long seed, CallbackInfo ci) {
-        BeTickStats.writes++;
+        BeTickStats.write();
     }
 
     @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V", at = @At("HEAD"))
     private void sleep$soundEntity(Player p, Entity e, Holder<SoundEvent> s, SoundSource c, float v, float pi, long seed, CallbackInfo ci) {
-        BeTickStats.writes++;
+        BeTickStats.write();
     }
 }

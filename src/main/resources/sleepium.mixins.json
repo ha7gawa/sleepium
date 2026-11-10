@@ -99,6 +99,7 @@
     "SleepProbeObserveCatalystMixin"
   ],
   "client": [
+    "ClientEntSleepTickMixin",
     "FrameHashFreezeMixin",
     "DrawStatsMixin",
     "DrawStatsObjectsMixin",
