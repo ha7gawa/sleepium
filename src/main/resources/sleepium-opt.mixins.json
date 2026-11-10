@@ -155,6 +155,10 @@
     "LightTimingMixin"
   ],
   "client": [
+    "GpuAnimFrameMixin",
+    "GpuAnimAtlasMixin",
+    "GpuAnimCloseMixin",
+    "GpuAnimPixelsAccessor",
     "ParallelEntityTicksMixin",
     "ParallelEntityTicksFxMixin",
     "ParallelEntityTicksSoundMixin",
