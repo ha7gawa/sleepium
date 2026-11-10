@@ -12,8 +12,12 @@ public final class ParticleStats {
         t0 = System.nanoTime();
     }
 
+    /** the particle ticks' time since the frame log last took it (ClientMeter's frame log) */
+    public static long frameNanos;
+
     public static void end(ParticleEngine engine) {
         long d = System.nanoTime() - t0;
+        frameNanos += d;
         ticks++;
         nanos += d;
         if (d > maxNanos) maxNanos = d;
