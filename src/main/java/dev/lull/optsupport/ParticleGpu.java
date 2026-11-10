@@ -129,6 +129,13 @@ public final class ParticleGpu {
         // only with the particle shader patched and the draw hook seen working (PartDrawMixin's _drawWithShader): without
         // either the records would never be drawn - the particles gone (an N100 run with most of the engine off)
         if (!enabled || bb == null || !patched || !hookSeen || !partsReady()) return;
+        // the sheet's shader (its begin may set its own: a mod's sheet) must be the patched particle program, else the
+        // records would never be drawn
+        ShaderInstance shader = RenderSystem.getShader();
+        if (shader == null || program(shader).length == 0) {
+            listsVanilla++;
+            return;
+        }
         if (((dev.lull.opt.BufferBuilderAccessor) bb).sleep$format() != DefaultVertexFormat.PARTICLE
                 || ((dev.lull.opt.BufferBuilderAccessor) bb).sleep$mode() != VertexFormat.Mode.QUADS) return;
         for (Particle p : queue)
