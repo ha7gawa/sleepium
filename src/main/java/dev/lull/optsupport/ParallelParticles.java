@@ -64,7 +64,7 @@ public final class ParallelParticles {
         parallel += np;
         serial += n - np;
         long t0 = BURST_LOG ? System.nanoTime() : 0;
-        long asked0 = ParticleWorkers.requests, pre0 = ParticleWorkers.prefilled;
+        long asked0 = ParticleWorkers.requests, pre0 = ParticleWorkers.prefilled, waited0 = ParticleWorkers.WAITED.get();
         if (CHECK) check(np, list);
         else runPure(np, list);
         long t1 = BURST_LOG ? System.nanoTime() : 0;
@@ -103,14 +103,18 @@ public final class ParallelParticles {
         if (BURST_LOG) {
             long t2 = System.nanoTime();
             if (t2 - t0 > 10_000_000L)
-                System.out.printf(java.util.Locale.ROOT, "[sleep] particle burst: list %d (%d pure, %s), parallel %.1f ms (asked %d, prefilled %d), walk %.1f ms (%d dead)%n",
-                        n, np, list.getClass().getSimpleName(), (t1 - t0) / 1e6, ParticleWorkers.requests - asked0, ParticleWorkers.prefilled - pre0, (t2 - t1) / 1e6, dead);
+                System.out.printf(java.util.Locale.ROOT, "[sleep] particle burst: list %d (%d pure, %s), parallel %.1f ms (asked %d, prefilled %d; render thread: prefill %.1f ms, own %d chunks %.1f ms, tail %.1f ms; %d helpers waited %.1f ms in all), walk %.1f ms (%d dead)%n",
+                        n, np, list.getClass().getSimpleName(), (t1 - t0) / 1e6, ParticleWorkers.requests - asked0, ParticleWorkers.prefilled - pre0,
+                        prefillNs / 1e6, ownChunks, ownNs / 1e6, (t1 - t0 - prefillNs - ownNs) / 1e6, helpersRun, (ParticleWorkers.WAITED.get() - waited0) / 1e6, (t2 - t1) / 1e6, dead);
         }
         return true;
     }
 
     /** -Dlab.particles.compact=false: the dead removed one by one as vanilla does (A/B) */
     private static final boolean COMPACT = !"false".equals(System.getProperty("lab.particles.compact"));
+
+    private static long prefillNs, ownNs;
+    private static int ownChunks, helpersRun;
 
     /** -Dlab.particles.burstLog=true: a list tick over 10 ms printed with its parts */
     private static final boolean BURST_LOG = Boolean.getBoolean("lab.particles.burstLog");
@@ -133,8 +137,17 @@ public final class ParallelParticles {
             int helpers = Math.min(pool.workerCount(), (np + CHUNK - 1) / CHUNK - 1);
             for (int k = 0; k < helpers; k++) pool.execute(ParallelParticles::workerRun);
             var level = net.minecraft.client.Minecraft.getInstance().level;
+            long b0 = BURST_LOG ? System.nanoTime() : 0;
             if (level != null) ParticleWorkers.prefill(level, list);   // while the workers start: this list's last tick's shapes, in this tick's level
+            long b1 = BURST_LOG ? System.nanoTime() : 0;
+            ownChunks = 0;
             drain(true);
+            long b2 = BURST_LOG ? System.nanoTime() : 0;
+            if (BURST_LOG) {
+                prefillNs = b1 - b0;
+                ownNs = b2 - b1;
+                helpersRun = helpers;
+            }
             long spinUntil = System.nanoTime() + 20_000;
             while (REMAINING.get() != 0) {
                 ParticleWorkers.serve();
@@ -178,9 +191,13 @@ public final class ParallelParticles {
                     error = t;
                     failed = p;
                 }
+                if (render && ParticleWorkers.pending()) ParticleWorkers.serve();   // a waiting worker answered now, not after the chunk
             }
             done += e - s;
-            if (render) ParticleWorkers.serve();
+            if (render) {
+                ParticleWorkers.serve();
+                ownChunks++;
+            }
         }
         if (done > 0 && REMAINING.addAndGet(-done) == 0 && !render) LockSupport.unpark(ParticleWorkers.renderThread);
     }

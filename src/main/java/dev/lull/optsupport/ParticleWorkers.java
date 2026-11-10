@@ -70,10 +70,12 @@ public final class ParticleWorkers {
             return c.moved;
         }
         Req r = new Req(state, level, x, y, z);
+        long w0 = WAIT_LOG ? System.nanoTime() : 0;
         REQUESTS.offer(r);
         LockSupport.unpark(renderThread);
         VoxelShape s;
         while ((s = r.result) == null) LockSupport.park(r);
+        if (WAIT_LOG) WAITED.addAndGet(System.nanoTime() - w0);
         return s;
     }
 
@@ -105,7 +107,6 @@ public final class ParticleWorkers {
         it.unimi.dsi.fastutil.longs.LongArrayList DEMAND = DEMANDS.get(list);
         if (DEMAND == null) return;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        int k = 0;
         for (int i = 0; i < DEMAND.size(); i++) {
             long key = DEMAND.getLong(i);
             if (SHARED.containsKey(key)) continue;
@@ -117,14 +118,30 @@ public final class ParticleWorkers {
             VoxelShape moved = sh == Shapes.block() || sh.isEmpty() ? sh : sh.move((double) x, (double) y, (double) z);
             SHARED.put(key, new Cell(state, moved, false));
             prefilled++;
-            if ((++k & 15) == 0) serve();
+            if (pending()) serve();   // a waiting worker answered between the prefilled shapes
         }
         serve();
+    }
+
+    /** the burst log's measure: the workers' time waiting for the render thread's answers, summed */
+    static final boolean WAIT_LOG = Boolean.getBoolean("lab.particles.burstLog");
+    static final java.util.concurrent.atomic.AtomicLong WAITED = new java.util.concurrent.atomic.AtomicLong();
+
+    /** a worker waits for an answer (one volatile read: the render thread checks it between its own particles) */
+    static boolean pending() {
+        return !REQUESTS.isEmpty();
     }
 
     static void serve() {
         Req r;
         while ((r = REQUESTS.poll()) != null) {
+            Cell c = SHARED.get(BlockPos.asLong(r.x, r.y, r.z));
+            if (c != null && c.state == r.state) {   // asked by another worker too, or prefilled meanwhile: this tick's answer
+                if (!c.used) c.used = true;
+                r.result = c.moved;
+                LockSupport.unpark(r.waiter);
+                continue;
+            }
             BlockPos pos = new BlockPos(r.x, r.y, r.z);
             VoxelShape sh = r.state.getCollisionShape(r.level, pos, CollisionContext.empty());
             VoxelShape moved = sh == Shapes.block() || sh.isEmpty() ? sh : sh.move((double) r.x, (double) r.y, (double) r.z);
