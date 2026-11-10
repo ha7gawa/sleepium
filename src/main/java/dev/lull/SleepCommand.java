@@ -40,7 +40,8 @@ public final class SleepCommand {
 
     static void register(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> d = event.getDispatcher();
-        d.register(Commands.literal("sleep").requires(s -> s.hasPermission(2))
+        // /sleepium as on 1.21.1; /sleep kept for now (tools and players use it in production; removing it: the user's call)
+        for (String name : new String[] {"sleepium", "sleep"}) d.register(Commands.literal(name).requires(s -> s.hasPermission(2))
                 .then(Commands.literal("start").executes(SleepCommand::start))
                 .then(Commands.literal("stop").executes(SleepCommand::stop))
                 .then(Commands.literal("run")
