@@ -74,6 +74,9 @@ public final class ParticleWorkers {
         REQUESTS.offer(r);
         LockSupport.unpark(renderThread);
         VoxelShape s;
+        // a short bounded wait first: the answer usually comes within microseconds, a park and its wake-up cost more
+        long until = SPIN_NS > 0 ? System.nanoTime() + SPIN_NS : 0;
+        while ((s = r.result) == null && SPIN_NS > 0 && System.nanoTime() < until) Thread.onSpinWait();
         while ((s = r.result) == null) LockSupport.park(r);
         if (WAIT_LOG) WAITED.addAndGet(System.nanoTime() - w0);
         return s;
@@ -126,6 +129,9 @@ public final class ParticleWorkers {
     /** the burst log's measure: the workers' time waiting for the render thread's answers, summed */
     static final boolean WAIT_LOG = Boolean.getBoolean("lab.particles.burstLog");
     static final java.util.concurrent.atomic.AtomicLong WAITED = new java.util.concurrent.atomic.AtomicLong();
+
+    /** -Dlab.particles.spinWaitUs: how long a worker checks for its answer before it parks (0: parks at once) */
+    static final long SPIN_NS = Long.getLong("lab.particles.spinWaitUs", 30) * 1000L;
 
     /** a worker waits for an answer (one volatile read: the render thread checks it between its own particles) */
     static boolean pending() {
