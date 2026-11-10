@@ -76,6 +76,12 @@ public final class SleepEngine {
         /** verified by value while asleep: the NonNullList fields (its item lists) of the whole class chain */
         final boolean deep;
         final Field[] lists;
+        /**
+         * sleeps only because of ObservedModSleep (the proof refuses it: no item list to verify, or owned state outside
+         * value verification): everything it owns is hashed (OwnedHash) while observed and on every skipped tick, and a
+         * neighbour change wakes it
+         */
+        boolean observedOnly;
 
         ClassInfo(SleepAnalysis.Plan plan) {
             this(plan, false, null);
@@ -123,6 +129,8 @@ public final class SleepEngine {
         long[] rates, prevRates;
         boolean prevValid;
         long prevTick = Long.MIN_VALUE, prevReadHash;
+        /** observed-only classes: the hash of everything the block entity owns, last observed tick / at sleep entry */
+        long prevOwned, ownedAtSleep;
         int stable, failStreak;
         long observeFrom = Long.MIN_VALUE, noSleepUntil = Long.MIN_VALUE;
         // asleep
@@ -216,7 +224,8 @@ public final class SleepEngine {
         if (s == null || s.state != State.ASLEEP) return true;
         // only the block entity's own fields (the cache lines the skip reads anyway): primitives by value, references by
         // identity. Changes inside referenced containers arrive as events (container hooks, setChanged, block updates).
-        if (s.info.snapper.same(be, s.prev, s.refs) && (!s.info.deep && s.neighbours == null || sameLists(s))) {
+        if (s.info.snapper.same(be, s.prev, s.refs) && (!s.info.deep && s.neighbours == null || sameLists(s))
+                && (!s.info.observedOnly || OwnedHash.of(be) == s.ownedAtSleep)) {
             verifiedSkips++;
             return true;
         }
@@ -498,6 +507,7 @@ public final class SleepEngine {
             if (unseen != null) p = new SleepAnalysis.Plan(false, bypass + "; owned state outside value verification: " + unseen, p.clocks(), p.conds());
             boolean deep = p.eligible() && ("all".equals(DEEP) || bypass != null);
             ClassInfo ci = new ClassInfo(p, deep, c);
+            ci.observedOnly = p.eligible() && bypass != null && observedModSleep() && (listsOf(c).length == 0 || unverifiedState(c) != null);
             System.out.println("[sleep/sleep] " + name + ": " + (p.eligible() ? "ELIGIBLE " : "no: ") + p.reason()
                     + (deep ? " [verified by value, " + ci.lists.length + " item list(s)" + (bypass != null ? ": " + bypass : "") + "]" : "")
                     + "  clocks=" + p.clocks().stream().map(f -> f == null ? "?" : f.getName()).toList()
@@ -528,6 +538,11 @@ public final class SleepEngine {
         s.info.snapper.snap(be, cur);
         boolean clockOnly = s.prevValid && s.prevTick == now - 1 && BeTickStats.writes == w0 && seed(level) == seed0
                 && readHash == s.prevReadHash && unobserved == u0;
+        if (s.info.observedOnly) {   // what it owns (an energy storage spent every tick, a tank, a timer object) counts too
+            long owned = OwnedHash.of(be);
+            if (owned != s.prevOwned) clockOnly = false;
+            s.prevOwned = owned;
+        }
         if (clockOnly) {
             long[] prev = s.prev;
             boolean[] isClock = s.info.isClock;
@@ -612,6 +627,7 @@ public final class SleepEngine {
         s.state = State.ASLEEP;
         s.woken = false;
         s.info.snapper.refs(s.be, s.refs);   // reference for verifyAsleep (s.prev holds the primitive slots)
+        if (s.info.observedOnly) s.ownedAtSleep = s.prevOwned;
         if (s.info.deep) s.deepCopy = copyLists(s);
         watchNeighbours(s);
         subscribe(s);
@@ -755,6 +771,15 @@ public final class SleepEngine {
         s.watchedPos.clear();
         s.watchedSections.clear();
         s.boxes.clear();
+    }
+
+    /** ObservedModSleep (NeighbourWakeMixin): a neighbour of this position changed - an observed-only sleeper there wakes. */
+    public static void neighbourAt(Level level, BlockPos pos) {
+        if (level == null || level.isClientSide || !observedModSleep()) return;
+        BlockEntity be = beAt(level, pos.asLong());
+        if (be == null) return;
+        Sleeper s = sleeper(be);
+        if (s != null && s.info.observedOnly && s.state == State.ASLEEP) request(s, "neighbour changed");
     }
 
     private static void request(Sleeper s, String reason) {
