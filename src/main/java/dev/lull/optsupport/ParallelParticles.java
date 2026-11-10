@@ -63,21 +63,61 @@ public final class ParallelParticles {
         lists++;
         parallel += np;
         serial += n - np;
+        long t0 = BURST_LOG ? System.nanoTime() : 0;
+        long asked0 = ParticleWorkers.requests, pre0 = ParticleWorkers.prefilled, waited0 = ParticleWorkers.WAITED.get();
         if (CHECK) check(np, list);
         else runPure(np, list);
+        long t1 = BURST_LOG ? System.nanoTime() : 0;
         dev.lull.opt.ParticleEngineAccessor acc = (dev.lull.opt.ParticleEngineAccessor) engine;
-        i = 0;
-        for (Iterator<Particle> it = list.iterator(); it.hasNext(); i++) {   // vanilla's walk: the others ticked, the dead removed
-            Particle p = it.next();
-            if (!pure[i]) acc.sleep$tickParticle(p);
-            if (!p.isAlive()) {
-                p.getParticleGroup().ifPresent(g -> acc.sleep$updateCount(g, -1));
-                it.remove();
+        int dead = 0;
+        if (np == n && COMPACT) {
+            // every particle pure: nothing runs in the walk, so the dead leave in one pass - the survivors put back in their
+            // order, the groups counted down in vanilla's order. Vanilla's Iterator.remove shifts the deque per removal:
+            // quadratic when a generation born together dies together (1 400 of 15 000: 27-40 ms)
+            int live = 0;
+            for (int j = 0; j < n; j++) {
+                Particle p = items[j];
+                if (p.isAlive()) items[live++] = p;
+                else {
+                    p.getParticleGroup().ifPresent(g -> acc.sleep$updateCount(g, -1));
+                    dead++;
+                }
+            }
+            if (live < n) {
+                list.clear();
+                for (int j = 0; j < live; j++) list.add(items[j]);
+            }
+        } else {
+            i = 0;
+            for (Iterator<Particle> it = list.iterator(); it.hasNext(); i++) {   // vanilla's walk: the others ticked, the dead removed
+                Particle p = it.next();
+                if (!pure[i]) acc.sleep$tickParticle(p);
+                if (!p.isAlive()) {
+                    p.getParticleGroup().ifPresent(g -> acc.sleep$updateCount(g, -1));
+                    it.remove();
+                    dead++;
+                }
             }
         }
         java.util.Arrays.fill(items, 0, n, null);
+        if (BURST_LOG) {
+            long t2 = System.nanoTime();
+            if (t2 - t0 > 10_000_000L)
+                System.out.printf(java.util.Locale.ROOT, "[sleep] particle burst: list %d (%d pure, %s), parallel %.1f ms (asked %d, prefilled %d; render thread: prefill %.1f ms, own %d chunks %.1f ms, tail %.1f ms; %d helpers waited %.1f ms in all), walk %.1f ms (%d dead)%n",
+                        n, np, list.getClass().getSimpleName(), (t1 - t0) / 1e6, ParticleWorkers.requests - asked0, ParticleWorkers.prefilled - pre0,
+                        prefillNs / 1e6, ownChunks, ownNs / 1e6, (t1 - t0 - prefillNs - ownNs) / 1e6, helpersRun, (ParticleWorkers.WAITED.get() - waited0) / 1e6, (t2 - t1) / 1e6, dead);
+        }
         return true;
     }
+
+    /** -Dlab.particles.compact=false: the dead removed one by one as vanilla does (A/B) */
+    private static final boolean COMPACT = !"false".equals(System.getProperty("lab.particles.compact"));
+
+    private static long prefillNs, ownNs;
+    private static int ownChunks, helpersRun;
+
+    /** -Dlab.particles.burstLog=true: a list tick over 10 ms printed with its parts */
+    private static final boolean BURST_LOG = Boolean.getBoolean("lab.particles.burstLog");
 
     private static final AtomicInteger NEXT = new AtomicInteger(), REMAINING = new AtomicInteger();
     private static volatile Throwable error;
@@ -97,8 +137,17 @@ public final class ParallelParticles {
             int helpers = Math.min(pool.workerCount(), (np + CHUNK - 1) / CHUNK - 1);
             for (int k = 0; k < helpers; k++) pool.execute(ParallelParticles::workerRun);
             var level = net.minecraft.client.Minecraft.getInstance().level;
+            long b0 = BURST_LOG ? System.nanoTime() : 0;
             if (level != null) ParticleWorkers.prefill(level, list);   // while the workers start: this list's last tick's shapes, in this tick's level
+            long b1 = BURST_LOG ? System.nanoTime() : 0;
+            ownChunks = 0;
             drain(true);
+            long b2 = BURST_LOG ? System.nanoTime() : 0;
+            if (BURST_LOG) {
+                prefillNs = b1 - b0;
+                ownNs = b2 - b1;
+                helpersRun = helpers;
+            }
             long spinUntil = System.nanoTime() + 20_000;
             while (REMAINING.get() != 0) {
                 ParticleWorkers.serve();
@@ -142,9 +191,13 @@ public final class ParallelParticles {
                     error = t;
                     failed = p;
                 }
+                if (render && ParticleWorkers.pending()) ParticleWorkers.serve();   // a waiting worker answered now, not after the chunk
             }
             done += e - s;
-            if (render) ParticleWorkers.serve();
+            if (render) {
+                ParticleWorkers.serve();
+                ownChunks++;
+            }
         }
         if (done > 0 && REMAINING.addAndGet(-done) == 0 && !render) LockSupport.unpark(ParticleWorkers.renderThread);
     }
