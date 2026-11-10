@@ -102,7 +102,17 @@ public abstract class BlockCollisionMemoMixin implements CollisionGetter {
             }
             BlockCollisionMemo.supportMisses++;
         }
-        java.util.Optional<net.minecraft.core.BlockPos> r = sleep$vanillaSupport(entity, box);
+        java.util.Optional<net.minecraft.core.BlockPos> r;
+        r = null;
+        if (dev.lull.optsupport.CollideKernel.ON && dev.lull.optsupport.CollideKernel.usable()
+                && (r = dev.lull.optsupport.CollideKernel.of((Level) (Object) this).support(entity, box, (Level) (Object) this)) != null) {
+            // the kernel's walk over the same blocks (BlockCollisions' cursor, checks, shapes): the nearest one, no iterator
+            if (dev.lull.optsupport.CollideKernel.CHECK) {
+                dev.lull.optsupport.CollideKernel.supportChecked++;
+                if (!sleep$vanillaSupport(entity, box).equals(r) && dev.lull.optsupport.CollideKernel.supportMismatches++ < 5)
+                    System.out.println("[sleep/opt] kernel support MISMATCH for " + entity + ": " + r + " vs " + sleep$vanillaSupport(entity, box));
+            }
+        } else r = sleep$vanillaSupport(entity, box);
         if (memo) {
             if (m == null) ((BlockCollisionMemo.Holder) entity).sleep$setSupportMemo(m = new BlockCollisionMemo());
             m.valid = BlockCollisionMemo.worthRecording(m, box) && BlockCollisionMemo.record(self, m, box);

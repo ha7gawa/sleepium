@@ -6,10 +6,15 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "sleepium.refmap.json",
   "client": [
-    "TickSplitMixin"
+    "TickSplitMixin",
+    "CensusWalkMixin",
+    "CensusFxMixin",
+    "CensusSoundMixin"
   ],
   "mixins": [
-    "ItemSplitMixin"
+    "ItemSplitMixin",
+    "MoveSplitMixin",
+    "CensusQueryMixin"
   ],
   "injectors": {
     "defaultRequire": 1

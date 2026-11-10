@@ -41,6 +41,7 @@
     "KnockGoalsMixin",
     "MoveTimeEntityMixin",
     "MoveTimeLivingMixin",
+    "MoveTimeItemMixin",
     "MoveTimeMobMixin",
     "MoveShadowMixin",
     "ComponentShadowMixin",

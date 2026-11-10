@@ -238,13 +238,13 @@ public final class CollideKernel {
                         Cell cell = null;
                         long key = 0;
                         if (shape == null && worker) {   // a particle on a pool worker: the render thread's shape for this cell
-                            VoxelShape moved = ParticleWorkers.shape(state, level, x, y, z);
+                            VoxelShape moved = ParticleWorkers.shape(state, level, x, y, z, entity);
                             if (moved == Shapes.block()) {
                                 if (bb.intersects((double) x, (double) y, (double) z, (double) x + 1.0, (double) y + 1.0, (double) z + 1.0))
-                                    addCube((double) x, (double) y, (double) z);
+                                    hitCube(x, y, z);
                             } else if (!moved.isEmpty()) {
                                 if (entityShape == null) entityShape = Shapes.create(bb);
-                                if (Shapes.joinIsNotEmpty(moved, entityShape, BooleanOp.AND)) add(moved);
+                                if (Shapes.joinIsNotEmpty(moved, entityShape, BooleanOp.AND)) hit(moved, x, y, z);
                             }
                             continue;
                         }
@@ -281,10 +281,10 @@ public final class CollideKernel {
                             }
                             if (moved == Shapes.block()) {
                                 if (bb.intersects((double) x, (double) y, (double) z, (double) x + 1.0, (double) y + 1.0, (double) z + 1.0))
-                                    addCube((double) x, (double) y, (double) z);
+                                    hitCube(x, y, z);
                             } else if (!moved.isEmpty()) {
                                 if (entityShape == null) entityShape = Shapes.create(bb);
-                                if (Shapes.joinIsNotEmpty(moved, entityShape, BooleanOp.AND)) add(moved);
+                                if (Shapes.joinIsNotEmpty(moved, entityShape, BooleanOp.AND)) hit(moved, x, y, z);
                             }
                             continue;
                         }
@@ -294,18 +294,74 @@ public final class CollideKernel {
                         }
                         if (shape == Shapes.block()) {
                             if (bb.intersects((double) x, (double) y, (double) z, (double) x + 1.0, (double) y + 1.0, (double) z + 1.0))
-                                addCube((double) x, (double) y, (double) z);
+                                hitCube(x, y, z);
                         } else if (!shape.isEmpty()) {
                             VoxelShape moved = shape.move((double) x, (double) y, (double) z);
                             if (!moved.isEmpty()) {
                                 if (entityShape == null) entityShape = Shapes.create(bb);
-                                if (Shapes.joinIsNotEmpty(moved, entityShape, BooleanOp.AND)) add(moved);
+                                if (Shapes.joinIsNotEmpty(moved, entityShape, BooleanOp.AND)) hit(moved, x, y, z);
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    // ------------------------------------------------------------------ findSupportingBlock on the same walk
+
+    /** support mode: the scan's hits pick the supporting block instead of collecting shapes */
+    private boolean support, found;
+    private int bx, by, bz;
+    private double bestD, epx, epy, epz;
+    public static long supportCalls, supportChecked, supportMismatches;
+
+    private void hit(VoxelShape moved, int x, int y, int z) {
+        if (support) consider(x, y, z);
+        else add(moved);
+    }
+
+    private void hitCube(int x, int y, int z) {
+        if (support) consider(x, y, z);
+        else addCube((double) x, (double) y, (double) z);
+    }
+
+    /** CollisionGetter.findSupportingBlock's choice: the least distToCenterSqr, a tie to the greater position (Vec3i.compareTo) */
+    private void consider(int x, int y, int z) {
+        double d0 = (double) x + 0.5 - epx, d1 = (double) y + 0.5 - epy, d2 = (double) z + 0.5 - epz;
+        double d = d0 * d0 + d1 * d1 + d2 * d2;
+        if (d < bestD || d == bestD && (!found || (by != y ? by < y : bz != z ? bz < z : bx < x))) {
+            bx = x;
+            by = y;
+            bz = z;
+            bestD = d;
+            found = true;
+        }
+    }
+
+    /**
+     * CollisionGetter.findSupportingBlock(entity, box): the blocks BlockCollisions yields over the box (this scan: its
+     * cursor, checks and shapes, the tick's shape memo) - the nearest to the entity's position. No iterator, no context,
+     * no position objects for the blocks it passes.
+     */
+    public java.util.Optional<BlockPos> support(Entity entity, AABB box, Level level) {
+        if (busy) return null;   // a nested query (a block's shape code asking for collisions): the caller goes the vanilla way
+        busy = true;
+        supportCalls++;
+        support = true;
+        found = false;
+        bestD = Double.MAX_VALUE;
+        Vec3 p = entity.position();
+        epx = p.x;
+        epy = p.y;
+        epz = p.z;
+        try {
+            scan(entity, level, box);
+        } finally {
+            support = false;
+            busy = false;
+        }
+        return found ? java.util.Optional.of(new BlockPos(bx, by, bz)) : java.util.Optional.empty();
     }
 
     private BlockGetter chunkAt(Level level, int x, int z) {

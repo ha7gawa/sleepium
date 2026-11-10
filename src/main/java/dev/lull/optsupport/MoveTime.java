@@ -12,10 +12,11 @@ import net.minecraft.world.entity.EntityType;
  * Measurement only (-Dsleep.moveTime=true, MoveTime*Mixin): direct timings of a mob's tick by part - tick, aiStep, the
  * AI (serverAiStep), travel, move, collide, checkInsideBlocks, the fluid scan, baseTick, pushEntities - as self time (a
  * part's timed children subtracted), per entity type. Printed every 600 game ticks as us per entity tick, then reset.
- * Server thread only.
+ * Server thread only; -Dsleep.moveTime.client=true: the client's entities on the render thread instead.
  */
 public final class MoveTime {
     public static final boolean ON = Boolean.getBoolean("sleep.moveTime");
+    private static final boolean CLIENT = Boolean.getBoolean("sleep.moveTime.client");
     public static final String[] PARTS = {"tick", "aiStep", "ai", "travel", "move", "collide", "insideBlocks", "fluids", "baseTick", "push", "support", "fireCheck", "speed", "fall"};
     public static final int TICK = 0, AISTEP = 1, AI = 2, TRAVEL = 3, MOVE = 4, COLLIDE = 5, INSIDE = 6, FLUIDS = 7, BASE = 8, PUSH = 9, SUPPORT = 10, FIRE = 11, SPEED = 12, FALL = 13;
     private static final Map<EntityType<?>, long[]> BY_TYPE = new IdentityHashMap<>();   // PARTS self ns, then entity ticks
@@ -30,10 +31,10 @@ public final class MoveTime {
 
     public static void enter(int part, Entity e) {
         if (thread == null) {
-            if (!Thread.currentThread().getName().equals("Server thread")) return;
+            if (!Thread.currentThread().getName().equals(CLIENT ? "Render thread" : "Server thread")) return;
             thread = Thread.currentThread();
         }
-        if (Thread.currentThread() != thread || e.level().isClientSide) return;
+        if (Thread.currentThread() != thread || e.level().isClientSide != CLIENT) return;
         if (depth >= 64) { depth++; return; }
         long[] row = BY_TYPE.computeIfAbsent(e.getType(), k -> new long[PARTS.length + 1]);
         if (part == TICK) row[PARTS.length]++;
@@ -44,7 +45,7 @@ public final class MoveTime {
     }
 
     public static void exit(Entity e) {
-        if (Thread.currentThread() != thread || e.level().isClientSide) return;
+        if (Thread.currentThread() != thread || e.level().isClientSide != CLIENT) return;
         if (--depth >= 64 || depth < 0) { if (depth < 0) depth = 0; return; }
         long dt = System.nanoTime() - T0[depth];
         ROW[depth][PART[depth]] += dt - CHILD[depth];
