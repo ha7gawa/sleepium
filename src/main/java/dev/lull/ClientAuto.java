@@ -636,6 +636,7 @@ public final class ClientAuto {
                         recording = null;
                     }
                     log(dev.lull.optsupport.ClientCounters.report());
+                    if (dev.lull.optsupport.sleep.EntitySleep.CLIENT_ON) log("client " + dev.lull.optsupport.sleep.EntitySleep.report());   // the render thread: the client's side
                     if (dev.lull.optsupport.LightTiming.ON) log(dev.lull.optsupport.LightTiming.report());
                     if (dev.lull.optsupport.LightScout.ON) log(dev.lull.optsupport.LightScout.report());
                     if (dev.lull.optsupport.LightRecipe.VERIFY) log(dev.lull.optsupport.LightRecipe.report());

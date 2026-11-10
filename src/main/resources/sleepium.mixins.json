@@ -90,6 +90,7 @@
     "BrainTimeTickMixin"
   ],
   "client": [
+    "ClientEntSleepTickMixin",
     "GenTraceClientMixin",
     "FrameHashFreezeMixin",
     "DrawStatsMixin",

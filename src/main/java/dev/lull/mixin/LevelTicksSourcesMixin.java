@@ -14,6 +14,6 @@ public abstract class LevelTicksSourcesMixin {
     @Inject(method = "schedule", at = @At("HEAD"))
     private void sleep$schedule(ScheduledTick<?> tick, CallbackInfo ci) {
         EventSources.scheduledTicks++;
-        dev.lull.BeTickStats.writes++;
+        dev.lull.BeTickStats.write();
     }
 }

@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class WriteProbeBlockEntityMixin {
     @Inject(method = "setChanged()V", at = @At("HEAD"))
     private void sleep$setChanged(CallbackInfo ci) {
-        BeTickStats.writes++;
+        BeTickStats.write();
         if (dev.lull.optsupport.sleep.SleepEngine.HOOKS) {
             BlockEntity be = (BlockEntity) (Object) this;
             dev.lull.optsupport.sleep.SleepEngine.onPos(be.getLevel(), be.getBlockPos(), "changed");
@@ -23,7 +23,7 @@ public abstract class WriteProbeBlockEntityMixin {
     @Inject(method = "setChanged(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)V", at = @At("HEAD"))
     private static void sleep$setChangedStatic(net.minecraft.world.level.Level level, net.minecraft.core.BlockPos pos,
                                                net.minecraft.world.level.block.state.BlockState state, CallbackInfo ci) {
-        BeTickStats.writes++;
+        BeTickStats.write();
         if (dev.lull.optsupport.sleep.SleepEngine.HOOKS) dev.lull.optsupport.sleep.SleepEngine.onPos(level, pos, "changed");
     }
 }

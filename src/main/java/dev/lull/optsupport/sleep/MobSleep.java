@@ -337,7 +337,7 @@ final class MobSleep {
                 }
             }
             if (EntitySleep.TIMING) {
-                long[] t = EntitySleep.ST;
+                long[] t = EntitySleep.S().ST;
                 long w0 = System.nanoTime();
                 all.both(o, out, refsOut);   // again, the data now in the cache
                 long w1 = System.nanoTime();
@@ -687,8 +687,8 @@ final class MobSleep {
             TICK.add(((long) given << 40) | ((long) kind << 32) | (bound & 0xFFFFFFFFL));
             TICK.add(valueBits);
             if (EntitySleep.TIMING) {
-                EntitySleep.OT[3] += System.nanoTime() - t0;
-                EntitySleep.OT[4]++;
+                EntitySleep.S().OT[3] += System.nanoTime() - t0;
+                EntitySleep.S().OT[4]++;
             }
             return;
         }
@@ -702,8 +702,8 @@ final class MobSleep {
             Class<?> owner = f.getDeclaringClass();
             String name = f.getMethodName();
             if (EntitySleep.TIMING) {
-                EntitySleep.OT[5] += t1 - t0;
-                EntitySleep.OT[6] += System.nanoTime() - t1;
+                EntitySleep.S().OT[5] += t1 - t0;
+                EntitySleep.S().OT[6] += System.nanoTime() - t1;
             }
             Set<String> over = OVERLOADED.computeIfAbsent(owner, MobSleep::overloadedNames);
             SiteKey key = over.contains(name) ? null : new SiteKey(owner, name, f.getByteCodeIndex());
@@ -718,8 +718,8 @@ final class MobSleep {
         TICK.add(((long) id << 40) | ((long) kind << 32) | (bound & 0xFFFFFFFFL));
         TICK.add(valueBits);
         if (EntitySleep.TIMING) {
-            EntitySleep.OT[3] += System.nanoTime() - t0;
-            EntitySleep.OT[4]++;
+            EntitySleep.S().OT[3] += System.nanoTime() - t0;
+            EntitySleep.S().OT[4]++;
         }
     }
 

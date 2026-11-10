@@ -33,6 +33,19 @@ public final class BeTickStats {
 
     /** World-visible writes, bumped by the write hooks (server thread). */
     public static long writes;
+    /** the client's world-visible writes (the render thread): the client's entity sleep compares these, not the server's */
+    public static long clientWrites;
+
+    /** a world-visible write, counted for the side of the thread that made it */
+    public static void write() {
+        if (Thread.currentThread() == dev.lull.optsupport.OwnerThread.client) clientWrites++;
+        else writes++;
+    }
+
+    /** the writes of this thread's side */
+    public static long writesHere() {
+        return Thread.currentThread() == dev.lull.optsupport.OwnerThread.client ? clientWrites : writes;
+    }
 
     private static final class Stat {
         long ticks, idle, sleepable, nanos;

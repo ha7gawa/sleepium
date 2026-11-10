@@ -35,6 +35,8 @@ public final class SleepMixinPlugin implements IMixinConfigPlugin {
         if (simple.startsWith("MoveTime")) return Boolean.getBoolean("sleep.moveTime");
         if (simple.startsWith("Knock")) return System.getProperty("sleep.knock") != null;
         if (simple.equals("ClientAutoMouseMixin")) return System.getProperty("sleep.clientAuto") != null;
+        if (simple.equals("ClientEntSleepTickMixin"))   // the client's entity sleep: only when asked for (a redirect other mods could meet)
+            return Boolean.getBoolean("lab.opt.EntitySleep") && Boolean.getBoolean("lab.opt.ClientEntitySleep");
         if (simple.startsWith("EntSleep")) return Boolean.getBoolean("lab.opt.EntitySleep") || System.getProperty("lab.entsleep.diag") != null;
         return !simple.startsWith("ReadProbe") || Boolean.getBoolean("sleep.beReads") || sleep;
     }
