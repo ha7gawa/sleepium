@@ -124,8 +124,39 @@ public final class ParallelParticles {
     private static volatile Particle failed;
     private static int jobN;
 
-    /** -Dlab.particles.serveOnly=N: a list asked more than N shapes last tick - the render thread answers, takes no chunks (0: off) */
+    /**
+     * -Dlab.particles.serveOnly=N: the render thread as the reactor - it hands out the list, prefills and answers the
+     * workers' questions at once (awake until the list is done), ticks no particle itself: -1 every list, N &gt; 0 a
+     * list that asked more than N shapes in its last tick, 0 never
+     */
     private static final int SERVE_ONLY = Integer.getInteger("lab.particles.serveOnly", 0);
+    /** -Dlab.particles.seat=false: no seat thread in the reactor's place (the pool's workers only) */
+    private static final boolean SEAT = !"false".equals(System.getProperty("lab.particles.seat"));
+    public static long reactorTicks;
+    private static Thread seatThread;
+    private static volatile boolean seatGo;
+
+    /**
+     * The seat: one thread of its own that ticks particles while the render thread is the reactor (the frame pool keeps
+     * min(4, cores - 2) workers for all its users - 2 on a 4-core machine). Parked between particle ticks.
+     */
+    private static void seat() {
+        Thread t = seatThread;
+        if (t == null) {
+            t = new Thread(() -> {
+                while (true) {
+                    while (!seatGo) LockSupport.park(ParallelParticles.class);
+                    seatGo = false;
+                    workerRun();
+                }
+            }, "Particle-Seat");
+            t.setDaemon(true);
+            seatThread = t;
+            t.start();
+        }
+        seatGo = true;
+        LockSupport.unpark(t);
+    }
     private static final java.util.Map<Object, Integer> ASKED = new java.util.IdentityHashMap<>();
 
     private static void runPure(int np, Object list) {
@@ -139,17 +170,23 @@ public final class ParallelParticles {
         ParticleWorkers.SHARED.clear();
         ParticleWorkers.active = true;
         try {
-            int helpers = Math.min(pool.workerCount(), (np + CHUNK - 1) / CHUNK - 1);
+            int chunks = (np + CHUNK - 1) / CHUNK;
+            // the reactor: the render thread hands out the list, prefills and answers the workers' questions at once - awake
+            // for the particle tick, ticking no particle itself; its place taken by the seat
+            Integer lastAsked = ASKED.get(list);
+            boolean reactor = chunks > 1 && (SERVE_ONLY < 0 || SERVE_ONLY > 0 && lastAsked != null && lastAsked > SERVE_ONLY);
+            int helpers = Math.min(pool.workerCount(), reactor ? chunks : chunks - 1);
             for (int k = 0; k < helpers; k++) pool.execute(ParallelParticles::workerRun);
+            if (reactor) {
+                reactorTicks++;
+                if (SEAT && chunks > helpers) seat();
+            }
             var level = net.minecraft.client.Minecraft.getInstance().level;
             long b0 = BURST_LOG ? System.nanoTime() : 0;
             if (level != null) ParticleWorkers.prefill(level, list);   // while the workers start: this list's last tick's shapes, in this tick's level
             long b1 = BURST_LOG ? System.nanoTime() : 0;
             ownChunks = 0;
-            // a list whose workers asked many shapes in its last tick: the render thread only answers (its own chunks
-            // delayed every waiting worker - a generation of particles in new places)
-            Integer lastAsked = ASKED.get(list);
-            if (SERVE_ONLY <= 0 || lastAsked == null || lastAsked <= SERVE_ONLY || helpers == 0) drain(true);
+            if (!reactor) drain(true);
             long b2 = BURST_LOG ? System.nanoTime() : 0;
             if (BURST_LOG) {
                 prefillNs = b1 - b0;
@@ -160,7 +197,7 @@ public final class ParallelParticles {
             while (REMAINING.get() != 0) {
                 ParticleWorkers.serve();
                 if (REMAINING.get() == 0) break;
-                if (System.nanoTime() < spinUntil) Thread.onSpinWait();
+                if (reactor || System.nanoTime() < spinUntil) Thread.onSpinWait();   // the reactor stays awake until the list is done
                 else LockSupport.park(ParallelParticles.class);   // a worker's question or the last chunk unparks
             }
             ParticleWorkers.serve();
@@ -316,8 +353,8 @@ public final class ParallelParticles {
     }
 
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "parallel particles: lists %d, particles in parallel %d, on the render thread %d, shapes asked for workers %d, prefilled %d; classes pure %d, not %d%s",
-                lists, parallel, serial, ParticleWorkers.requests, ParticleWorkers.prefilled, ParticlePurity.pure, ParticlePurity.impure,
+        return String.format(java.util.Locale.ROOT, "parallel particles: lists %d (reactor %d), particles in parallel %d, on the render thread %d, shapes asked for workers %d, prefilled %d; classes pure %d, not %d%s",
+                lists, reactorTicks, parallel, serial, ParticleWorkers.requests, ParticleWorkers.prefilled, ParticlePurity.pure, ParticlePurity.impure,
                 CHECK ? String.format(java.util.Locale.ROOT, "; checked %d (random not compared %d), MISMATCHES %d", checked, unchecked, mismatches) : "");
     }
 }
