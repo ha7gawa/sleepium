@@ -81,6 +81,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
                     || Boolean.getBoolean("lab.opt.ParticleGpuMixin");
         else if (simple.equals("EntityShapeMemoMixin"))   // part of the tick shape memo (its measurement, the entity tick)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParticleShapeMemoMixin");
+        if (simple.startsWith("ParallelEntityTicks") && !simple.equals("ParallelEntityTicksMixin"))   // parts of the parallel entity runs
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntityTicksMixin");
         if (simple.equals("NeighbourWakeMixin"))   // part of ObservedModSleep (no cost without it)
             on = Boolean.getBoolean("lab.sleep.ObservedModSleep");
         if (simple.equals("QuadGpuMixin"))   // draws through PartBatch's item queues, shader patch and draw hooks

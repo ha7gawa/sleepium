@@ -238,7 +238,7 @@ public final class CollideKernel {
                         Cell cell = null;
                         long key = 0;
                         if (shape == null && worker) {   // a particle on a pool worker: the render thread's shape for this cell
-                            VoxelShape moved = ParticleWorkers.shape(state, level, x, y, z);
+                            VoxelShape moved = ParticleWorkers.shape(state, level, x, y, z, entity);
                             if (moved == Shapes.block()) {
                                 if (bb.intersects((double) x, (double) y, (double) z, (double) x + 1.0, (double) y + 1.0, (double) z + 1.0))
                                     hitCube(x, y, z);

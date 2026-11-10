@@ -19,7 +19,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 public final class ParticleWorkers {
     private ParticleWorkers() {}
 
-    static volatile boolean active;
+    public static volatile boolean active;
     static Thread renderThread;
     static final ThreadLocal<boolean[]> IN_WORKER = ThreadLocal.withInitial(() -> new boolean[1]);
 
@@ -49,20 +49,45 @@ public final class ParticleWorkers {
         final BlockState state;
         final Level level;
         final int x, y, z;
+        /** ParallelEntities: the entity asking, when the block's shape may depend on who asks (its context); else null */
+        final net.minecraft.world.entity.Entity entity;
         final Thread waiter = Thread.currentThread();
         volatile VoxelShape result;
 
         Req(BlockState state, Level level, int x, int y, int z) {
+            this(state, level, x, y, z, null);
+        }
+
+        Req(BlockState state, Level level, int x, int y, int z, net.minecraft.world.entity.Entity entity) {
             this.state = state;
             this.level = level;
             this.x = x;
             this.y = y;
             this.z = z;
+            this.entity = entity;
         }
     }
 
     /** A worker: the non-static shape of this state at (x, y, z), moved to its cell, as the render thread computes it. */
     static VoxelShape shape(BlockState state, Level level, int x, int y, int z) {
+        return shape(state, level, x, y, z, null);
+    }
+
+    /**
+     * entity: an entity ticked on a worker (ParallelEntities) - a block whose shape may depend on who asks
+     * (ShapePurity.contextFree no) is computed with its context, and not shared
+     */
+    static VoxelShape shape(BlockState state, Level level, int x, int y, int z, net.minecraft.world.entity.Entity entity) {
+        if (entity != null && !ShapePurity.contextFree(state.getBlock())) {
+            Req r = new Req(state, level, x, y, z, entity);
+            REQUESTS.offer(r);
+            LockSupport.unpark(renderThread);
+            VoxelShape s;
+            long until = SPIN_NS > 0 ? System.nanoTime() + SPIN_NS : 0;
+            while ((s = r.result) == null && SPIN_NS > 0 && System.nanoTime() < until) Thread.onSpinWait();
+            while ((s = r.result) == null) LockSupport.park(r);
+            return s;
+        }
         long key = BlockPos.asLong(x, y, z);
         Cell c = SHARED.get(key);
         if (c != null && c.state == state) {
@@ -141,6 +166,12 @@ public final class ParticleWorkers {
     static void serve() {
         Req r;
         while ((r = REQUESTS.poll()) != null) {
+            if (r.entity != null) {   // the asking entity's context (its worker waits: its state holds still)
+                VoxelShape sh = r.state.getCollisionShape(r.level, new BlockPos(r.x, r.y, r.z), CollisionContext.of(r.entity));
+                r.result = sh == Shapes.block() || sh.isEmpty() ? sh : sh.move((double) r.x, (double) r.y, (double) r.z);
+                LockSupport.unpark(r.waiter);
+                continue;
+            }
             Cell c = SHARED.get(BlockPos.asLong(r.x, r.y, r.z));
             if (c != null && c.state == r.state) {   // asked by another worker too, or prefilled meanwhile: this tick's answer
                 if (!c.used) c.used = true;

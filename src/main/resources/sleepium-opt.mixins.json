@@ -6,6 +6,8 @@
   "compatibilityLevel": "JAVA_21",
   "overwrites": { "conformVisibility": true },
   "mixins": [
+    "ParallelEntityTicksMoveMixin",
+    "ParallelEntityTicksGuardMixin",
     "FluidScanDryMixin",
     "FireCheckLoopMixin",
     "NeighbourWakeMixin",
@@ -153,6 +155,10 @@
     "LightTimingMixin"
   ],
   "client": [
+    "ParallelEntityTicksMixin",
+    "ParallelEntityTicksFxMixin",
+    "ParallelEntityTicksSoundMixin",
+    "ParallelEntityTicksRandomMixin",
     "RenderPriorityMixin",
     "RenderPriorityServerMixin",
     "SpriteInterpolateMixin",

@@ -244,6 +244,13 @@ public final class CompositeEventBus extends EventBus {
         return b;
     }
 
+    /** the listeners posting type would call (EventPriority markers included), or null if not known */
+    public net.neoforged.bus.api.EventListener[] listenersOf(Class<?> type) {
+        if (fallbackAlways || (boolean) SHUTDOWN.getVolatile(delegate)) return null;
+        ListenerList list = lookupList(type);
+        return list == null ? null : list.getListeners();
+    }
+
     private ListenerList lookupList(Class<?> type) {
         try {
             return (ListenerList) ((Map<?, ?>) getReadMap.invoke(listenerLists)).get(type);
@@ -259,7 +266,12 @@ public final class CompositeEventBus extends EventBus {
         return super.post(phase, event);
     }
     // listener changes: every allocation-free event site back to the normal post, before and after (EventSites)
-    @Override public void register(Object target) { EventSites.invalidate(); super.register(target); EventSites.invalidate(); }
+    /** the objects and classes given to register, in order (ParallelEntities finds a generated listener's method there) */
+    private final java.util.List<Object> targets = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public java.util.List<Object> registered() { return targets; }
+
+    @Override public void register(Object target) { EventSites.invalidate(); super.register(target); targets.add(target); EventSites.invalidate(); }
     @Override public void unregister(Object object) { EventSites.invalidate(); super.unregister(object); EventSites.invalidate(); }
     @Override public void start() { EventSites.invalidate(); super.start(); EventSites.invalidate(); }
     @Override public <T extends Event> void addListener(Consumer<T> consumer) { EventSites.invalidate(); super.addListener(consumer); EventSites.invalidate(); }

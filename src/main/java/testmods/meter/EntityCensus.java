@@ -46,8 +46,10 @@ public final class EntityCensus {
         } else current = null;
     }
 
+    private static final boolean ON = Boolean.getBoolean("sleep.meter.census");
+
     public static void itemBegin(ItemEntity e) {
-        if (!e.level().isClientSide) return;
+        if (!ON || !e.level().isClientSide) return;
         inItem = true;
         section = SectionPos.asLong(e.blockPosition());
         particles0 = particles;
@@ -68,6 +70,7 @@ public final class EntityCensus {
 
     /** an entity query answered while another entity ticked (Level.getEntities, both forms) */
     public static void query(List<?> result) {
+        if (Thread.currentThread() != dev.lull.optsupport.OwnerThread.client) return;   // the client's walk only
         Entity asker = current;
         if (asker == null || asker instanceof ItemEntity || !asker.level().isClientSide) return;
         long[] q = QUERIES.computeIfAbsent(asker.getClass().getSimpleName(), k -> new long[3]);

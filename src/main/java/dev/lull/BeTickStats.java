@@ -38,6 +38,7 @@ public final class BeTickStats {
 
     /** a world-visible write, counted for the side of the thread that made it */
     public static void write() {
+        if (dev.lull.optsupport.ParticleWorkers.active && dev.lull.optsupport.ParticleWorkers.inWorker()) dev.lull.optsupport.ParallelEntities.conflict("a world write");
         if (Thread.currentThread() == dev.lull.optsupport.OwnerThread.client) clientWrites++;
         else writes++;
     }
