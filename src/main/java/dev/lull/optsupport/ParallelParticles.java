@@ -106,6 +106,8 @@ public final class ParallelParticles {
                 System.out.printf(java.util.Locale.ROOT, "[sleep] particle burst: list %d (%d pure, %s), parallel %.1f ms (asked %d, prefilled %d; render thread: prefill %.1f ms, own %d chunks %.1f ms, tail %.1f ms; %d helpers waited %.1f ms in all), walk %.1f ms (%d dead)%n",
                         n, np, list.getClass().getSimpleName(), (t1 - t0) / 1e6, ParticleWorkers.requests - asked0, ParticleWorkers.prefilled - pre0,
                         prefillNs / 1e6, ownChunks, ownNs / 1e6, (t1 - t0 - prefillNs - ownNs) / 1e6, helpersRun, (ParticleWorkers.WAITED.get() - waited0) / 1e6, (t2 - t1) / 1e6, dead);
+            if (t2 - t0 > 10_000_000L) System.out.println("[sleep] particle burst: " + ages(np));
+            else java.util.Arrays.fill(CHUNK_NS, 0, Math.min(CHUNK_NS.length, (np + CHUNK - 1) / CHUNK), 0);
         }
         return true;
     }
@@ -114,6 +116,18 @@ public final class ParallelParticles {
     private static final boolean COMPACT = !"false".equals(System.getProperty("lab.particles.compact"));
 
     private static long prefillNs, ownNs;
+    /** the burst log's time of each chunk by its index (the newest particles are the list's last) */
+    private static final long[] CHUNK_NS = new long[1024];
+
+    /** us per particle in the list's newest quarter (its last chunks) and in the rest */
+    private static String ages(int np) {
+        int chunks = Math.min(CHUNK_NS.length, (np + CHUNK - 1) / CHUNK), q = Math.max(1, chunks / 4);
+        long newer = 0, older = 0;
+        for (int c = 0; c < chunks; c++) if (c >= chunks - q) newer += CHUNK_NS[c]; else older += CHUNK_NS[c];
+        java.util.Arrays.fill(CHUNK_NS, 0, chunks, 0);
+        return String.format(java.util.Locale.ROOT, "us per particle: newest quarter %.1f, the rest %.1f",
+                newer / 1e3 / Math.max(1, Math.min(np, q * CHUNK)), older / 1e3 / Math.max(1, np - q * CHUNK));
+    }
     private static int ownChunks, helpersRun;
 
     /** -Dlab.particles.burstLog=true: a list tick over 10 ms printed with its parts */
@@ -229,6 +243,7 @@ public final class ParallelParticles {
         int done = 0;
         for (int s; (s = NEXT.getAndAdd(CHUNK)) < jobN; ) {
             int e = Math.min(jobN, s + CHUNK);
+            long c0 = BURST_LOG ? System.nanoTime() : 0;
             for (int j = s; j < e; j++) {
                 Particle p = items[pureIdx[j]];
                 try {
@@ -239,6 +254,7 @@ public final class ParallelParticles {
                 }
                 if (render && ParticleWorkers.pending()) ParticleWorkers.serve();   // a waiting worker answered now, not after the chunk
             }
+            if (BURST_LOG && s / CHUNK < CHUNK_NS.length) CHUNK_NS[s / CHUNK] = System.nanoTime() - c0;
             done += e - s;
             if (render) {
                 ParticleWorkers.serve();
