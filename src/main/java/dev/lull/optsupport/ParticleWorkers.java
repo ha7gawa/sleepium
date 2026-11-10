@@ -28,7 +28,18 @@ public final class ParticleWorkers {
         return active && IN_WORKER.get()[0];
     }
 
-    record Cell(BlockState state, VoxelShape moved) {}
+    /** a position's shape for the tick; used: a worker took it (or asked for it) - next tick's demand */
+    static final class Cell {
+        final BlockState state;
+        final VoxelShape moved;
+        volatile boolean used;
+
+        Cell(BlockState state, VoxelShape moved, boolean used) {
+            this.state = state;
+            this.moved = moved;
+            this.used = used;
+        }
+    }
 
     static final ConcurrentHashMap<Long, Cell> SHARED = new ConcurrentHashMap<>();
     private static final ConcurrentLinkedQueue<Req> REQUESTS = new ConcurrentLinkedQueue<>();
@@ -54,7 +65,10 @@ public final class ParticleWorkers {
     static VoxelShape shape(BlockState state, Level level, int x, int y, int z) {
         long key = BlockPos.asLong(x, y, z);
         Cell c = SHARED.get(key);
-        if (c != null && c.state == state) return c.moved;
+        if (c != null && c.state == state) {
+            if (!c.used) c.used = true;
+            return c.moved;
+        }
         Req r = new Req(state, level, x, y, z);
         REQUESTS.offer(r);
         LockSupport.unpark(renderThread);
@@ -65,17 +79,56 @@ public final class ParticleWorkers {
 
     /** The render thread's kernel computed one (the particle window): the workers may take it too. */
     static void offer(BlockState state, int x, int y, int z, VoxelShape moved) {
-        if (active) SHARED.put(BlockPos.asLong(x, y, z), new Cell(state, moved));
+        if (active) SHARED.put(BlockPos.asLong(x, y, z), new Cell(state, moved, false));
     }
 
     /** Render thread: answer the workers' questions. */
+    /**
+     * The positions whose shapes the workers took or asked for in the last tick: at the next tick's start the render
+     * thread computes them again - in that tick's level, as it would answer the questions - while the workers start,
+     * so they mostly find the shared memo filled instead of waiting.
+     */
+    private static final java.util.Map<Object, it.unimi.dsi.fastutil.longs.LongArrayList> DEMANDS = new java.util.IdentityHashMap<>();
+
+    /** Render thread, at the end of a list's parallel tick: what its workers used (the list's demand for its next tick). */
+    static void keepDemand(Object list) {
+        it.unimi.dsi.fastutil.longs.LongArrayList d = DEMANDS.computeIfAbsent(list, k -> new it.unimi.dsi.fastutil.longs.LongArrayList());
+        d.clear();
+        for (var e : SHARED.entrySet()) if (e.getValue().used) d.add(e.getKey().longValue());
+    }
+    public static long prefilled;
+    static final boolean PREFILL = !"false".equals(System.getProperty("lab.particles.prefill"));
+
+    /** Render thread, the tick's start (workers launched): last ticks' positions computed again, questions answered between. */
+    static void prefill(Level level, Object list) {
+        if (!PREFILL) return;
+        it.unimi.dsi.fastutil.longs.LongArrayList DEMAND = DEMANDS.get(list);
+        if (DEMAND == null) return;
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        int k = 0;
+        for (int i = 0; i < DEMAND.size(); i++) {
+            long key = DEMAND.getLong(i);
+            if (SHARED.containsKey(key)) continue;
+            pos.set(key);
+            BlockState state = level.getBlockState(pos);
+            if (state instanceof BlockCollisionMemo.StaticShape st && st.sleep$staticCollision() != null) continue;   // workers take static shapes themselves
+            VoxelShape sh = state.getCollisionShape(level, pos, CollisionContext.empty());
+            int x = pos.getX(), y = pos.getY(), z = pos.getZ();
+            VoxelShape moved = sh == Shapes.block() || sh.isEmpty() ? sh : sh.move((double) x, (double) y, (double) z);
+            SHARED.put(key, new Cell(state, moved, false));
+            prefilled++;
+            if ((++k & 15) == 0) serve();
+        }
+        serve();
+    }
+
     static void serve() {
         Req r;
         while ((r = REQUESTS.poll()) != null) {
             BlockPos pos = new BlockPos(r.x, r.y, r.z);
             VoxelShape sh = r.state.getCollisionShape(r.level, pos, CollisionContext.empty());
             VoxelShape moved = sh == Shapes.block() || sh.isEmpty() ? sh : sh.move((double) r.x, (double) r.y, (double) r.z);
-            SHARED.put(pos.asLong(), new Cell(r.state, moved));
+            SHARED.put(pos.asLong(), new Cell(r.state, moved, true));
             requests++;
             r.result = moved;
             LockSupport.unpark(r.waiter);

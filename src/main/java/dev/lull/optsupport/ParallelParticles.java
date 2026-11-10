@@ -63,8 +63,8 @@ public final class ParallelParticles {
         lists++;
         parallel += np;
         serial += n - np;
-        if (CHECK) check(np);
-        else runPure(np);
+        if (CHECK) check(np, list);
+        else runPure(np, list);
         dev.lull.opt.ParticleEngineAccessor acc = (dev.lull.opt.ParticleEngineAccessor) engine;
         i = 0;
         for (Iterator<Particle> it = list.iterator(); it.hasNext(); i++) {   // vanilla's walk: the others ticked, the dead removed
@@ -84,7 +84,7 @@ public final class ParallelParticles {
     private static volatile Particle failed;
     private static int jobN;
 
-    private static void runPure(int np) {
+    private static void runPure(int np, Object list) {
         ParticleWorkers.renderThread = Thread.currentThread();
         LabRuntime pool = FrameReactor.pool();
         jobN = np;
@@ -96,6 +96,8 @@ public final class ParallelParticles {
         try {
             int helpers = Math.min(pool.workerCount(), (np + CHUNK - 1) / CHUNK - 1);
             for (int k = 0; k < helpers; k++) pool.execute(ParallelParticles::workerRun);
+            var level = net.minecraft.client.Minecraft.getInstance().level;
+            if (level != null) ParticleWorkers.prefill(level, list);   // while the workers start: this list's last tick's shapes, in this tick's level
             drain(true);
             long spinUntil = System.nanoTime() + 20_000;
             while (REMAINING.get() != 0) {
@@ -105,6 +107,7 @@ public final class ParallelParticles {
                 else LockSupport.park(ParallelParticles.class);   // a worker's question or the last chunk unparks
             }
             ParticleWorkers.serve();
+            ParticleWorkers.keepDemand(list);
         } finally {
             ParticleWorkers.active = false;
         }
@@ -221,11 +224,11 @@ public final class ParallelParticles {
         return a != null && a.equals(b);
     }
 
-    private static void check(int np) {
+    private static void check(int np, Object list) {
         Object[][] before = new Object[np][], par = new Object[np][];
         try {
             for (int j = 0; j < np; j++) before[j] = snapshot(items[pureIdx[j]]);
-            runPure(np);
+            runPure(np, list);
             for (int j = 0; j < np; j++) par[j] = snapshot(items[pureIdx[j]]);
             for (int j = 0; j < np; j++) {
                 Particle p = items[pureIdx[j]];
@@ -251,8 +254,8 @@ public final class ParallelParticles {
     }
 
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "parallel particles: lists %d, particles in parallel %d, on the render thread %d, shapes asked for workers %d; classes pure %d, not %d%s",
-                lists, parallel, serial, ParticleWorkers.requests, ParticlePurity.pure, ParticlePurity.impure,
+        return String.format(java.util.Locale.ROOT, "parallel particles: lists %d, particles in parallel %d, on the render thread %d, shapes asked for workers %d, prefilled %d; classes pure %d, not %d%s",
+                lists, parallel, serial, ParticleWorkers.requests, ParticleWorkers.prefilled, ParticlePurity.pure, ParticlePurity.impure,
                 CHECK ? String.format(java.util.Locale.ROOT, "; checked %d (random not compared %d), MISMATCHES %d", checked, unchecked, mismatches) : "");
     }
 }
