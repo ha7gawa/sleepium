@@ -159,6 +159,13 @@
     "EntityFluidLoopMixin"
   ],
   "client": [
+    "VoxelStreamCompileMixin",
+    "VoxelStreamDirtyMixin",
+    "VoxelStreamLightMixin",
+    "VoxelStreamPointMixin",
+    "VoxelLodFrameMixin",
+    "VoxelLodLevelMixin",
+    "VoxelFrustumAccessor",
     "GpuAnimFrameMixin",
     "GpuAnimAtlasMixin",
     "GpuAnimCloseMixin",

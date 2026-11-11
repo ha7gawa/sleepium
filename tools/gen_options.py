@@ -69,6 +69,9 @@ GEO_PART_OF = {'GeoModelWorkerMixin': ['GeoParallelMixin', 'ParallelEntitiesMixi
 
 # off by default, shown in their groups (key, group, description); 1.20.1: lab.chunkmd.occlusion waits for chunk multi-draw
 EXPERIMENTAL = [
+    ('lab.voxel.stream', 'chunks', 'GPU terrain: chunk sections meshed on the graphics card from the blocks as the server sends them, far terrain as coarser cells (level of detail beyond 6 chunks, coarser again beyond 10). Less CPU per frame and fewer triangles: on an Intel N100 a flight 88 -> 166 fps. Near terrain looks the same; far terrain is simplified. Blocks whose look mods compute from the world are drawn the vanilla way.'),
+    ('lab.voxel.stream.lodNear', 'chunks', 'GPU terrain: level of detail closer (from 4 chunks, coarser from 8) - for weak graphics; the middle distance looks coarser.', 'lab.voxel.stream'),
+    ('lab.voxel.stream.cone', 'chunks', 'GPU terrain: terrain toward the screen edges and behind goes coarse sooner. A few more fps; after a fast turn detail fills in over a moment.', 'lab.voxel.stream'),
     ('lab.sleep.ObservedModSleep', 'ticks', 'Machines of mods whose tick the analysis cannot follow (Industrial Foregoing, Functional Storage, PneumaticCraft...) sleep on what Sleepium observes, as before 1.1.8: idle machines cost less, but their sleep is not proven exact.'),
 ]
 
@@ -170,8 +173,8 @@ def main():
         group = next(g for g, rx in GROUPS if re.search(rx, name))
         desc = DESCRIPTIONS.get(name) or javadoc_of(name) or javadoc_of(name + 'Mixin')
         rows.append((key, group, value, desc, ','.join('lab.opt.' + f for f in part_of(name, rules))))
-    for key, group, desc in EXPERIMENTAL:
-        rows.append((key, group, 'false', desc, ''))
+    for key, group, desc, *part in EXPERIMENTAL:   # (key, group, description[, the flag it is part of])
+        rows.append((key, group, 'false', desc, part[0] if part else ''))
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, 'w', encoding='utf-8', newline='\n') as f:
         for r in rows:
