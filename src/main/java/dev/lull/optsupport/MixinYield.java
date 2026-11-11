@@ -29,30 +29,20 @@ public final class MixinYield {
 
     /** our mixins that add an interface of ours to their target: interface (internal name) -> {mixin class, target class} */
     private static volatile java.util.Map<String, String[]> PROVIDERS;
+    private static volatile java.util.Set<String> UNAVAILABLE;
 
     /**
      * True when this mixin of ours uses (casts to, checks, calls) an interface another mixin of ours adds, and that one
-     * gives way to another mod: applied alone it would find the interface missing (ShapeCacheMixin gave way to
+     * gives way to another mod, directly or through a dependency: applied alone it would find the interface missing (ShapeCacheMixin gave way to
      * ModernFix's getCollisionShape and BlockCollisionMemoMixin's casts failed).
      */
     public static boolean needsYielded(String mixinClassName) {
-        ClassNode cn;
-        try {
-            cn = org.spongepowered.asm.service.MixinService.getService().getBytecodeProvider().getClassNode(mixinClassName);
-        } catch (Throwable t) {
-            return false;
-        }
         java.util.Map<String, String[]> providers = providers();
-        java.util.Set<String> used = new java.util.HashSet<>();
-        for (MethodNode m : cn.methods)
-            for (org.objectweb.asm.tree.AbstractInsnNode in = m.instructions.getFirst(); in != null; in = in.getNext()) {
-                if (in instanceof org.objectweb.asm.tree.TypeInsnNode t) used.add(t.desc);
-                else if (in instanceof org.objectweb.asm.tree.MethodInsnNode mi && mi.getOpcode() == org.objectweb.asm.Opcodes.INVOKEINTERFACE) used.add(mi.owner);
-            }
-        for (String type : used) {
+        java.util.Set<String> unavailable = unavailableProviders();
+        for (String type : usedInterfaces(mixinClassName)) {
             String[] p = providers.get(type);
             if (p == null || p[0].equals(mixinClassName)) continue;
-            if (yields(p[1], p[0])) {
+            if (unavailable.contains(p[0])) {
                 yielded++;
                 System.out.println("[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: it needs "
                         + type.substring(type.lastIndexOf('/') + 1) + " from " + p[0].substring(p[0].lastIndexOf('.') + 1) + ", which gave way");
@@ -60,6 +50,49 @@ public final class MixinYield {
             }
         }
         return false;
+    }
+
+    private static java.util.Set<String> usedInterfaces(String mixinClassName) {
+        ClassNode cn;
+        try {
+            cn = org.spongepowered.asm.service.MixinService.getService().getBytecodeProvider().getClassNode(mixinClassName);
+        } catch (Throwable t) {
+            return java.util.Set.of();
+        }
+        java.util.Set<String> used = new java.util.TreeSet<>();
+        for (MethodNode m : cn.methods)
+            for (org.objectweb.asm.tree.AbstractInsnNode in = m.instructions.getFirst(); in != null; in = in.getNext()) {
+                if (in instanceof org.objectweb.asm.tree.TypeInsnNode t) used.add(t.desc);
+                else if (in instanceof org.objectweb.asm.tree.MethodInsnNode mi && mi.getOpcode() == org.objectweb.asm.Opcodes.INVOKEINTERFACE) used.add(mi.owner);
+            }
+        return used;
+    }
+
+    private static synchronized java.util.Set<String> unavailableProviders() {
+        if (UNAVAILABLE != null) return UNAVAILABLE;
+        java.util.Map<String, String[]> providers = providers();
+        java.util.Map<String, java.util.Set<String>> used = new java.util.TreeMap<>();
+        java.util.Set<String> unavailable = new java.util.HashSet<>();
+        for (String[] p : providers.values()) used.putIfAbsent(p[0], null);
+        for (String mixin : used.keySet()) used.put(mixin, usedInterfaces(mixin));
+        for (String[] p : providers.values()) if (yields(p[1], p[0])) unavailable.add(p[0]);
+        // Propagate only from missing prerequisites: independent cycles stay available, regardless of query order.
+        boolean changed;
+        do {
+            changed = false;
+            for (var entry : used.entrySet()) {
+                if (unavailable.contains(entry.getKey())) continue;
+                for (String type : entry.getValue()) {
+                    String[] p = providers.get(type);
+                    if (p != null && unavailable.contains(p[0])) {
+                        changed |= unavailable.add(entry.getKey());
+                        break;
+                    }
+                }
+            }
+        } while (changed);
+        UNAVAILABLE = java.util.Set.copyOf(unavailable);
+        return UNAVAILABLE;
     }
 
     private static java.util.Map<String, String[]> providers() {
