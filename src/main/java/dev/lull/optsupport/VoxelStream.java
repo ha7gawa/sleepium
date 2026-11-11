@@ -1953,6 +1953,11 @@ public final class VoxelStream {
      */
     private static void lifecycle() {
         if (!ON) return;
+        if (ASIDE != null) {
+            if (!asideLogged) LOG.info("[sleep/voxel] the GPU terrain stands aside: {}; vanilla's (or that mod's) terrain is drawn", ASIDE);
+            asideLogged = true;
+            return;
+        }
         var mc = Minecraft.getInstance();
         var level = mc.level;
         if (level == null) return;
@@ -1971,6 +1976,25 @@ public final class VoxelStream {
             lifeMinY = level.getMinBuildHeight();
             start();
         }
+    }
+
+    /**
+     * Why the GPU terrain does not start, or null. It cuts vanilla's opaque draws in chunk multi-draw's renderChunkLayer and takes
+     * over the section compile (rebuildChunkAsync, compileSync): when multi-draw is off, or another mod's mixin changes one of them (a
+     * replaced chunk renderer - Embeddium, Sodium and the shader mods on them), both would draw or the GPU's sections
+     * would never be handed over. Decided once from the mixins (MixinTouch), as multi-draw's own give-way.
+     */
+    static final String ASIDE = aside();
+    private static boolean asideLogged;
+
+    private static String aside() {
+        if (!ON) return null;
+        if (!(Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkMultiDrawMixin")))
+            return "chunk multi-draw is off (the GPU terrain cuts vanilla's opaque draws there)";
+        if (!ChunkMultiDraw.ACTIVE) return "another mod changes LevelRenderer.renderChunkLayer (its own chunk renderer)";
+        for (String m : new String[] {"rebuildChunkAsync", "compileSync"})
+            if (MixinTouch.touched("net/minecraft/client/renderer/chunk/ChunkRenderDispatcher$RenderChunk", m)) return "another mod changes the section compile (" + m + ")";
+        return null;
     }
 
     /** everything the stream holds on the GPU freed, vanilla's drawing back; a start builds it all again */
