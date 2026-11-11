@@ -424,12 +424,50 @@ public final class ParallelRender {
      * another entity's, a data race (EMF + Fresh Animations crashed the render cache's fingerprint with a
      * ConcurrentModificationException). Such entities stay on the render thread, as in 1.0.3.
      */
-    static final boolean INNER = (!DISPATCH_UNTOUCHED || Boolean.getBoolean("lab.prender.forceInner")) && (Boolean.getBoolean("lab.prender.inner") || Boolean.getBoolean("lab.prender.forceInner"))
+    static final boolean INNER = (!DISPATCH_UNTOUCHED || Boolean.getBoolean("lab.prender.forceInner"))
+            && (Boolean.getBoolean("lab.prender.inner") || Boolean.getBoolean("lab.prender.forceInner") || autoInner() == null)
             && cacheHooked()
             && !MixinTouch.overwritten("net/minecraft/client/renderer/entity/EntityRenderDispatcher", "render")
             && !MixinTouch.redirected("net/minecraft/client/renderer/entity/EntityRenderDispatcher", "render", "render")
             && !MixinTouch.overwritten("net/minecraft/client/renderer/LevelRenderer", "renderEntity")
             && !MixinTouch.redirected("net/minecraft/client/renderer/LevelRenderer", "renderEntity", "render");
+
+
+    /** the mods in the dispatcher (for the log) */
+    static String dispatchMods;   // (no initialiser: set while INNER, above, is initialised)
+
+    /**
+     * The merge inside the dispatcher without a flag (-Dlab.prender.autoInner=false: never): null when no mod with a mixin
+     * in EntityRenderDispatcher.render / LevelRenderer.renderEntity also has one in the code a worker runs (workerCode) -
+     * then what their injections set around the renderer is not read inside it on a worker (Iris: the entity id is read by
+     * its vertex mixins only with a shaderpack; those bytes are checked, CHECK_DENSE). Otherwise why not.
+     */
+    static String autoInner() {
+        if ("false".equals(System.getProperty("lab.prender.autoInner"))) return "off by flag";
+        java.util.Set<String> hookers = new java.util.TreeSet<>(MixinTouch.touchers("net/minecraft/client/renderer/entity/EntityRenderDispatcher", "render"));
+        hookers.addAll(MixinTouch.touchers("net/minecraft/client/renderer/LevelRenderer", "renderEntity"));
+        dispatchMods = hookers.toString();
+        if (hookers.contains("?") || hookers.contains("index")) return "the mods in the dispatcher not known";
+        // the code a worker job runs for an entity: model parts, models, renderers. A mod with mixins both in the dispatcher
+        // and here keeps per-entity state between the two (Entity Model Features: the animated entity in globals its model
+        // mixins read) - on a worker that is another entity's, a data race. (A local: INNER, above, is initialised first.)
+        String[][] workerCode = {
+                {"net/minecraft/client/model/geom/ModelPart", "render"}, {"net/minecraft/client/model/geom/ModelPart", "compile"},
+                {"net/minecraft/client/model/geom/ModelPart", "translateAndRotate"},
+                {"net/minecraft/client/model/HierarchicalModel", "renderToBuffer"}, {"net/minecraft/client/model/AgeableListModel", "renderToBuffer"},
+                {"net/minecraft/client/model/EntityModel", "setupAnim"}, {"net/minecraft/client/model/EntityModel", "prepareMobModel"},
+                {"net/minecraft/client/renderer/entity/EntityRenderer", "render"}, {"net/minecraft/client/renderer/entity/LivingEntityRenderer", "render"},
+                {"net/minecraft/client/renderer/entity/layers/RenderLayer", "renderColoredCutoutModel"}};
+        for (String[] w : workerCode)
+            for (String c : MixinTouch.touchers(w[0], w[1])) {
+                if (c.equals("?")) return "unknown mixins in " + w[0] + "." + w[1];
+                if (hookers.contains(c)) return c + " is in the dispatcher and in " + w[0].substring(w[0].lastIndexOf('/') + 1) + "." + w[1];
+            }
+        return null;
+    }
+
+    /** -Dsleep.clientAuto.ab=dev.lull.optsupport.ParallelRender#innerOff@S: the frame with every entity on the render thread (A/B) */
+    static boolean innerOff;
 
     /** RenderCacheMixin's redirect is in the dispatcher (not given way, its flag on): its handler is among the class' methods */
     private static boolean cacheHooked() {
@@ -442,16 +480,21 @@ public final class ParallelRender {
             System.out.println("[sleep/opt] parallel render: another mod's mixin in EntityRenderDispatcher.render; merged inside it: " + INNER
                     + " (render cache " + cacheHooked()
                     + ", render overwritten " + MixinTouch.overwritten("net/minecraft/client/renderer/entity/EntityRenderDispatcher", "render")
-                    + ", its renderer call redirected " + MixinTouch.redirected("net/minecraft/client/renderer/entity/EntityRenderDispatcher", "render", "render") + ")");
+                    + ", its renderer call redirected " + MixinTouch.redirected("net/minecraft/client/renderer/entity/EntityRenderDispatcher", "render", "render")
+                    + "; mods there " + dispatchMods + (INNER ? "" : "; not merged inside: " + autoInner()) + ")");
     }
 
     /**
      * A burning entity's flame drawn by the worker, where render draws it (after the renderer, before the offset is
      * undone): renderFlame reads the atlas' fire sprites and the camera's yaw, both fixed while the frame's entities
      * are drawn. Burning mobs (zombies at noon, a fight with fire) went to the render thread before - in a horde nearly
-     * all of them. A mod's mixin in renderFlame keeps them there (-Dlab.prender.flame=false: always).
+     * all of them. A mod's mixin in renderFlame keeps them there.
      */
-    static final boolean FLAME_ON_WORKERS = !"false".equals(System.getProperty("lab.prender.flame"))
+    // OFF by default (11-11): an in-frame A/B of a burning horde (hundreds of zombies) showed 7 pixels where a flame and a
+    // body meet at equal depth - the burning entity's draws are ordered against the flames' batch otherwise than vanilla's
+    // (with flames on workers, and in the merge inside the dispatcher too); kept on the render thread there is no
+    // difference and no fps lost on the host (1989 vs 1979). -Dlab.prender.flame=true: on workers again.
+    static final boolean FLAME_ON_WORKERS = Boolean.getBoolean("lab.prender.flame")
             && !MixinTouch.touched("net/minecraft/client/renderer/entity/EntityRenderDispatcher", "renderFlame");
 
     /** the job being merged through renderEntity (render thread), and whether its dispatcher call took the job's bytes */
@@ -502,6 +545,8 @@ public final class ParallelRender {
     private static final int CHECK_FIRST = Integer.getInteger("lab.prender.checkFirst", 8);
     private static final int CHECK_EVERY = Integer.getInteger("lab.prender.checkEvery", 512);
     private static final int CHECK_LIMIT = 2;
+    /** merged inside another mod's dispatcher hooks: one job in 16 checked (their per-entity state may reach the bytes) */
+    private static final boolean CHECK_DENSE = !DISPATCH_UNTOUCHED;
     /** render thread: per entity type {jobs merged, mismatches}; counted again after a resource reload */
     private static final java.util.IdentityHashMap<net.minecraft.world.entity.EntityType<?>, int[]> CHECKS = new java.util.IdentityHashMap<>();
     private static long checked, checkMismatches;
@@ -512,7 +557,7 @@ public final class ParallelRender {
         int[] c = CHECKS.get(j.entity.getType());
         if (c == null) CHECKS.put(j.entity.getType(), c = new int[2]);
         int n = c[0]++;
-        return n < CHECK_FIRST || n % CHECK_EVERY == 0;
+        return n < CHECK_FIRST || n % (CHECK_DENSE ? 16 : CHECK_EVERY) == 0;
     }
 
     /**
@@ -604,13 +649,13 @@ public final class ParallelRender {
     }
 
     private static boolean eligible(Entity e, MultiBufferSource buffers) {
-        if (!DISPATCH_UNTOUCHED && !INNER) return no(0);
+        if (innerOff || !DISPATCH_UNTOUCHED && !INNER) return no(0);
         if (dev.lull.shaders.ShaderPipeline.active) return no(1);   // the shaderpack's vertex ids are render-thread state
         if (!WORKER_REFUSED.isEmpty() && WORKER_REFUSED.contains(e.getType())) return no(2);
         Minecraft mc = Minecraft.getInstance();
         EntityRenderDispatcher d = mc.getEntityRenderDispatcher();
         if (LIB_UNSAFE.get(d.getRenderer(e).getClass())) return no(3);
-        if (buffers != mc.renderBuffers().bufferSource() || e instanceof AbstractClientPlayer || e.hasCustomName() || e.displayFireAnimation() && !FLAME_ON_WORKERS && !INNER
+        if (buffers != mc.renderBuffers().bufferSource() || e instanceof AbstractClientPlayer || e.hasCustomName() || e.displayFireAnimation() && !FLAME_ON_WORKERS
                 || d.shouldRenderHitBoxes()) return no(4);
         if (listened != 0 && !LISTENERS_ON_WORKERS && (anyListener || EventSites.postsListened(d.getRenderer(e).getClass(), listened))) return no(5);
         if (dev.lull.api.Compat.parallelRenderExcluded(e)) return no(6);
