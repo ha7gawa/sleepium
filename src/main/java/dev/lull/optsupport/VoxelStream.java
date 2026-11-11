@@ -2009,6 +2009,7 @@ public final class VoxelStream {
         VoxelLod.cutAll = VoxelLod.cutting = false;
         int freed = GlTrack.freeAll(VoxelStream.class, VoxelCompute.class, VoxelLod.class);
         VANILLA_OWNED.clear();
+        SEEN_DARK.clear();
         RECS.clear();
         DIRTY.clear();
         for (Batch b : FLIGHTS) if (b.fence != 0) org.lwjgl.opengl.GL32C.glDeleteSync(b.fence);   // batches in flight
@@ -2068,7 +2069,28 @@ public final class VoxelStream {
      */
     static final boolean SKIP_DARK = on("lab.voxel.stream.skipDark");
     private static final it.unimi.dsi.fastutil.longs.LongOpenHashSet SKIPPED = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
-    public static long darkSkips, darkRestores;
+    public static long darkSkips, darkRestores, darkSeen;
+    /** skipped sections vanilla's occlusion graph has seen (meshed from then on while they stay in the area) */
+    private static final it.unimi.dsi.fastutil.longs.LongOpenHashSet SEEN_DARK = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+    /** -Dlab.voxel.stream.seenDark=false: the old skipDark (an A/B of the caveat) */
+    private static final boolean SEEN_DARK_ON = on("lab.voxel.stream.seenDark");
+
+    /**
+     * skipDark's caveat closed: a skipped section in vanilla's visible list this frame - reached by its occlusion graph
+     * from the camera, so seen through an opening (a cave down a shaft from the sky's side) - is meshed, and stays.
+     * Caves not joined to an opening in view are never reached and stay skipped.
+     */
+    private static void seenDark(java.util.List<net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection> visible) {
+        for (int i = 0, n = visible.size(); i < n; i++) {
+            var o = visible.get(i).getOrigin();
+            long k = SectionPos.asLong(o.getX() >> 4, o.getY() >> 4, o.getZ() >> 4);
+            if (SKIPPED.remove(k)) {
+                SEEN_DARK.add(k);
+                DIRTY.add(k);
+                darkSeen++;
+            }
+        }
+    }
 
     /** no sky light anywhere in the section (a light layer that is all zeros) */
     private static boolean noSky(net.minecraft.world.level.lighting.LayerLightEventListener sky, long k) {
@@ -2439,6 +2461,7 @@ public final class VoxelStream {
             int cx = SectionPos.x(k), cz = SectionPos.z(k);
             if (!within(cx, cz, d)) {
                 it.remove();
+                SEEN_DARK.remove(k);
                 continue;
             }
             long dx = cx * 16 + 8 - camX, dy = SectionPos.y(k) * 16 + 8 - camY, dz = cz * 16 + 8 - camZ;
@@ -2461,7 +2484,7 @@ public final class VoxelStream {
                 dropRec(k);
                 continue;
             }
-            if (camLit && Math.max(Math.abs(cx - camCxs), Math.abs(cz - camCzs)) > 1 && noSkyAround(skyLight, k)) {   // dark and far: not meshed
+            if (camLit && Math.max(Math.abs(cx - camCxs), Math.abs(cz - camCzs)) > 1 && !SEEN_DARK.contains(k) && noSkyAround(skyLight, k)) {   // dark and far: not meshed
                 it.remove();
                 dropRec(k);
                 SKIPPED.add(k);
@@ -3414,6 +3437,7 @@ public final class VoxelStream {
         var mc = Minecraft.getInstance();
         var cam = mc.gameRenderer.getMainCamera().getPosition();
         var visible = ((dev.lull.opt.LevelRendererVisibleAccessor) mc.levelRenderer).sleep$visible();
+        if (SKIP_DARK && SEEN_DARK_ON && !SKIPPED.isEmpty()) seenDark(visible);
         int need = (visible.size() + 8) * 18 * 5;
         if (cmds.length < need) cmds = new int[need + need / 2];   // with room: not a new array each time the view grows a little
         int[] start = new int[3], count = new int[3];
@@ -3792,7 +3816,7 @@ public final class VoxelStream {
                     all, m[1] & 0xFFFFFFFFL, 100.0 * (m[1] & 0xFFFFFFFFL) / Math.max(1, all), m[2] & 0xFFFFFFFFL, 100.0 * (m[2] & 0xFFFFFFFFL) / Math.max(1, all), m[3] & 0xFFFFFFFFL, m[4] & 0xFFFFFFFFL);
         }
         String caves = merge + String.format(Locale.ROOT, "%n  without sky light (caves, rock): %d sections, %d faces (%.1f %% of the meshed faces)", darkSecs, darkFaces, 100.0 * darkFaces / Math.max(1, used))
-                + (SKIP_DARK ? String.format(Locale.ROOT, "; skipDark: %d skips, %d restored, %d skipped now", darkSkips, darkRestores, SKIPPED.size()) : "")
+                + (SKIP_DARK ? String.format(Locale.ROOT, "; skipDark: %d skips, %d restored, %d seen by the occlusion graph, %d skipped now", darkSkips, darkRestores, darkSeen, SKIPPED.size()) : "")
                 + (COMPACT ? String.format(Locale.ROOT, "; compact index reused %d frames of %d", compactReused, drawFrames) : "")
                 + (LOD_CONE > 0 ? String.format(Locale.ROOT, "; lod cone K=%.1f: %d sections meshed again for a turn or move", LOD_CONE, coneRemesh) : "")
                 + (MIXED > 1 ? String.format(Locale.ROOT, "; mixed resolution 1/%d: %d frames, far faces %.1f %% of the drawn", MIXED, mixedFrames, 100.0 * mixedFarFaces / Math.max(1, mixedAllFaces)) : "");
