@@ -196,6 +196,7 @@
 -Dlab.opt.GpuAnim=true
 -Dlab.opt.ParallelWorldgenMixin=true
 -Dlab.opt.OffThreadEntity=true
+-Dlab.opt.ParallelEntityTicksMixin=true
 -Dlab.opt.ParallelParticlesMixin=true
 -Dlab.opt.ParticleGpuMixin=true
 -Dlab.opt.ParticleLightMemoMixin=true
