@@ -6,7 +6,7 @@ import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
-/** sleepium-emf.mixins.json, applied only when Entity Model Features is loaded: EmfAsmSplitMixin (unless -Dlab.opt.EmfSplit=false), EmfPartGpuMixin with its accessor (with PartBatch, unless -Dlab.opt.EmfPartGpu=false). */
+/** sleepium-emf.mixins.json, applied only when Entity Model Features is loaded: EmfAsmSplitMixin (unless -Dlab.opt.EmfSplit=false), EmfPartGpuMixin with its accessor (with PartBatch, unless -Dlab.opt.EmfPartGpu=false), EmfCarrierMixin with EmfAdapter on (EMF / ETF on render workers). */
 public final class EmfMixinPlugin implements IMixinConfigPlugin {
     static {
         dev.lull.optsupport.GameDefaults.ensure();   // a built jar's flags before they are read
@@ -28,7 +28,8 @@ public final class EmfMixinPlugin implements IMixinConfigPlugin {
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         String simple = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
-        boolean on = emf() && (simple.equals("EmfAsmSplitMixin") ? SPLIT : (simple.equals("EmfPartGpuMixin") || simple.equals("ModelPartCubesAccessor")) && GPU);
+        boolean on = emf() && (simple.equals("EmfAsmSplitMixin") ? SPLIT : simple.startsWith("EmfCarrier") ? dev.lull.optsupport.EmfAdapter.ON
+                : (simple.equals("EmfPartGpuMixin") || simple.equals("ModelPartCubesAccessor")) && GPU);
         if (on) System.out.println("[sleep/opt] applying " + simple + " -> " + targetClassName);
         return on;
     }

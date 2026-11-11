@@ -96,6 +96,7 @@ public final class LateEventSites implements IExtension {
         java.util.Map<String, Integer> before = BEFORE.remove(cn.name);
         if (MARKED.remove(cn.name)) EventSiteTransformer.transform(cn, true, before);
         OverrideHooks.apply(cn);
+        if (EmfAdapter.ON) EmfAdapter.transform(cn);   // EMF / ETF's render state per job (after every mod's mixins)
     }
 
     /** true when the extension runs (postApply after every other mixin) */

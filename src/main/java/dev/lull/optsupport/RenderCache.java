@@ -168,6 +168,28 @@ public final class RenderCache {
         }
 
         /** Same types, counts and element bytes (a format's padding bytes are never written: left out). */
+        /**
+         * EmfAdapter's check: the same layout and every vertex position within tol of the other's (NaN fails). Entity
+         * Model Features keeps animation state per model root, and a worker's renderer set has its own roots: a worker's
+         * pose is EMF's, not the render thread's to the bit (the user, 11-11: not required); a race shows far beyond tol.
+         */
+        boolean closeTo(Rec o, float tol) {
+            if (o.size != size || !o.types.equals(types)) return false;
+            for (int i = 0; i < types.size(); i++) if (o.counts[i] != counts[i] || o.offs[i] != offs[i]) return false;
+            for (int i = 0; i < types.size(); i++) {
+                VertexFormat f = types.get(i).format();
+                if (f.getElements().isEmpty() || f.getElements().get(0) != com.mojang.blaze3d.vertex.DefaultVertexFormat.ELEMENT_POSITION) return false;
+                int vs = f.getVertexSize();
+                long a = mem + offs[i], b = o.mem + offs[i];
+                for (int v = 0; v < counts[i]; v++)
+                    for (int k = 0; k < 3; k++) {
+                        float x = MemoryUtil.memGetFloat(a + (long) v * vs + 4L * k), y = MemoryUtil.memGetFloat(b + (long) v * vs + 4L * k);
+                        if (!(Math.abs(x - y) <= tol)) return false;
+                    }
+            }
+            return true;
+        }
+
         boolean sameAs(Rec o) {
             if (o.size != size || !o.types.equals(types) || o.runN != runN) return false;
             for (int i = 0; i < types.size(); i++) if (o.counts[i] != counts[i] || o.offs[i] != offs[i] || o.runCount[i] != runCount[i]) return false;

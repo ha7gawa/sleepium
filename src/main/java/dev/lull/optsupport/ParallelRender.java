@@ -130,6 +130,8 @@ public final class ParallelRender {
         final Map<EntityType<?>, EntityRenderer<?>> renderers;
         /** 1.20.1: player renderers keyed by skin model name ("default" / "slim") */
         final Map<String, EntityRenderer<? extends net.minecraft.world.entity.player.Player>> players;
+        /** another mod's render state localized for this set's jobs (EmfAdapter), or null */
+        final ModLocals.Copy locals = ModLocals.active() ? new ModLocals.Copy() : null;
 
         Set(int epoch) {
             this.epoch = epoch;
@@ -166,7 +168,12 @@ public final class ParallelRender {
         long t0 = System.nanoTime();
         buildingSets = true;
         try {
-            for (int i = 0; i < THREADS + 1; i++) SETS.add(new Set(e));   // one more: the render thread helps
+            for (int i = 0; i < THREADS + 1; i++) {   // one more: the render thread helps
+                if (EmfAdapter.active()) EmfAdapter.beginSet();   // EMF's model roots so far: the render thread's
+                Set s = new Set(e);
+                if (EmfAdapter.active() && s.locals != null) EmfAdapter.endSet(s.locals);   // the ones this set's renderers baked
+                SETS.add(s);
+            }
         } finally {
             buildingSets = false;
         }
@@ -215,6 +222,7 @@ public final class ParallelRender {
             parts.clear();
             CURRENT.set(this);
             try {
+                if (s != null && s.locals != null) ModLocals.enter(s.locals);   // (inside: a failure here is the job's, not the worker's)
                 ok = s != null && render(s, this);
             } catch (Refusal r) {
                 ok = false;
@@ -232,6 +240,7 @@ public final class ParallelRender {
                 if (type != null) learnFailure(type, t);
             } finally {
                 CURRENT.remove();
+                if (s != null && s.locals != null) ModLocals.exit();
                 if (!ok) {   // the render thread renders it again, side effects included
                     calls.clear();
                     parts.clear();
@@ -314,6 +323,7 @@ public final class ParallelRender {
             }
             setsChecked = false;
             listened = EventSites.renderListenedMask();   // once per frame
+            if (ModLocals.active()) ModLocals.frameStart();   // the render thread's values the jobs' copies start from
         }
         Job j = size < QUEUE.size() ? QUEUE.get(size) : null;
         if (j == null) {
@@ -461,7 +471,7 @@ public final class ParallelRender {
         for (String[] w : workerCode)
             for (String c : MixinTouch.touchers(w[0], w[1])) {
                 if (c.equals("?")) return "unknown mixins in " + w[0] + "." + w[1];
-                if (hookers.contains(c)) return c + " is in the dispatcher and in " + w[0].substring(w[0].lastIndexOf('/') + 1) + "." + w[1];
+                if (hookers.contains(c) && !EmfAdapter.covers(c)) return c + " is in the dispatcher and in " + w[0].substring(w[0].lastIndexOf('/') + 1) + "." + w[1];
             }
         return null;
     }
@@ -481,7 +491,8 @@ public final class ParallelRender {
                     + " (render cache " + cacheHooked()
                     + ", render overwritten " + MixinTouch.overwritten("net/minecraft/client/renderer/entity/EntityRenderDispatcher", "render")
                     + ", its renderer call redirected " + MixinTouch.redirected("net/minecraft/client/renderer/entity/EntityRenderDispatcher", "render", "render")
-                    + "; mods there " + dispatchMods + (INNER ? "" : "; not merged inside: " + autoInner()) + ")");
+                    + "; mods there " + dispatchMods + (INNER ? "" : "; not merged inside: " + autoInner()) + ")"
+                    + (EmfAdapter.ON ? "; " + EmfAdapter.report() : ""));
     }
 
     /**
@@ -524,7 +535,12 @@ public final class ParallelRender {
         }
         if (sampled(j)) {   // rendered here once more, inside renderEntity where other mods' state is set: the same bytes?
             VERIFY_REC.reset();
-            Minecraft.getInstance().getEntityRenderDispatcher().render(e, x, y, z, yaw, pt, pose, VERIFY_REC, light);
+            EmfAdapter.checking = true;   // as the worker drew it: no EMF LOD frame skip
+            try {
+                Minecraft.getInstance().getEntityRenderDispatcher().render(e, x, y, z, yaw, pt, pose, VERIFY_REC, light);
+            } finally {
+                EmfAdapter.checking = false;
+            }
             if (mismatch(j, j.buffers)) return true;
         }
         return take(j, j.buffers);
@@ -549,7 +565,9 @@ public final class ParallelRender {
     private static final boolean CHECK_DENSE = !DISPATCH_UNTOUCHED;
     /** render thread: per entity type {jobs merged, mismatches}; counted again after a resource reload */
     private static final java.util.IdentityHashMap<net.minecraft.world.entity.EntityType<?>, int[]> CHECKS = new java.util.IdentityHashMap<>();
-    private static long checked, checkMismatches;
+    private static long checked, checkMismatches, checkClose;
+    /** -Dlab.prender.emfTolerance: how far (blocks) a worker's vertex may be from the render thread's with EmfAdapter on */
+    private static final float EMF_TOLERANCE = Float.parseFloat(System.getProperty("lab.prender.emfTolerance", "0.25"));
 
     /** Is this merge one of the checked ones? (render thread) */
     private static boolean sampled(Job j) {
@@ -568,6 +586,10 @@ public final class ParallelRender {
         VERIFY_REC.finish(VERIFY_OUT);
         checked++;
         if (VERIFY_OUT.sameAs(j.out)) return false;
+        if (EmfAdapter.active() && VERIFY_OUT.closeTo(j.out, EMF_TOLERANCE)) {   // EMF's poses: per renderer set, close (EmfAdapter)
+            checkClose++;
+            return false;
+        }
         checkMismatches++;
         net.minecraft.world.entity.EntityType<?> type = j.entity.getType();
         if (++CHECKS.get(type)[1] == CHECK_LIMIT) {
@@ -600,7 +622,12 @@ public final class ParallelRender {
         }
         if (sampled(j)) {   // rendered here once more, inside the dispatcher where other mods' state is set: the same bytes?
             VERIFY_REC.reset();
-            Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(e).render(e, yaw, pt, pose, VERIFY_REC, light);
+            EmfAdapter.checking = true;   // as the worker drew it: no EMF LOD frame skip
+            try {
+                Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(e).render(e, yaw, pt, pose, VERIFY_REC, light);
+            } finally {
+                EmfAdapter.checking = false;
+            }
             if (mismatch(j, buffers)) return true;
         }
         return take(j, buffers);
@@ -831,13 +858,23 @@ public final class ParallelRender {
         if (INNER) {   // the renderer alone: the dispatcher's flame and shadow are drawn by the dispatcher at the merge
             j.innerPose.set(pose.last().pose());
             j.innerNormal.set(pose.last().normal());
-            r.render(e, yaw, pt, pose, rec, light);
+            Object etf = s.locals != null && EmfAdapter.active() ? EmfAdapter.mount(e) : null;   // as ETF's dispatcher hook
+            try {
+                r.render(e, yaw, pt, pose, rec, light);
+            } finally {
+                if (etf != null) EmfAdapter.unmount(etf);
+            }
             pose.popPose();
             if (rec.unsupported) return false;
             rec.finish(j.out);
             return true;
         }
-        r.render(e, yaw, pt, pose, rec, light);
+        Object etf = s.locals != null && EmfAdapter.active() ? EmfAdapter.mount(e) : null;   // as ETF's dispatcher hook
+        try {
+            r.render(e, yaw, pt, pose, rec, light);
+        } finally {
+            if (etf != null) EmfAdapter.unmount(etf);
+        }
         EntityRenderDispatcher d = Minecraft.getInstance().getEntityRenderDispatcher();
         if (e.displayFireAnimation()) ((EntityRenderDispatcherInvoker) d).sleep$renderFlame(pose, rec, e);
         pose.translate(-off.x(), -off.y(), -off.z());
@@ -855,12 +892,13 @@ public final class ParallelRender {
     }
 
     public static String report() {
+        if (EmfAdapter.ON) System.out.println("[sleep/opt] " + EmfAdapter.report());
         if (WHY) {
             StringBuilder w = new StringBuilder("parallel render, why on the render thread:");
             for (int i = 0; i < WHY_N.length; i++) if (WHY_N[i] > 0) w.append(' ').append(WHY_NAMES[i]).append(' ').append(WHY_N[i]).append(';');
             System.out.println(w);
         }
         return String.format(java.util.Locale.ROOT, "parallel render: %d workers, jobs %d, on workers %d (render thread helped %d), on the render thread %d (of them merges that fell back %d), failed %d, refused %d, journaled calls %d, part records merged in %.0f ms%s", THREADS, jobs, parallel,
-                helped, sequential, mergeFallbacks, failed, refused, journaled, mergeNanos / 1e6, (WORKER_REFUSED.isEmpty() ? "" : ", kept on the render thread " + WORKER_REFUSED) + (CHECK ? ", checked in place " + checked + (checkMismatches > 0 ? " (differed " + checkMismatches + ")" : "") : "") + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches + (MISMATCH_TYPES.isEmpty() ? "" : " " + MISMATCH_TYPES) + (SELF_TYPES.isEmpty() ? "" : ", of them also between two render-thread renders " + SELF_TYPES) : ""));
+                helped, sequential, mergeFallbacks, failed, refused, journaled, mergeNanos / 1e6, (WORKER_REFUSED.isEmpty() ? "" : ", kept on the render thread " + WORKER_REFUSED) + (CHECK ? ", checked in place " + checked + (checkMismatches > 0 ? " (differed " + checkMismatches + ")" : "") + (checkClose > 0 ? " (close, EMF " + checkClose + ")" : "") : "") + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches + (MISMATCH_TYPES.isEmpty() ? "" : " " + MISMATCH_TYPES) + (SELF_TYPES.isEmpty() ? "" : ", of them also between two render-thread renders " + SELF_TYPES) : ""));
     }
 }

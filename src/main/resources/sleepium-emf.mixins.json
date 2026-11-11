@@ -8,6 +8,8 @@
   "refmap": "sleepium.refmap.json",
   "client": [
     "EmfAsmSplitMixin",
+    "EmfCarrierMixin",
+    "EmfCarrierItfMixin",
     "EmfPartGpuMixin",
     "ModelPartCubesAccessor"
   ],
