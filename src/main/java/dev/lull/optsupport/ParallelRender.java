@@ -253,7 +253,9 @@ public final class ParallelRender {
     private static final List<Job> QUEUE = new ArrayList<>();
     private static final List<Job> FREE = new ArrayList<>();
     private static int size;
-    private static boolean listened;
+    private static int listened;   // EventSites.renderListenedMask, once per frame
+    /** -Dlab.prender.anyListener: the old rule - any listened entity render event keeps every entity on the render thread (not final: ClientAuto's in-frame A/B flips it) */
+    static boolean anyListener = Boolean.getBoolean("lab.prender.anyListener");
 
     /**
      * -Dlab.prender.pin=render;w1,w2,...: the render thread pinned to one logical CPU and each worker, at its first
@@ -302,7 +304,7 @@ public final class ParallelRender {
                 System.out.println("[sleep/opt] parallel render: render thread pinned to mask " + Long.toHexString(RENDER_PIN) + " " + dev.lab.runtime.OsThreads.pinCurrent(RENDER_PIN));
             }
             setsChecked = false;
-            listened = EventSites.renderListened();   // once per frame
+            listened = EventSites.renderListenedMask();   // once per frame
         }
         Job j = size < QUEUE.size() ? QUEUE.get(size) : null;
         if (j == null) {
@@ -455,7 +457,7 @@ public final class ParallelRender {
         if (LIB_UNSAFE.get(d.getRenderer(e).getClass())) return no(3);
         if (buffers != mc.renderBuffers().bufferSource() || e instanceof AbstractClientPlayer || e.hasCustomName() || e.displayFireAnimation() && !FLAME_ON_WORKERS && !INNER
                 || d.shouldRenderHitBoxes()) return no(4);
-        if (listened) return no(5);
+        if (listened != 0 && (anyListener || EventSites.postsListened(d.getRenderer(e).getClass(), listened))) return no(5);   // its renderer posts a listened event
         if (dev.lull.api.Compat.parallelRenderExcluded(e)) return no(6);
         if (!(!Boolean.getBoolean("lab.opt.RenderCacheMixin") || RenderCache.animated(e) || dev.lull.api.Compat.renderCacheExcluded(e))) return no(7);
         // with the render cache on: what it draws the vanilla way (animated, or excluded from it by Compat)

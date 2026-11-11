@@ -115,6 +115,74 @@ public final class EventSites {
         return false;
     }
 
+    /** The entity render events with a listener now: bit i = the i-th of them (every bit when the bus cannot say). */
+    public static int renderListenedMask() {
+        if (!(NeoForge.EVENT_BUS instanceof CompositeEventBus cb)) return -1;
+        int m = 0;
+        for (int i = 0; i < ENTITY_RENDER_EVENTS.length; i++) if (cb.mayHaveListeners(ENTITY_RENDER_EVENTS[i])) m |= 1 << i;
+        return m;
+    }
+
+    /**
+     * Does this renderer post one of the listened events ({@code listened}, renderListenedMask)? Each event is posted by
+     * the renderers that construct it - RenderLivingEvent by LivingEntityRenderer, RenderItemInFrameEvent by
+     * ItemFrameRenderer, RenderNameTagEvent by EntityRenderer - so a listener of one runs for those entities only. Read
+     * once per renderer class from its bytes: a NEW of an event in a method of the class or a superclass, or in a loader
+     * hook method they call (one level). Unreadable: every event.
+     */
+    public static boolean postsListened(Class<?> renderer, int listened) {
+        return listened != 0 && (POSTS.get(renderer) & listened) != 0;
+    }
+
+    private static final ClassValue<Integer> POSTS = new ClassValue<>() {
+        @Override
+        protected Integer computeValue(Class<?> type) {
+            int m = posted(type);
+            if (Boolean.getBoolean("lab.prender.why"))
+                System.out.println("[sleep/opt] render events posted by " + type.getName() + ": " + (m == -1 ? "unreadable (all)" : Integer.toBinaryString(m)) + "; listened now " + Integer.toBinaryString(renderListenedMask()));
+            return m;
+        }
+    };
+
+    private static int posted(Class<?> type) {
+        String[] names = new String[ENTITY_RENDER_EVENTS.length];
+        for (int i = 0; i < names.length; i++) names[i] = org.objectweb.asm.Type.getInternalName(ENTITY_RENDER_EVENTS[i]);
+        java.util.Set<String> hooks = new java.util.HashSet<>();
+        int m = 0;
+        try {
+            for (Class<?> k = type; k != null && k != Object.class; k = k.getSuperclass()) {
+                var cn = dev.lull.ClassBytes.readBefore(k.getClassLoader(), k.getName().replace('.', '/'), org.objectweb.asm.ClassReader.SKIP_FRAMES);
+                if (cn == null) return -1;
+                for (var mn : cn.methods) m |= constructs(mn, names, hooks);
+            }
+            for (String h : hooks) {   // owner.name+desc of a loader hook a renderer calls: that method alone
+                int dot = h.indexOf('.'), paren = h.indexOf('(');
+                var cn = dev.lull.ClassBytes.readBefore(type.getClassLoader(), h.substring(0, dot), org.objectweb.asm.ClassReader.SKIP_FRAMES);
+                if (cn == null) return -1;
+                for (var mn : cn.methods)
+                    if (mn.name.equals(h.substring(dot + 1, paren)) && mn.desc.equals(h.substring(paren))) m |= constructs(mn, names, null);
+            }
+        } catch (java.io.IOException | RuntimeException e) {
+            if (Boolean.getBoolean("lab.prender.why")) System.out.println("[sleep/opt] render events of " + type.getName() + " unreadable: " + e);
+            return -1;
+        }
+        return m;
+    }
+
+    private static int constructs(org.objectweb.asm.tree.MethodNode mn, String[] names, java.util.Set<String> hooks) {
+        int m = 0;
+        if (mn.instructions == null) return 0;
+        for (var in : mn.instructions) {
+            if (in instanceof org.objectweb.asm.tree.TypeInsnNode t && t.getOpcode() == org.objectweb.asm.Opcodes.NEW) {
+                for (int i = 0; i < names.length; i++) if (t.desc.equals(names[i])) m |= 1 << i;
+            } else if (hooks != null && in instanceof org.objectweb.asm.tree.MethodInsnNode mi && mi.getOpcode() == org.objectweb.asm.Opcodes.INVOKESTATIC
+                    && mi.owner.startsWith("net/neoforged/")) {
+                hooks.add(mi.owner + "." + mi.name + mi.desc);
+            }
+        }
+        return m;
+    }
+
     public static String report() {
         int fast = 0;
         java.util.Set<String> slow = new java.util.TreeSet<>();
