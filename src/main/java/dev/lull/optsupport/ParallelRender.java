@@ -488,13 +488,13 @@ public final class ParallelRender {
      * A burning entity's flame drawn by the worker, where render draws it (after the renderer, before the offset is
      * undone): renderFlame reads the atlas' fire sprites and the camera's yaw, both fixed while the frame's entities
      * are drawn. Burning mobs (zombies at noon, a fight with fire) went to the render thread before - in a horde nearly
-     * all of them. A mod's mixin in renderFlame keeps them there.
+     * all of them. A mod's mixin in renderFlame keeps them there (-Dlab.prender.flame=false: always).
      */
-    // OFF by default (11-11): an in-frame A/B of a burning horde (hundreds of zombies) showed 7 pixels where a flame and a
-    // body meet at equal depth - the burning entity's draws are ordered against the flames' batch otherwise than vanilla's
-    // (with flames on workers, and in the merge inside the dispatcher too); kept on the render thread there is no
-    // difference and no fps lost on the host (1989 vs 1979). -Dlab.prender.flame=true: on workers again.
-    static final boolean FLAME_ON_WORKERS = Boolean.getBoolean("lab.prender.flame")
+    // On by default (the user, 11-11: a few pixels are acceptable here). An in-frame A/B of a burning horde (hundreds of
+    // zombies) shows 7-10 of 921 600 pixels where a flame and a body meet at equal depth (the burning entity's draws are
+    // ordered against the flames' batch otherwise than vanilla's); next to Iris without shaders the horde runs 1012-1051
+    // fps with them on workers, 804 without. -Dlab.prender.flame=false: burning entities on the render thread (exact).
+    static final boolean FLAME_ON_WORKERS = !"false".equals(System.getProperty("lab.prender.flame"))
             && !MixinTouch.touched("net/minecraft/client/renderer/entity/EntityRenderDispatcher", "renderFlame");
 
     /** the job being merged through renderEntity (render thread), and whether its dispatcher call took the job's bytes */
@@ -655,7 +655,7 @@ public final class ParallelRender {
         Minecraft mc = Minecraft.getInstance();
         EntityRenderDispatcher d = mc.getEntityRenderDispatcher();
         if (LIB_UNSAFE.get(d.getRenderer(e).getClass())) return no(3);
-        if (buffers != mc.renderBuffers().bufferSource() || e instanceof AbstractClientPlayer || e.hasCustomName() || e.displayFireAnimation() && !FLAME_ON_WORKERS
+        if (buffers != mc.renderBuffers().bufferSource() || e instanceof AbstractClientPlayer || e.hasCustomName() || e.displayFireAnimation() && !FLAME_ON_WORKERS && !INNER
                 || d.shouldRenderHitBoxes()) return no(4);
         if (listened != 0 && !LISTENERS_ON_WORKERS && (anyListener || EventSites.postsListened(d.getRenderer(e).getClass(), listened))) return no(5);
         if (dev.lull.api.Compat.parallelRenderExcluded(e)) return no(6);
