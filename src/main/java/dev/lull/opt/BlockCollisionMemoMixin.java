@@ -98,7 +98,7 @@ public abstract class BlockCollisionMemoMixin {
         }
         java.util.Optional<net.minecraft.core.BlockPos> r;
         r = null;
-        if (dev.lull.optsupport.CollideKernel.ON && dev.lull.optsupport.CollideKernel.usable()
+        if (dev.lull.optsupport.CollideKernel.SUPPORT && dev.lull.optsupport.CollideKernel.usable()
                 && (r = dev.lull.optsupport.CollideKernel.of((Level) (Object) this).support(entity, box, (Level) (Object) this)) != null) {
             // the kernel's walk over the same blocks (BlockCollisions' cursor, checks, shapes): the nearest one, no iterator
             if (dev.lull.optsupport.CollideKernel.CHECK) {

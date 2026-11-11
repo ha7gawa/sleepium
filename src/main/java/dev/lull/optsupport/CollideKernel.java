@@ -36,6 +36,8 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 public final class CollideKernel {
     /** -Dlab.opt.collideKernel=false: vanilla's collectColliders + collideWithShapes (A/B) */
     public static final boolean ON = !"false".equals(System.getProperty("lab.opt.collideKernel"));
+    /** -Dlab.opt.collideKernelSupport=false: findSupportingBlock the vanilla way while the kernel collides (A/B) */
+    public static final boolean SUPPORT = ON && !"false".equals(System.getProperty("lab.opt.collideKernelSupport"));
     public static final boolean CHECK = Boolean.getBoolean("lab.opt.collideKernelCheck");
     public static long calls, checked, mismatches;
     private static final CollideKernel SERVER = new CollideKernel(), CLIENT = new CollideKernel();

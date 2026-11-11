@@ -1,6 +1,7 @@
 """Server speed, deterministic: jar against jar on the production NeoForge server, the same ticks in both.
 
     python tools/detbench.py --jar old=F:/rel/sleepium-1.1.4.jar --jar new=build/libs/sleepium-1.1.5.jar mobs zoo items
+           (a jar's own flags: --jar nosup=build/libs/x.jar::-Dlab.opt.collideKernelSupport=false)
            [--rounds 2] [--warm 200] [--measure 600] [--server F:/release-test/server]
 
 tools/bench.py times a scene by the clock: the scene is built at whatever tick the server reached, the entities get
@@ -42,8 +43,10 @@ a = ap.parse_args()
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCENES = os.path.join(HERE, '..', 'src', 'scenes', 'resources', 'data')
 JARS = []
+JFLAGS = {}
 for j in a.jar:
     label, path = j.split('=', 1)
+    path, _, JFLAGS[label] = path.partition('::')   # label=path::-Dx=y - flags for this jar's runs only
     JARS.append((label, os.path.abspath(path)))
 D = a.server
 PROPS = os.path.join(D, 'server.properties')
@@ -77,7 +80,7 @@ def run(label, jar):
         f.write('{"pack":{"pack_format":48,"description":"sleep scenes"}}')
     with open(PROPS, 'w') as f:
         f.writelines('%s=%s\n' % kv for kv in props.items())
-    jvm = ['-Xms' + a.heap, '-Xmx' + a.heap, '-XX:+AlwaysPreTouch', '-Dsleep.seedEntities=true'] + a.flags.split()
+    jvm = ['-Xms' + a.heap, '-Xmx' + a.heap, '-XX:+AlwaysPreTouch', '-Dsleep.seedEntities=true'] + a.flags.split() + JFLAGS[label].split()
     p = subprocess.Popen([a.java] + jvm + ['@user_jvm_args.txt', '@libraries/net/neoforged/neoforge/%s/win_args.txt' % a.neoforge, 'nogui'],
                          cwd=D, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8',
                          errors='replace', bufsize=1)
