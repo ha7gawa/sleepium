@@ -644,6 +644,7 @@ public final class ClientAuto {
                     if (dev.lull.optsupport.LightRecipe.VERIFY) log(dev.lull.optsupport.LightRecipe.report());
                     if (Boolean.getBoolean("lab.shaderlight.diag")) log(dev.lull.optsupport.LightVolumes.diagReport());
                     if (DrawStats.ON) log(DrawStats.report());
+                    if (dev.lull.optsupport.VoxelStream.ON) log(dev.lull.optsupport.VoxelStream.report());   // the GPU terrain (stops it: the run ends here)
                     if (Boolean.getBoolean("lab.geoparts.verify")) log(dev.lull.optsupport.GeoParts.report());   // GeckoLib loaded then
                     for (java.util.function.Function<String, String> r : REPORTS) {   // other mods' reports (the label of the run given)
                         String x = r.apply(LABEL);
