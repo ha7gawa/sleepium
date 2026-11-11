@@ -133,7 +133,8 @@ public final class ClientAuto {
     private static com.mojang.blaze3d.platform.NativeImage abA;
     /** -Dsleep.clientAuto.gamemode=survival: the game mode once the terrain is ready (default spectator) */
     private static final String GAMEMODE = System.getProperty("sleep.clientAuto.gamemode", "spectator");
-    /** -Dsleep.clientAuto.cmdAt=S:command[|S:command...]: server commands S seconds into the measured window (e.g. 10:reload) */
+    /** -Dsleep.clientAuto.cmdAt=S:command[|S:command...]: server commands S seconds into the measured window (e.g. 10:reload);
+     * "!resources" is the client's resource reload (F3+T) */
     private static final String CMD_AT = System.getProperty("sleep.clientAuto.cmdAt");
     private static final java.util.List<Object[]> CMDS = new java.util.ArrayList<>();
 
@@ -462,7 +463,8 @@ public final class ClientAuto {
             if (ticks >= (int) c[0]) {
                 it.remove();
                 log("command at " + ticks + ": /" + c[1]);
-                command(Minecraft.getInstance(), (String) c[1]);
+                if ("!resources".equals(c[1])) Minecraft.getInstance().reloadResourcePacks();   // a client action: F3+T
+                else command(Minecraft.getInstance(), (String) c[1]);
             }
         }
         if (shotAt >= 0 && ticks >= shotAt) {
