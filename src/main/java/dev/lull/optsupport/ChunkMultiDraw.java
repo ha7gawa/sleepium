@@ -709,7 +709,10 @@ public final class ChunkMultiDraw {
             return true;
         }
         if (SORT_NEAR && !allFaces) visible = sortedNearFirst(visible, x, y, z);
+        boolean cut = VoxelLod.cutting && !allFaces;   // the GPU terrain draws the opaque layers (VoxelStream)
+        if (cut) VoxelLod.camera(x, z);
         for (SectionRenderDispatcher.RenderSection s : visible) {
+            if (cut && VoxelLod.far(s.getOrigin())) continue;   // the GPU's section (VoxelLod.far: unless vanilla draws it for mods)
             // the section's own entry slots: no emptiness test (an empty layer has no entry), no map lookups
             Object[] md = ((ChunkEntries) s).sleep$md();
             Entry e = (Entry) md[fs], pe = (Entry) md[fs + 1];
@@ -1520,5 +1523,13 @@ public final class ChunkMultiDraw {
                 KEEP_VANILLA || PATCHED.size() != SUPPORTED.size() ? "filled" : "not filled") + packReport()
                 + (TRANSLUCENT ? String.format(java.util.Locale.ROOT, "; translucent: patched %s, multi-draws %d, frames the vanilla way %d, resorts %d",
                         translucentPatched, translucentDraws, translucentFallbacks, resorts) : "");
+    }
+
+    /** the camera's kept layer lists dropped (the GPU terrain: the set of drawn sections changed without a new version) */
+    public static void invalidateLayerCaches() {
+        for (LayerCache c : LCACHE) {
+            c.ver = -1;
+            c.stable = false;
+        }
     }
 }

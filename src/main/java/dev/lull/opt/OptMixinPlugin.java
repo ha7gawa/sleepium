@@ -46,6 +46,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.WriteBarrier");
         if (simple.startsWith("OffThreadEntity"))   // one feature: entities added from another thread go where they belong
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.OffThreadEntity");
+        if (simple.startsWith("VoxelStream") || simple.startsWith("VoxelLod")) on = Boolean.getBoolean("lab.voxel.stream");   // the GPU terrain (notes/61, 68)
         if (simple.startsWith("GpuAnim"))   // one feature: animated sprites' frames copied on the GPU (the ring for interpolated ones: lab.gpuAnim.pbo)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.GpuAnim");
         if (simple.startsWith("MoveMemo"))   // one feature: an unchanged move of a living entity skipped

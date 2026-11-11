@@ -155,6 +155,12 @@
     "LightTimingMixin"
   ],
   "client": [
+    "VoxelStreamCompileMixin",
+    "VoxelStreamDirtyMixin",
+    "VoxelStreamLightMixin",
+    "VoxelStreamPointMixin",
+    "VoxelLodFrameMixin",
+    "VoxelLodLevelMixin",
     "GpuAnimFrameMixin",
     "GpuAnimAtlasMixin",
     "GpuAnimCloseMixin",
