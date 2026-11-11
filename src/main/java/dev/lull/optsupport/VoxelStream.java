@@ -2296,7 +2296,10 @@ public final class VoxelStream {
         for (var e : RECS.long2ObjectEntrySet()) {
             Rec r = e.getValue();
             long k = e.getLongKey();
-            if (r.lod > lodFor(k, ccx, ccz, 0) || r.lod < lodFor(k, ccx, ccz, 1)) {
+            // off screen: never finer (it waits until the view turns to it); coarser only as the plain distance's level asks
+            // (walking away - the face buffer is sized for that), never by the cone
+            boolean back = LOD_CONE > 0 && !CONE_BEHIND && behind(k, ccx, ccz);
+            if ((!back && r.lod > lodFor(k, ccx, ccz, 0)) || r.lod < lodFor(k, ccx, ccz, 1)) {
                 if (DIRTY.add(k)) {
                     lodRemesh++;
                     if (LOD_CONE > 0) coneRemesh++;
@@ -2313,6 +2316,8 @@ public final class VoxelStream {
      */
     static final float LOD_CONE = Float.parseFloat(System.getProperty("lab.voxel.stream.lodCone", Boolean.getBoolean("lab.voxel.stream.cone") ? "2" : "0"));
     private static final double CONE_TURN = Math.cos(Math.toRadians(15));
+    /** -Dlab.voxel.stream.coneBehind: the old rule - sections behind the camera coarse too (an A/B of the reveal) */
+    private static final boolean CONE_BEHIND = Boolean.getBoolean("lab.voxel.stream.coneBehind");
     private static double coneLx, coneLz = 1, coneDoneX, coneDoneZ = 1;
     public static long coneRemesh;
 
@@ -2332,12 +2337,21 @@ public final class VoxelStream {
         return dist;
     }
 
+    /** more than 90 degrees off the look and past the 2 full-detail chunks (the cone leaves it alone) */
+    private static boolean behind(long k, int ccx, int ccz) {
+        int dx = SectionPos.x(k) - ccx, dz = SectionPos.z(k) - ccz;
+        return Math.max(Math.abs(dx), Math.abs(dz)) > 2 && dx * coneLx + dz * coneLz < 0;
+    }
+
     /** a section's level; slack 1 = the coarser bound one chunk nearer (the hysteresis) */
     static int lodFor(long k, int ccx, int ccz, int slack) {
         int dx = SectionPos.x(k) - ccx, dz = SectionPos.z(k) - ccz;
         int dd = Math.max(Math.abs(dx), Math.abs(dz)) - slack;
         if (LOD_CONE <= 0 || dd <= 2) return lodLevel(dd);
         double cos = (dx * coneLx + dz * coneLz) / Math.sqrt((double) dx * dx + (double) dz * dz);
+        // more than 90 degrees off the look (never on screen: half the horizontal view is under 70 degrees even at
+        // FOV 110): the plain distance's level - nothing re-meshed coarser behind, a turn finds it fine already
+        if (cos < 0 && !CONE_BEHIND) return lodLevel(dd);
         return lodLevel((int) Math.floor(dd * (1 + LOD_CONE * (1 - cos) / 2)));
     }
 
