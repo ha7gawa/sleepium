@@ -36,6 +36,9 @@ public abstract class FireCheckLoopMixin {
         Level level = sleep$fireLevel;
         sleep$fireBox = null;
         sleep$fireLevel = null;
+        // getBlockStatesIfLoaded did not reach us: another mod's wrapper of that call (MixinExtras @WrapOperation - Bons and
+        // Furious builds its own loop stream there) made the stream without calling through. Its stream answers.
+        if (box == null) return unused == null || unused.noneMatch(test);
         int x0 = Mth.floor(box.minX), x1 = Mth.floor(box.maxX), y0 = Mth.floor(box.minY), y1 = Mth.floor(box.maxY), z0 = Mth.floor(box.minZ), z1 = Mth.floor(box.maxZ);
         if (!level.hasChunksAt(x0, y0, z0, x1, y1, z1)) return true;   // LevelReader.getBlockStatesIfLoaded: an empty stream
         BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
