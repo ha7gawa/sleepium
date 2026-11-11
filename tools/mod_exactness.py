@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -52,10 +53,17 @@ for f in sorted(os.listdir(a.mods)):
                         ids.append(ns + ':' + name)
 
 
+# every loaded saved data written at each save (testmods SaveAllDataMixin): a mod's unwritable data shows at once; the
+# save check's blocks driven as the scene drives them (fed from every side from the start: Functional Storage's ender
+# drawer puts its null key into its saved data only once items went in)
+SAVE_ALL = ['-Dsleep.test.saveAllData=true', '-Dsleep.test.stimulate=8,8,44,50', '-Dsleep.test.stimulate.work=true']
+
+
 def check(ids):
     """the ids the server knows as blocks"""
     good = []
-    with Server([]) as srv:
+    srv = Server(SAVE_ALL).__enter__()   # save_breakers stops it (or its successors)
+    try:
         srv.wait_for(r'Done \(')
         for b in ids:
             try:
@@ -69,9 +77,89 @@ def check(ids):
             # a block whose placing or removing throws (a mod's own bug, e.g. PneumaticCraft's programmable controller) stays out
             if m.group(0) in ('Changed the block', 'Could not set the block') and r.group(0) != 'threw an exception':
                 good.append(b)
-        srv.cmd('stop')
-        srv.p.wait(timeout=180)
-    return good
+    except BaseException:
+        srv.__exit__(None, None, None)
+        raise
+    # the blocks found to break the save are kept per mod set (the same mods' jars: the same answer) - the four runs of a
+    # check (offoff, default, observed, control) would each bisect again, a fresh server per failed save (22 min, 11-11)
+    import hashlib
+    mods_key = hashlib.sha1('|'.join('%s:%d' % (f, os.path.getsize(os.path.join(a.mods, f))) for f in sorted(os.listdir(a.mods))
+                                    if f.endswith('.jar')).encode()).hexdigest()[:12]
+    cache = os.path.join(RUN, 'mod_exactness-save-breakers-%s.txt' % mods_key)
+    if os.path.exists(cache):
+        srv.__exit__(None, None, None)
+        bad = [l.strip() for l in open(cache, encoding='utf-8') if l.strip()]
+        for b in bad:
+            print('  left out %s: the world does not save once its block entity ticked (found before for these mods)' % b, flush=True)
+    else:
+        bad = save_breakers(good, srv)
+        with open(cache, 'w', encoding='utf-8') as f:
+            f.write(''.join(b + chr(10) for b in bad))
+    return [b for b in good if b not in bad]
+
+
+def save_breakers(ids, first):
+    """blocks whose block entity, once it ticked, leaves the world unsaveable - a mod's own bug the one-block check above
+    cannot see (Functional Storage 1.20.1's ender drawer placed without its item's frequency puts a null key into its
+    saved data on its first tick, and every save after it throws: the server dies at the next autosave). All placed at
+    once, 2 s of ticks, save-all; a failing group is split, each failed save costing a fresh server (the bad data stays
+    in the old one). first: the check's server, used until a save fails; stopped here."""
+    W, Y, STEP_ = 12, -50, 3
+    srv = [first]
+
+    def ok(group):
+        if srv[0] is None:
+            srv[0] = Server(SAVE_ALL).__enter__()
+            srv[0].wait_for(r'Done \(')
+        s = srv[0]
+        try:
+            span = ((len(group) + W - 1) // W) * STEP_
+            s.ask('forceload add 8 8 %d %d' % (8 + W * STEP_, 8 + span), r'force load|forceload|Unknown|Incorrect', 20)
+            for i, b in enumerate(group):
+                s.ask('setblock %d %d %d %s' % (8 + (i % W) * STEP_, Y, 8 + (i // W) * STEP_, b),
+                      r'Changed the block|Could not set the block|threw an exception|Unknown|Incorrect', 20)
+            t0 = int(s.ask('time query gametime', r'The time is (\d+)', 20).group(1))
+            while int(s.ask('time query gametime', r'The time is (\d+)', 20).group(1)) < t0 + 45:
+                time.sleep(0.5)
+            with s.lock:
+                at = len(s.lines)
+            # flush: 1.21.1 writes saved data asynchronously - its exception only shows in the log (and hangs the stop)
+            m = s.ask('save-all flush', r'Saved the game|Saving failed|unexpected error|threw an exception', 180)
+            time.sleep(1.0)
+            with s.lock:
+                thrown = [l for l in s.lines[at:] if re.search(r'Exception|/ERROR\]', l)]
+            if m.group(0) == 'Saved the game' and not thrown:
+                s.ask('fill 8 %d 8 %d %d %d minecraft:air' % (Y, 8 + W * STEP_, Y, 8 + span),
+                      r'Successfully filled|No blocks were filled|threw an exception|Unknown|Incorrect|too many', 20)
+                return True
+        except SystemExit as e:
+            print('  save check: %s' % e, flush=True)
+        s.__exit__(None, None, None)   # its own save on stop throws as well: logged, the process ends
+        srv[0] = None
+        return False
+
+    bad = []
+
+    def find(group, failed=False):
+        if not failed and ok(group):
+            return
+        if len(group) == 1:
+            print('  left out %s: the world does not save once its block entity ticked (the mod\'s own bug)' % group[0], flush=True)
+            bad.append(group[0])
+            return
+        h = len(group) // 2
+        if ok(group[:h]):
+            find(group[h:], True)
+        else:
+            find(group[:h], True)
+            find(group[h:])
+
+    find(ids)
+    if srv[0] is not None:
+        srv[0].cmd('stop')
+        srv[0].p.wait(timeout=180)
+        srv[0].__exit__(None, None, None)
+    return bad
 
 
 def scene(ids):

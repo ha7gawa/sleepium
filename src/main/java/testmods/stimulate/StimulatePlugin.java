@@ -6,9 +6,12 @@ import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
-/** Applies the stimulus test mixin only with -Dsleep.test.stimulate=x1,z1,x2,z2. */
+/** Applies the stimulus test mixin only with -Dsleep.test.stimulate=x1,z1,x2,z2, SaveAllDataMixin only with -Dsleep.test.saveAllData=true. */
 public final class StimulatePlugin implements IMixinConfigPlugin {
-    @Override public boolean shouldApplyMixin(String target, String mixin) { return !System.getProperty("sleep.test.stimulate", "").isEmpty(); }
+    @Override public boolean shouldApplyMixin(String target, String mixin) {
+        if (mixin.endsWith(".SaveAllDataMixin")) return Boolean.getBoolean("sleep.test.saveAllData");
+        return !System.getProperty("sleep.test.stimulate", "").isEmpty();
+    }
     @Override public void onLoad(String mixinPackage) {}
     @Override public String getRefMapperConfig() { return null; }
     @Override public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {}

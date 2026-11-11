@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import threading
 import time
+import uuid
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUN = os.path.join(ROOT, 'run')
@@ -40,7 +41,8 @@ KNOWN = re.compile(r"No key layers|lag_create|Unknown block type 'create:")
 
 class Server:
     def __init__(self, jvm_args, props=None, log=None, world=None):
-        self.jvm_args = jvm_args
+        self.tag = uuid.uuid4().hex[:12]   # marks this server's JVM (see _kill_jvm)
+        self.jvm_args = list(jvm_args) + ['-Dsleep.test.run=' + self.tag]
         self.world = world   # a saved world to start from (copied to run/world) instead of a fresh flat one
         self.props = dict(PROPS, **(props or {}))
         self.log = log
@@ -98,6 +100,18 @@ class Server:
         with self.lock:
             return [l for l in self.lines if re.search(r'Exception|/ERROR\]|/FATAL\]', l) and not KNOWN.search(l)]
 
+    def _kill_jvm(self):
+        """the server's JVM itself: gradle runs it under its daemon, so killing gradlew alone leaves it running (11-11:
+        three servers whose stop hung - a mod's saved data throwing - stayed behind, 1 GB each)"""
+        if os.name != 'nt':
+            return
+        ps = ("Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Where-Object { $_.CommandLine -like "
+              "'*sleep.test.run=%s*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" % self.tag)
+        try:
+            subprocess.run(['powershell', '-NoProfile', '-Command', ps], capture_output=True, timeout=60)
+        except Exception:
+            pass
+
     def __exit__(self, *a):
         try:
             if self.p.poll() is None:
@@ -105,5 +119,6 @@ class Server:
                 self.p.wait(120)
         except Exception:
             self.p.kill()
+            self._kill_jvm()
         if self.logf:
             self.logf.close()

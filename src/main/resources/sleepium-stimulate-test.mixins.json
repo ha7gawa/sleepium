@@ -5,7 +5,8 @@
   "plugin": "testmods.stimulate.StimulatePlugin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "StimulateMixin"
+    "StimulateMixin",
+    "SaveAllDataMixin"
   ],
   "injectors": {
     "defaultRequire": 1
