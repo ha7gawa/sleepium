@@ -57,7 +57,7 @@ public final class SleepEngine {
     static final String DEEP = System.getProperty("lab.sleep.deepVerify", "auto");
 
     /**
-     * -Dlab.sleep.ObservedModSleep (off by default; a setting): mods' block entities whose tick the analysis cannot
+     * -Dlab.sleep.ObservedModSleep (on by default since 1.2.0; a setting): mods' block entities whose tick the analysis cannot
      * follow (a ticker calling the block entity through a mod's interface, contents in an item handler object) sleep
      * on what is observed while they run, as before 1.1.8 - faster idle machines, not proven exact. Read when a class
      * is analysed (a change takes a restart).

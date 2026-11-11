@@ -137,6 +137,9 @@
 -Dlab.opt.SignalPathMixin=true
 -Dlab.opt.SignalProofStateMixin=true
 -Dlab.opt.SleepMixin=true
+# mods' machines whose tick the analysis cannot follow sleep on what Sleepium observes (on since 1.2.0, the changelog asks
+# to report problems; Titanium / Industrial Foregoing / Functional Storage exact with it, a control run catches a missed wake)
+-Dlab.sleep.ObservedModSleep=true
 -Dlab.opt.SpriteInterpolateMixin=true
 -Dlab.analysis.running=true
 -Dlab.opt.StructurePlaceLockMixin=true
