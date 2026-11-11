@@ -40,8 +40,8 @@ public final class SleepCommand {
 
     static void register(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> d = event.getDispatcher();
-        // /sleepium as on 1.21.1; /sleep kept for now (tools and players use it in production; removing it: the user's call)
-        for (String name : new String[] {"sleepium", "sleep"}) d.register(Commands.literal(name).requires(s -> s.hasPermission(2))
+        // /sleepium as on 1.21.1 (the user, 11-11: /sleep may clash with other mods' commands); dev runs keep /sleep for the tools
+        for (String name : SleepMod.DEV ? new String[] {"sleepium", "sleep"} : new String[] {"sleepium"}) d.register(Commands.literal(name).requires(s -> s.hasPermission(2))
                 .then(Commands.literal("start").executes(SleepCommand::start))
                 .then(Commands.literal("stop").executes(SleepCommand::stop))
                 .then(Commands.literal("run")

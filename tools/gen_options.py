@@ -20,10 +20,10 @@ OUT = os.path.join(ROOT, 'src', 'main', 'resources', 'assets', 'sleepium', 'opti
 # first matching rule wins: (group, name regex)
 GROUPS = [
     ('lighting', r'^(Light|ShaderLight|ClientLight)'),
-    ('chunks', r'^(Chunk(Multi|Section|Shader|Upload)|Section(Layer|Lists|ModCount)|BlockMesh|VertexSort|SamplerUnit|Uniform|ShaderSampler|Frame|RenderCache|RenderCall|OverworldFog|AmbientParticle|ItemFrame|Texture|ParallelReload|ClientBiome|ClientChunkCacheBiome)'),
-    ('entities_render', r'^(EntityBatch|ItemGpu|QuadGpu|Part|ModelPart|PoseStack|EntityCull|EntityLight|BlockEntityCull|Vec3FromRgb)'),
+    ('chunks', r'^(Chunk(Multi|Section|Shader|Upload)|Section(Layer|Lists|ModCount)|BlockMesh|VertexSort|SamplerUnit|Uniform|ShaderSampler|Frame|RenderCache|RenderCall|OverworldFog|AmbientParticle|ItemFrame|Texture|ParallelReload|ClientBiome|ClientChunkCacheBiome|GpuAnim)'),
+    ('entities_render', r'^(EntityBatch|ItemGpu|QuadGpu|Part|ParallelParticles|ModelPart|PoseStack|EntityCull|EntityLight|BlockEntityCull|Vec3FromRgb)'),
     ('animation', r'^(Geo|Molang|Keyframe|AnimStream)'),
-    ('threads', r'^(MainReactor|Reactor|ParallelEntities|LabPools|PersistentPools|MailboxBatch|ForgeBus|RenderPriority)'),
+    ('threads', r'^(MainReactor|Reactor|ParallelEntities|ParallelEntityTicks|LabPools|PersistentPools|MailboxBatch|ForgeBus|RenderPriority)'),
     ('network', r'^Net'),
     ('worldgen', r'^(Worldgen|GenScout|CubicSampler|ParallelWorldgen|StructurePlace|OffThreadEntity)'),
     ('saving', r'^(AsyncChunkSave|ChunkIo|ChunkCache|UnloadRecheck|AllocTrim|PoiColumn|SectionStorage)'),
@@ -52,6 +52,13 @@ DESCRIPTIONS = {
     'WorldgenFeatureAlloc': 'Feature placement and joints without per-call allocation.',
     'WorldgenShare': 'World generation shares work between neighbouring chunks: biomes, coordinates, region noise and surface slices computed once.',
     'WorldgenSkip': 'World generation skips work that cannot change the result: aquifer cells, fills and the beardifier where nothing is near.',
+    'ParticleGpuMixin': 'Particles drawn from compact records on the GPU instead of their vertices, with their light kept per block. Particle-heavy scenes (hundreds of working machines) about 2x fps; on an Intel N100 1.5 -> 53 fps.',
+    'ParallelParticlesMixin': "Particles ticked on Sleepium's worker threads when their tick proves to touch only the particle itself; the rest tick as before.",
+    'ParticleShapeMemoMixin': "Particles' block-shape questions answered once per tick and block instead of once per particle (with parallel particles).",
+    'ParticleLightMemoMixin': "A particle's light read once per block position per frame (with the particle records).",
+    'FireCheckLoopMixin': "Every entity's move checks the blocks around it for fire and lava without building a stream of positions: the same blocks, the same answer.",
+    'FluidScanDryMixin': 'Entities skip the per-block fluid lookup when every chunk section around them holds no fluid at all: the same answer, no lookups.',
+    'GpuAnim': "Animated textures (water, lava, fire, mods' animated blocks) change frames by a GPU copy instead of an upload from the CPU: less work on the render thread, the same picture.",
 }
 
 # GeoMixinPlugin's gates (a different shape from OptMixinPlugin's)
