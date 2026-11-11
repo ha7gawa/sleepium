@@ -181,7 +181,14 @@ lab.opt.UnloadRecheckMixin	saving	true	A chunk being unloaded that is not ready 
 lab.opt.LightSnapshotMixin	lighting	true	LightSnapshot: a light storage map remembers the keys it wrote since its last full copy (its only writes).	
 lab.opt.AllocTrim	saving	true	AllocTrim (lab.opt.AllocTrim): temporary arrays vanilla allocates per call in hot paths, reused per thread instead.	
 lab.opt.ChunkIo	saving	true	Chunk storage without blocking (lab.opt.ChunkIo, every IOWorker: chunks, entities, POI; notes/38).	
+lab.opt.FireCheckLoopMixin	ticks	true	Every entity's move checks the blocks around it for fire and lava without building a stream of positions: the same blocks, the same answer.	
+lab.opt.FluidScanDryMixin	ticks	true	Entities skip the per-block fluid lookup when every chunk section around them holds no fluid at all: the same answer, no lookups.	
+lab.opt.GpuAnim	chunks	true	Animated textures (water, lava, fire, mods' animated blocks) change frames by a GPU copy instead of an upload from the CPU: less work on the render thread, the same picture.	
 lab.opt.ParallelWorldgenMixin	worldgen	true	exp/parallel-worldgen: hand SURFACE/CARVERS/FEATURES to ParallelGen's pool instead of running them inside the single worldgen mailbox actor.	
 lab.opt.OffThreadEntity	worldgen	true	Entities that a mod adds to the world from another thread (a mob spawn handler during world generation) go where they belong: into the chunk being generated, or onto the server thread. Mods that add entities the normal way are not affected.	
+lab.opt.ParallelParticlesMixin	entities_render	true	Particles ticked on Sleepium's worker threads when their tick proves to touch only the particle itself; the rest tick as before.	
+lab.opt.ParticleGpuMixin	entities_render	true	Particles drawn from compact records on the GPU instead of their vertices, with their light kept per block. Particle-heavy scenes (hundreds of working machines) about 2x fps; on an Intel N100 1.5 -> 53 fps.	
+lab.opt.ParticleLightMemoMixin	entities_render	true	A particle's light read once per block position per frame (with the particle records).	lab.opt.ParticleGpuMixin
+lab.opt.ParticleShapeMemoMixin	entities_render	true	Particles' block-shape questions answered once per tick and block instead of once per particle (with parallel particles).	
 lab.sleep.ObservedModSleep	ticks	false	Machines of mods whose tick the analysis cannot follow (Industrial Foregoing, Functional Storage, PneumaticCraft...) sleep on what Sleepium observes, as before 1.1.8: idle machines cost less, but their sleep is not proven exact.	
 lab.chunkmd.occlusion	chunks	false	GPU occlusion culling of chunk sections (two phases, exact). Pays off where most of the loaded terrain is hidden.	

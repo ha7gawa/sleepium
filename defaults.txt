@@ -191,5 +191,12 @@
 -Dlab.opt.LightSnapshotMixin=true
 -Dlab.opt.AllocTrim=true
 -Dlab.opt.ChunkIo=true
+-Dlab.opt.FireCheckLoopMixin=true
+-Dlab.opt.FluidScanDryMixin=true
+-Dlab.opt.GpuAnim=true
 -Dlab.opt.ParallelWorldgenMixin=true
 -Dlab.opt.OffThreadEntity=true
+-Dlab.opt.ParallelParticlesMixin=true
+-Dlab.opt.ParticleGpuMixin=true
+-Dlab.opt.ParticleLightMemoMixin=true
+-Dlab.opt.ParticleShapeMemoMixin=true
