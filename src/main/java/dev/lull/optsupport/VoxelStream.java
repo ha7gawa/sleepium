@@ -463,7 +463,19 @@ public final class VoxelStream {
                 for (int q = VARIANTS.get(v)[0]; q < VARIANTS.get(v)[0] + VARIANTS.get(v)[1]; q++)
                     if ((int) QUADS.get(q)[23] == 3) flags |= 16;
         if (!st.getFluidState().isEmpty()) flags |= familyOf(st.getFluidState()) > 0 ? 64 : 32;   // the GPU's fluid (tinted per cell) or vanilla's
-        if (dataModel) flags |= VANILLA_MODEL;
+        if (dataModel) {
+            flags |= VANILLA_MODEL;
+            // the far LOD's cells take a block only as a full cube with quads on every side, read without the world's model
+            // data: a block that is not one that way would vanish far away - its sections stay at full detail (KEEP_FULL)
+            boolean solid = lodSolid(st, Minecraft.getInstance().level, new BlockPos.MutableBlockPos(0, 64, 0));
+            if (!solid) flags |= LOD_LOSSY;
+            if (MODS_WHY) {
+                int quads = 0;
+                for (int e = eStart; e < ENTRIES.size(); e++)
+                    for (int v = ENTRIES.get(e)[0]; v < ENTRIES.get(e)[0] + ENTRIES.get(e)[1]; v++) quads += VARIANTS.get(v)[1];
+                LOG.info("[sleep/voxel] model reads the world: {} - {} quads without its data, LOD-solid {}", st, quads, solid);
+            }
+        }
         return new int[] {eStart, ENTRIES.size() - eStart, offIdx | seedOff << 16, flags};
     }
 
@@ -472,6 +484,15 @@ public final class VoxelStream {
      * Blocks...) - read here with ModelData.EMPTY it would lose that look, so a section holding it is meshed by vanilla.
      */
     static final int VANILLA_MODEL = 128;
+    /** Library flag (with VANILLA_MODEL): the far LOD cannot draw it (not LOD-solid without the world's model data) */
+    static final int LOD_LOSSY = 1024;
+    /** -Dlab.voxel.stream.modsWhy: each state whose model reads the world logged with its quads and LOD-solidity */
+    private static final boolean MODS_WHY = Boolean.getBoolean("lab.voxel.stream.modsWhy");
+    /**
+     * Sections with a LOD_LOSSY state: full detail at any distance, drawn by vanilla (with the world's model data) as near
+     * by - the GPU's own full-detail mesh of them skips those blocks and matches vanilla's for the rest.
+     */
+    private static final it.unimi.dsi.fastutil.longs.LongOpenHashSet KEEP_FULL = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
     /**
      * Sections whose blocks a mod draws in a way the GPU cannot (VANILLA_MODEL states, block entities' model data, a
      * mod's own section geometry): vanilla's compile meshes them and its opaque layers are drawn for them
@@ -489,11 +510,20 @@ public final class VoxelStream {
         long key = SectionPos.asLong(origin.getX() >> 4, origin.getY() >> 4, origin.getZ() >> 4);
         if (!VANILLA_OWNED.contains(key)) return false;
         Rec r = RECS.get(key);
-        return r == null || r.lod == 0;
+        return r == null || r.lod == 0 || KEEP_FULL.contains(key);
     }
 
     private static void owned(long key, boolean owned) {
         if (owned ? VANILLA_OWNED.add(key) : VANILLA_OWNED.remove(key)) ChunkMultiDraw.invalidateLayerCaches();
+        if (!owned) keepFull(key, false);
+    }
+
+    /** a section into / out of KEEP_FULL: one meshed as far LOD is meshed again at full detail (and back) */
+    private static void keepFull(long key, boolean keep) {
+        if (!(keep ? KEEP_FULL.add(key) : KEEP_FULL.remove(key))) return;
+        Rec r = RECS.get(key);
+        if (r != null && (keep ? r.lod != 0 : true)) DIRTY.add(key);
+        ChunkMultiDraw.invalidateLayerCaches();
     }
     /** -Dlab.voxel.stream.modsFallback=false: mods' sections drawn by the GPU anyway (to see what the fallback fixes) */
     static final boolean MODS_FALLBACK = !"false".equals(System.getProperty("lab.voxel.stream.modsFallback"));
@@ -1263,6 +1293,7 @@ public final class VoxelStream {
             if (sec != null && !sec.hasOnlyAir() && sec.maybeHas(st -> (LIB.get(localOf(st))[3] & VANILLA_MODEL) != 0)) {
                 leftForMods++;
                 owned(okey, true);
+                keepFull(okey, sec.maybeHas(st -> (LIB.get(localOf(st))[3] & LOD_LOSSY) != 0));
                 return false;
             }
             // the contents now (not as last uploaded): fluids and translucent quads still need vanilla's mesh (its
@@ -2004,6 +2035,7 @@ public final class VoxelStream {
         VoxelLod.cutAll = VoxelLod.cutting = false;
         int freed = GlTrack.freeAll(VoxelStream.class, VoxelCompute.class, VoxelLod.class);
         VANILLA_OWNED.clear();
+        KEEP_FULL.clear();
         SEEN_DARK.clear();
         RECS.clear();
         DIRTY.clear();
@@ -2391,6 +2423,7 @@ public final class VoxelStream {
 
     /** a section's level; slack 1 = the coarser bound one chunk nearer (the hysteresis) */
     static int lodFor(long k, int ccx, int ccz, int slack) {
+        if (!KEEP_FULL.isEmpty() && KEEP_FULL.contains(k)) return 0;   // a mod's blocks the far LOD cannot draw
         int dx = SectionPos.x(k) - ccx, dz = SectionPos.z(k) - ccz;
         int dd = Math.max(Math.abs(dx), Math.abs(dz)) - slack;
         if (LOD_CONE <= 0 || dd <= 2) return lodLevel(dd);
@@ -4011,6 +4044,7 @@ public final class VoxelStream {
         uploadLibrary();
         VoxelLod.cutAll = VoxelLod.cutting = true;
         VANILLA_OWNED.clear();
+        KEEP_FULL.clear();
         ChunkMultiDraw.invalidateLayerCaches();
         LOG.info("[sleep/voxel] stream: grid {}x{}x{} ({} chunks a side), face buffer {} faces", nx, ny, nx, chunks, CAPACITY);
         dirtyAllVanilla();
