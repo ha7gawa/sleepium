@@ -55,6 +55,7 @@ DESCRIPTIONS = {
     'FireCheckLoopMixin': "Every entity's move checks the blocks around it for fire and lava without building a stream of positions: the same blocks, the same answer.",
     'FluidScanDryMixin': 'Entities skip the per-block fluid lookup when every chunk section around them holds no fluid at all: the same answer, no lookups.',
     'ParallelEntityTicksMixin': "Dropped items and other non-living entities tick on Sleepium's worker threads in long runs, each exactly as vanilla ticks it; their moves in the entity storage are made in order after the run. A pile of 2 500 items: client tick 13.1 -> 11.5 ms; on an Intel N100 42.6 -> 60.9 fps.",
+    'ObservedModSleep': "Machines of mods whose tick the analysis cannot follow (Industrial Foregoing, Functional Storage, PneumaticCraft...) sleep while Sleepium sees them idle and wake on any change it observes: idle machines cost less. Checked exact on the mods we test; if a machine of some mod stops or misbehaves, turn this off and please tell us which one.",
     'GpuAnim': "Animated textures (water, lava, fire, mods' animated blocks) change frames by a GPU copy instead of an upload from the CPU: less work on the render thread, the same picture.",
 }
 
@@ -65,7 +66,6 @@ GEO_PART_OF = {'GeoModelWorkerMixin': ['GeoParallelMixin', 'ParallelEntitiesMixi
 
 # off by default, shown in their groups (key, group, description)
 EXPERIMENTAL = [
-    ('lab.sleep.ObservedModSleep', 'ticks', 'Machines of mods whose tick the analysis cannot follow (Industrial Foregoing, Functional Storage, PneumaticCraft...) sleep on what Sleepium observes, as before 1.1.8: idle machines cost less, but their sleep is not proven exact.'),
     ('lab.voxel.stream', 'chunks', 'GPU terrain: chunk sections meshed on the graphics card from the blocks as the server sends them, far terrain as coarser cells (level of detail beyond 6 chunks, coarser again beyond 10). Less CPU per frame and fewer triangles: on an Intel N100 a flight 88 -> 166 fps. Near terrain looks the same; far terrain is simplified. Blocks whose look mods compute from the world are drawn the vanilla way. Stands aside (vanilla terrain) when another mod replaces the chunk renderer: Sodium, Embeddium and the shader mods on them.'),
     ('lab.voxel.stream.lodNear', 'chunks', 'GPU terrain: level of detail closer (from 4 chunks, coarser from 8) - for weak graphics; the middle distance looks coarser.', 'lab.voxel.stream'),
     ('lab.voxel.stream.cone', 'chunks', 'GPU terrain: terrain toward the screen edges and behind goes coarse sooner. A few more fps; after a fast turn detail fills in over a moment.', 'lab.voxel.stream'),
