@@ -520,13 +520,23 @@ public final class PartBatch {
      * From VertexBuffer._drawWithShader right before the batch's own draw (program and state set): the type's item
      * records, then the batch's vertex array bound again.
      */
-    public static void beforeDraw(ShaderInstance shader, com.mojang.blaze3d.vertex.VertexBuffer vb) {
+    public static void beforeDraw(ShaderInstance shader, com.mojang.blaze3d.vertex.VertexBuffer vb, org.joml.Matrix4f modelView, org.joml.Matrix4f projection) {
         RenderType t = current;
         if (t == null || ITEM_QUEUES.isEmpty()) return;
         Queue q = ITEM_QUEUES.get(t);
         if (q == null || q.n == 0) return;
         itemBlock = t.format() == DefaultVertexFormat.BLOCK;
-        drawQueue(shader, q, 7);
+        ShaderInstance use = shader;
+        if (itemBlock && !PATCHED.contains(shader.getName())) {   // the terrain's program: the records go through its copy
+            use = PartsPrograms.bind(shader, modelView, projection);
+            if (use == null) {
+                fallbacks += q.n;
+                q.n = 0;
+                return;
+            }
+        }
+        drawQueue(use, q, 7);
+        if (use != shader) PartsPrograms.unbind(use, shader);
         q.n = 0;   // drawn (the records were copied to the driver): a later draw of the type this frame does not repeat them
         vb.bind();
     }
@@ -1295,6 +1305,10 @@ public final class PartBatch {
             ok = false;
             ShaderInstance s = EntityBatch.shaderOf(t);
             if (s != null && PATCHED.contains(s.getName()) && GL20C.glGetUniformLocation(s.getId(), "ProbePartMode") >= 0) ok = true;
+            else if (s != null && t.format() == DefaultVertexFormat.BLOCK) {   // a block program (the terrain's): QuadGpu's records bind its copy
+                ShaderInstance c = PartsPrograms.copyOf(s);
+                ok = c != null && PATCHED.contains(c.getName()) && GL20C.glGetUniformLocation(c.getId(), "ProbePartMode") >= 0;
+            }
             TYPE_OK.put(t, ok);
         }
         return ok;
@@ -1599,7 +1613,7 @@ public final class PartBatch {
 
     public static String report() {
         SbbRecorder rcd = sbbRecorder;
-        return (rcd != null ? rcd.report() + "; " : "") + ItemGpu.report() + "; " + QuadGpu.report() + "; " + String.format(java.util.Locale.ROOT, "part batch: SuperByteBuffer calls %d, parts %d (not taken %d %s %s %s, UV shift %d, level light %d); shaders patched %s, parts %d (EMF %d), GeckoLib bones %d (from workers %d, jobs refused at merge %d), multi-draws %d, geometries %d (%.1f MB), lost %d; resident draws %d, uploads %d (arena %.1f MB); persistent records %d, draws %d, uploads %d; level-lit parts %d (refused %d); %s",
+        return (rcd != null ? rcd.report() + "; " : "") + ItemGpu.report() + "; " + QuadGpu.report() + " (" + PartsPrograms.report() + "); " + String.format(java.util.Locale.ROOT, "part batch: SuperByteBuffer calls %d, parts %d (not taken %d %s %s %s, UV shift %d, level light %d); shaders patched %s, parts %d (EMF %d), GeckoLib bones %d (from workers %d, jobs refused at merge %d), multi-draws %d, geometries %d (%.1f MB), lost %d; resident draws %d, uploads %d (arena %.1f MB); persistent records %d, draws %d, uploads %d; level-lit parts %d (refused %d); %s",
                 sbbCalls, sbbParts, sbbRefused, java.util.Arrays.toString(SBB_WHY), SBB_CONSUMERS, SBB_TYPES, sbbShift, sbbLevelLight, PATCHED, parts, emfParts, geoParts, jobMerged, jobRefused, draws, geometries, (double) used * STRIDE / 1048576.0, fallbacks, residentDraws, residentUploads,
                 (double) RES_ARENA.capacity * RES_ARENA.stride / 1048576.0, pUsed - pFreeN, persistDraws, persistUploads, litParts, litRefused,
                 LightBoxes.report()) + (RESIDENT_WHY ? System.lineSeparator() + residentWhyReport() : "");
