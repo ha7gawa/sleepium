@@ -197,6 +197,10 @@
 -Dlab.opt.FireCheckLoopMixin=true
 -Dlab.opt.FluidScanDryMixin=true
 -Dlab.opt.GpuAnim=true
+# the F3 screen's lines gathered 10 times a second instead of every frame (sleep.f3.refreshMs)
+-Dlab.opt.DebugScreenCacheMixin=true
+# the F3 screen's text vertices kept between refreshes (no glyph layout every frame)
+-Dlab.opt.DebugScreenTextCacheMixin=true
 -Dlab.opt.ParallelWorldgenMixin=true
 -Dlab.opt.OffThreadEntity=true
 -Dlab.opt.ParallelEntityTicksMixin=true

@@ -196,3 +196,5 @@ lab.voxel.stream	chunks	false	GPU terrain: chunk sections meshed on the graphics
 lab.voxel.stream.lodNear	chunks	false	GPU terrain: level of detail closer (from 4 chunks, coarser from 8) - for weak graphics; the middle distance looks coarser.	lab.voxel.stream
 lab.voxel.stream.cone	chunks	false	GPU terrain: terrain toward the screen edges and behind goes coarse sooner. A few more fps; after a fast turn detail fills in over a moment.	lab.voxel.stream
 lab.chunkmd.occlusion	chunks	false	GPU occlusion culling of chunk sections (two phases, exact). Pays off where most of the loaded terrain is hidden.	
+lab.opt.DebugScreenCacheMixin	chunks	true	The F3 debug screen's lines are gathered 10 times a second instead of every frame (its FPS line changes once a second anyway): opening F3 no longer costs a large part of your frame rate. sleep.f3.refreshMs sets the interval.	
+lab.opt.DebugScreenTextCacheMixin	chunks	true	The F3 debug screen's text is laid out 10 times a second and its vertices reused in between, instead of laying out every line each frame: F3 open costs far less. With an F3 chart open it draws as usual.	

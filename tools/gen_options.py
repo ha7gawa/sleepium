@@ -16,7 +16,7 @@ OUT = os.path.join(ROOT, 'src', 'main', 'resources', 'assets', 'sleepium', 'opti
 # first matching rule wins: (group, name regex)
 GROUPS = [
     ('lighting', r'^(Light|ShaderLight|ClientLight)'),
-    ('chunks', r'^(Chunk(Multi|Section|Shader|Upload)|Section(Layer|Lists|ModCount)|BlockMesh|VertexSort|SamplerUnit|Uniform|ShaderSampler|Frame|RenderCache|RenderCall|OverworldFog|AmbientParticle|ItemFrame|Texture|ParallelReload|ClientBiome|ClientChunkCacheBiome|GpuAnim)'),
+    ('chunks', r'^(Chunk(Multi|Section|Shader|Upload)|Section(Layer|Lists|ModCount)|BlockMesh|VertexSort|SamplerUnit|Uniform|ShaderSampler|Frame|RenderCache|RenderCall|OverworldFog|AmbientParticle|ItemFrame|Texture|ParallelReload|ClientBiome|ClientChunkCacheBiome|GpuAnim|DebugScreen)'),
     ('entities_render', r'^(EntityBatch|ItemGpu|QuadGpu|Part|ParallelParticles|ModelPart|PoseStack|EntityCull|EntityLight|BlockEntityCull|Vec3FromRgb)'),
     ('animation', r'^(Geo|Molang|Keyframe|AnimStream)'),
     ('threads', r'^(MainReactor|Reactor|ParallelEntities|ParallelEntityTicks|LabPools|PersistentPools|MailboxBatch|NeoForgeBus|RenderPriority)'),
@@ -57,6 +57,8 @@ DESCRIPTIONS = {
     'ParallelEntityTicksMixin': "Dropped items and other non-living entities tick on Sleepium's worker threads in long runs, each exactly as vanilla ticks it; their moves in the entity storage are made in order after the run. A pile of 2 500 items: client tick 13.1 -> 11.5 ms; on an Intel N100 42.6 -> 60.9 fps.",
     'ObservedModSleep': "Machines of mods whose tick the analysis cannot follow (Industrial Foregoing, Functional Storage, PneumaticCraft...) sleep while Sleepium sees them idle and wake on any change it observes: idle machines cost less. Checked exact on the mods we test; if a machine of some mod stops or misbehaves, turn this off and please tell us which one.",
     'GpuAnim': "Animated textures (water, lava, fire, mods' animated blocks) change frames by a GPU copy instead of an upload from the CPU: less work on the render thread, the same picture.",
+    'DebugScreenCacheMixin': "The F3 debug screen's lines are gathered 10 times a second instead of every frame (its FPS line changes once a second anyway): opening F3 no longer costs a large part of your frame rate. sleep.f3.refreshMs sets the interval.",
+    'DebugScreenTextCacheMixin': "The F3 debug screen's text is laid out 10 times a second and its vertices reused in between, instead of laying out every line each frame: F3 open costs far less. With an F3 chart open it draws as usual.",
 }
 
 # GeoMixinPlugin's gates (a different shape from OptMixinPlugin's)

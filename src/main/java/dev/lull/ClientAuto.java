@@ -225,6 +225,9 @@ public final class ClientAuto {
             CMDS.add(new Object[] {ticks + Integer.parseInt(c.substring(0, i).trim()) * 20, cmd});
         }
         if (Boolean.getBoolean("sleep.clientAuto.thirdPerson")) Minecraft.getInstance().options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK);
+        // -Dsleep.clientAuto.debugScreen=true: the F3 screen open through the measured window (what it costs)
+        if (Boolean.getBoolean("sleep.clientAuto.debugScreen") && !Minecraft.getInstance().getDebugOverlay().showDebugScreen())
+            Minecraft.getInstance().getDebugOverlay().toggleOverlay();   // (1.21: the overlay keeps its own state)
         if (!SHOTS.isEmpty()) {
             shotsBase = ticks;
             Minecraft.getInstance().options.hideGui = !Boolean.getBoolean("sleep.clientAuto.shotGui");
@@ -522,7 +525,7 @@ public final class ClientAuto {
                     savedFps = mc.options.framerateLimit().get();
                     savedClouds = mc.options.cloudStatus().get();
                     savedDistance = mc.options.renderDistance().get();
-                    mc.options.renderDistance().set(12);
+                    mc.options.renderDistance().set(Integer.getInteger("sleep.clientAuto.distance", 12));   // (a phone: 6)
                     mc.options.pauseOnLostFocus = false;
                     if (FRAMEHASH) {   // nothing that moves by itself
                         mc.options.cloudStatus().set(net.minecraft.client.CloudStatus.OFF);

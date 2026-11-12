@@ -155,6 +155,8 @@
     "LightTimingMixin"
   ],
   "client": [
+    "DebugScreenCacheMixin",
+    "DebugScreenTextCacheMixin",
     "VoxelStreamCompileMixin",
     "VoxelStreamDirtyMixin",
     "VoxelStreamLightMixin",
