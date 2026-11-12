@@ -4,6 +4,63 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.2.1 - 2026-11-13
+
+Android and older graphics. 1.2.0 crashed at start on any graphics driver without OpenGL 4.3 - phones and tablets
+running Minecraft through a launcher such as MojoLauncher, older or translated drivers. Sleepium now asks the driver
+what it really supports and picks a path that works there, and most of its graphics work has a path for OpenGL 3.3.
+Measured on a phone (Snapdragon 855+, Android 12, MojoLauncher with the LTW renderer, Forge 1.20.1, view distance 6),
+an Intel N100 laptop and a desktop (Ryzen 7 5800X + RTX 4070 SUPER):
+
+| | vanilla | Sleepium 1.2.0 | Sleepium 1.2.1 |
+|---|---:|---:|---:|
+| phone, 355 armoured mobs with swords, item frames, chests | 8 | crashes | 42-58 |
+| phone, the same, the slowest frames (p99) | | | 33-36 ms |
+| phone, plain terrain view | 147 (p99 18 ms) | crashes | 222 (p99 10 ms) |
+| N100, plain terrain view | 88 | 117 | 118 |
+| N100, armour stands, item frames, chests, signs, skulls | 36-42 | 133 | 132 |
+| N100, a pile of dropped items | 49-56 | 183 | 183 |
+| N100, a horde of mobs | 112-119 | 182 | 183 |
+| desktop 1.21.1, F3 open | | 986 | ~1 300 |
+
+Desktops and laptops keep 1.2.0's speed (the N100 rows) and draw the same picture: frames from 1.2.0 and 1.2.1 compared
+bit for bit on both Minecraft versions.
+
+- **Android: Sleepium runs, and runs fast.** Tested with MojoLauncher's LTW renderer (OpenGL 3.3 over the phone's
+  OpenGL ES). Every feature that needs more than the driver has now checks first - by compiling a test shader, not by
+  trusting what the driver claims (LTW reports storage buffers in vertex shaders that it cannot compile) - and uses an
+  OpenGL 3.3 path or the game's own. On the phone: the entity scene above 8 -> 42-58 fps (the phone's temperature
+  decides where in that range), the client tick 19.5 -> 6-7 ms. GL4ES (OpenGL 2.1) starts but is slow even without
+  Sleepium; Zink and Freedreno are not tested yet.
+- **Terrain drawn per region where the driver has no per-draw data in shaders** (phones): a region's sections share one
+  buffer and one draw call. Phone terrain: 2.74 -> 0.58 ms a frame. The same picture to a fraction of a pixel at
+  geometry edges.
+- **Model parts, held and framed items and particles drawn from graphics memory on OpenGL 3.3** too, through texture
+  buffers and instancing instead of storage buffers.
+- **Animated textures that blend between frames** (crimson and warped stems, prismarine, sculk, campfires, furnaces,
+  command blocks...) can be blended on the graphics card instead of on the processor and uploaded. Same pixels, checked
+  against the processor's blend; before it touches the texture atlas, the first blend is drawn into a scratch texture
+  and checked. On the phone: the slowest client ticks 31 -> 10 ms, the slowest frames 62 -> 36 ms.
+- **Choices by measurement.** Some of the above help one machine and cost another, so Sleepium measures on the running
+  game and keeps what is faster there: the render cache or the helper threads for entities (a phone's slower cores:
+  the threads, 23 -> 39 fps; desktops: the cache), model parts from graphics memory for entities drawn on the helper
+  threads (desktop 1.21.1, cache off: 558 -> 759 fps; Intel's integrated graphics: off - its driver handles the many
+  small draws slowly), blending animated textures on the graphics card (the phone: yes; desktops and Intel: no). Each
+  takes a few seconds of measuring when a world opens or a crowd appears, and again after 5 minutes or when the number
+  of entities halves or doubles; the log says what was chosen and why.
+- **F3 no longer halves the frame rate.** Its lines are gathered 10 times a second instead of every frame, and the text
+  is laid out once per refresh (1.21.1: 986 -> ~1 300 fps with F3 open, 1 890 closed; 1.20.1: 648 -> 760-793). Sleepium's
+  HUD shows the F3 entity and chunk counts, for testers who open F3 only for them.
+- **Crowds in armour and with items in hand** (helper threads): item quads written without a per-quad memory-stack
+  lookup, and on 1.20.1 armour texture paths kept instead of formatted for every piece of every mob every frame
+  (desktop, many armoured mobs on the helper threads: +5-15 %). Same picture, pixel for pixel.
+- **Fixed:** the render cache's records could be read by the helper threads while being changed (a rare race); a shader
+  that failed to compile and was retried lost its imports; JOML's direct matrix writes are not used (they fail on
+  Android's Java).
+- For testing: thread placement on Linux / Android (`lab.prender.pin`, `lab.prender.cpuStats`), off by default (it
+  made no difference on the phone); each measured choice has a switch to fix it (`lab.rcache.tune`,
+  `lab.partbatch.partsTune`, `lab.gpuAnim.interp=gpu|cpu`).
+
 ## 1.2.0 - 2026-11-12
 
 Final numbers on the release build, against the same game without Sleepium's optimisations: an Intel N100 laptop

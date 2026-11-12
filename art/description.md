@@ -38,6 +38,28 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.2.1: Android
+
+Sleepium now runs on phones and tablets through MojoLauncher (and on any driver without OpenGL 4.3 - 1.2.0 crashed
+there at start). It checks what the graphics driver really supports and draws through OpenGL 3.3 where that is all
+there is.
+
+| A phone (Snapdragon 855+, MojoLauncher LTW, Forge 1.20.1, view distance 6) | vanilla | Sleepium 1.2.1 | |
+|---|---:|---:|---:|
+| 355 armoured mobs with swords, item frames, chests, fps | 8 | 42-58 | ×5-7 |
+| plain terrain view, fps | 147 | 222 | +51 % |
+| the slowest frames in the terrain view (p99) | 18 ms | 10 ms | |
+
+- **Terrain per region, model parts, items and particles from graphics memory** - each with an OpenGL 3.3 path.
+- **Animated textures blended on the graphics card** where that is faster (on the phone: the slowest client ticks
+  31 -> 10 ms).
+- **Choices by measurement:** the render cache or the helper threads for entities, model parts from graphics memory on
+  the helper threads, blending on the graphics card or the processor - Sleepium measures each on the running game and
+  keeps the faster one (a few seconds of measuring when a world opens or a crowd appears).
+- **F3 no longer halves the frame rate** (1.21.1: 986 -> ~1 300 fps with F3 open).
+- Desktops and laptops: as fast as 1.2.0 (Intel N100: terrain 118, entities 132, items 183, a horde 183 fps), the same
+  picture bit for bit.
+
 ## New in 1.2.0
 
 | 1.2.0 against vanilla | vanilla | Sleepium 1.2.0 | |
