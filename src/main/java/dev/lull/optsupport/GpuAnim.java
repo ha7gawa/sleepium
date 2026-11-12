@@ -477,6 +477,11 @@ public final class GpuAnim {
     private static double cpuPer;
     public static String interpChoice = "not decided";
 
+    /** the blend's windows are running: the other measured choices wait (each would measure the other's switching) */
+    public static boolean measuring() {
+        return tunePhase >= 1 && tunePhase <= 3;
+    }
+
     /**
      * The choice by whole atlas ticks (tickDone: the blends, the copies, the uploads and their waits together), not by
      * the blend call's own time: 11-12 on the N100 (Intel) the blends measured 653 against 791 us a frame and the GPU
