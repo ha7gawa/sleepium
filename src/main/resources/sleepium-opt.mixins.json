@@ -159,6 +159,8 @@
     "EntityFluidLoopMixin"
   ],
   "client": [
+    "DebugScreenCacheMixin",
+    "ForgeHudTextBatchMixin",
     "VoxelStreamCompileMixin",
     "VoxelStreamDirtyMixin",
     "VoxelStreamLightMixin",

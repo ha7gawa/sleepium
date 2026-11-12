@@ -101,6 +101,30 @@ public final class SleepStats {
         var font = Minecraft.getInstance().font;
         int y = dev.lull.shaders.ShaderPipeline.preparing() != null ? 16 : 4;
         g.drawString(font, a, 4, y, 0xFFDDE4FF, true);
-        if (b != null) g.drawString(font, b, 4, y + 10, 0xFFB8C2E8, true);
+        if (b != null) {
+            y += 10;
+            g.drawString(font, b, 4, y, 0xFFB8C2E8, true);
+        }
+        String[] w = world();
+        for (String s : w) {
+            y += 10;
+            g.drawString(font, s, 4, y, 0xFFB8C2E8, true);
+        }
+    }
+
+    private static String[] worldLines = new String[0];
+    private static long worldAt;
+
+    /**
+     * The F3 screen's entity and chunk lines (vanilla's own counters: entities drawn / in the level, culled, ...;
+     * sections compiled / in view), for testers who open F3 only for them - gathered 4 times a second, not every frame
+     */
+    private static String[] world() {
+        long now = System.nanoTime();
+        if (now - worldAt < 250_000_000L) return worldLines;
+        worldAt = now;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return worldLines = new String[0];
+        return worldLines = new String[] {mc.levelRenderer.getEntityStatistics(), mc.levelRenderer.getChunkStatistics()};
     }
 }

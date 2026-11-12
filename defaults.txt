@@ -200,6 +200,10 @@
 -Dlab.opt.FireCheckLoopMixin=true
 -Dlab.opt.FluidScanDryMixin=true
 -Dlab.opt.GpuAnim=true
+# the F3 screen's lines gathered 10 times a second instead of every frame (sleep.f3.refreshMs)
+-Dlab.opt.DebugScreenCacheMixin=true
+# Forge's F3 text drawn in one batch (as vanilla's) instead of a draw per line
+-Dlab.opt.ForgeHudTextBatchMixin=true
 -Dlab.opt.OffThreadEntity=true
 -Dlab.opt.ParallelEntityTicksMixin=true
 -Dlab.opt.ParallelParticlesMixin=true
