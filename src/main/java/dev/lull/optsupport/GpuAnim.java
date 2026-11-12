@@ -117,6 +117,8 @@ public final class GpuAnim {
     /** around TextureAtlas.cycleAnimationFrames: the whole animation tick of an atlas, the copies part of it */
     public static void tickDone(long ns) {
         tickNs += ns;
+        if (INTERP && !interpBroken) tuneTick(ns, tickHadInterp);
+        tickHadInterp = false;
         if (++ticks % 2400 == 0 || ticks == 200)   // (once early too: a short measured run sees it)
             LOG.info("[sleep/opt] gpu anim: {} atlas ticks ({} empty ones skipped), {} ms each; {} frame copies ({} per tick, {} us each, {} ms per tick), {} interpolated frames per tick (vanilla's path; their upload {} ms per tick, through the ring {} ms per tick, {} ring waits), {} sheets, {} blended on the GPU{}",
                     ticks, emptyAtlasTicks, String.format(java.util.Locale.ROOT, "%.3f", tickNs / 1e6 / ticks), copies, String.format(java.util.Locale.ROOT, "%.1f", (double) copies / ticks),
@@ -395,7 +397,7 @@ public final class GpuAnim {
      */
     public static boolean interpolate(SpriteContents c, int x, int y, int fx0, int fy0, int fx1, int fy1, double d) {
         if (!INTERP || atlas == 0 || interpBroken || c.byMipLevel.length == 0 || c.byMipLevel[0].format() != NativeImage.Format.RGBA) return false;
-        if (tunePhase == 2 || tunePhase == 4) return false;   // measuring the CPU way, or decided for it
+        if (tunePhase == 2 || tunePhase == 3 || tunePhase == 5) return false;   // settling / measuring the CPU way, or decided for it
         if (!interpReady()) return false;
         long t0 = System.nanoTime();
         Integer sheet = SHEETS.get(c);
@@ -460,56 +462,71 @@ public final class GpuAnim {
         gpuBlends++;
         long ns = System.nanoTime() - t0;
         interpUploadNs += ns;
-        tuneGpu(ns);
         return true;
     }
 
     // which way is faster here: measured (-Dlab.gpuAnim.interp=gpu / cpu: fixed)
     private static final String INTERP_WAY = System.getProperty("lab.gpuAnim.interp", "tune");
-    /** 0 GPU warm-up (sheets, tables, first draws), 1 GPU window, 2 CPU window, 3 decided: GPU, 4 decided: CPU */
-    private static int tunePhase = "cpu".equals(INTERP_WAY) ? 4 : "gpu".equals(INTERP_WAY) ? 3 : 0;
-    private static final int WARM = 400, WINDOW = 600;
-    private static long tuneNs, tuneFrames;
+    /**
+     * 0 GPU warm-up (sheets, tables, first draws), 1 GPU window, 2 settling on the CPU (not counted: the GPU's queued
+     * draws into the atlas drain), 3 CPU window, 4 decided: GPU, 5 decided: CPU
+     */
+    private static int tunePhase = "cpu".equals(INTERP_WAY) ? 5 : "gpu".equals(INTERP_WAY) ? 4 : 0;
+    private static final int WARM = 40, WINDOW = 200, SETTLE = 20;
+    private static long tuneNs, tuneTicks;
     private static double gpuPer;
     public static String interpChoice = "not decided";
 
     /**
-     * A GPU blend's time on the render thread (the driver's work included). Desktop NVIDIA: the CPU way (SpriteMix and
-     * an upload) is ~6 us a frame, the GPU blend ~50-150 (a framebuffer attachment per mip level); Android's LTW: the
-     * uploads were 2.7 ms an atlas tick. The faster one is kept, the GPU with a 10 % margin.
+     * The choice by whole atlas ticks (tickDone: the blends, the copies, the uploads and their waits together), not by
+     * the blend call's own time: 11-12 on the N100 (Intel) the blends measured 653 against 791 us a frame and the GPU
+     * was kept, but its atlas ticks were 3.0 ms against the CPU way's 1.7 - the uploads after GPU draws into the atlas
+     * waited for them, which the blend's own time does not show. The phone (LTW): ~0.7 against ~2.7 ms. The GPU is kept
+     * for a 10 % win; ticks without interpolated frames are not counted.
      */
-    private static void tuneGpu(long ns) {
-        if (tunePhase == 0) {
-            if (++tuneFrames >= WARM) {
-                tunePhase = 1;
-                tuneFrames = tuneNs = 0;
+    private static void tuneTick(long ns, boolean hadInterp) {
+        if (tunePhase >= 4) return;
+        if (!hadInterp) return;
+        switch (tunePhase) {
+            case 0 -> {
+                if (++tuneTicks >= WARM) {
+                    tunePhase = 1;
+                    tuneTicks = tuneNs = 0;
+                }
             }
-        } else if (tunePhase == 1) {
-            tuneNs += ns;
-            if (++tuneFrames >= WINDOW) {
-                gpuPer = (double) tuneNs / tuneFrames;
-                tunePhase = 2;
-                tuneFrames = tuneNs = 0;
+            case 1 -> {
+                tuneNs += ns;
+                if (++tuneTicks >= WINDOW) {
+                    gpuPer = (double) tuneNs / tuneTicks;
+                    tunePhase = 2;
+                    tuneTicks = tuneNs = 0;
+                }
+            }
+            case 2 -> {
+                if (++tuneTicks >= SETTLE) {
+                    tunePhase = 3;
+                    tuneTicks = tuneNs = 0;
+                }
+            }
+            default -> {   // 3
+                tuneNs += ns;
+                if (++tuneTicks >= WINDOW) {
+                    double cpuPer = (double) tuneNs / tuneTicks;
+                    boolean gpu = gpuPer < cpuPer * 0.9;
+                    tunePhase = gpu ? 4 : 5;
+                    interpChoice = String.format(java.util.Locale.ROOT, "%s (an atlas tick %.3f ms with the GPU blends, %.3f with the CPU's)", gpu ? "GPU" : "CPU", gpuPer / 1e6, cpuPer / 1e6);
+                    LOG.info("[sleep/opt] gpu anim: interpolated frames blended on the {}", interpChoice);
+                }
             }
         }
     }
 
-    /** SpriteInterpolateMixin: an interpolated frame's CPU blend and upload took ns (only while measuring) */
-    public static void tuneCpu(long ns) {
-        if (tunePhase != 2) return;
-        tuneNs += ns;
-        if (++tuneFrames >= WINDOW) {
-            double cpuPer = (double) tuneNs / tuneFrames;
-            boolean gpu = gpuPer < cpuPer * 0.9;
-            tunePhase = gpu ? 3 : 4;
-            interpChoice = String.format(java.util.Locale.ROOT, "%s (%.1f us a frame on the GPU, %.1f on the CPU)", gpu ? "GPU" : "CPU", gpuPer / 1e3, cpuPer / 1e3);
-            LOG.info("[sleep/opt] gpu anim: interpolated frames blended on the {}", interpChoice);
-        }
-    }
+    /** interpolated frames went through interpolate this atlas tick (the GPU's or the CPU's) */
+    private static boolean tickHadInterp;
 
-    /** whether the CPU way is being measured now (the mixin times it then) */
-    public static boolean tuningCpu() {
-        return tunePhase == 2;
+    /** SpriteInterpolateMixin: an interpolated frame was blended (either way) in this atlas tick */
+    public static void interpSeen() {
+        tickHadInterp = true;
     }
 
     public static final boolean VERIFY_BLEND = VERIFY;
