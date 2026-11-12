@@ -171,7 +171,7 @@ public final class RenderCache {
         /**
          * EmfAdapter's check: the same layout and every vertex position within tol of the other's (NaN fails). Entity
          * Model Features keeps animation state per model root, and a worker's renderer set has its own roots: a worker's
-         * pose is EMF's, not the render thread's to the bit (the user, 11-11: not required); a race shows far beyond tol.
+         * pose is EMF's, not the render thread's to the bit (11-11: not required); a race shows far beyond tol.
          */
         boolean closeTo(Rec o, float tol) {
             if (o.size != size || !o.types.equals(types)) return false;

@@ -32,7 +32,7 @@ import org.objectweb.asm.tree.MethodNode;
  * dispatcher injections run on the render thread as before.</li>
  * </ul>
  * Off with -Dlab.opt.EmfWorkers=false, without Mixin's extension list (LateEventSites), or on any other shape (the log
- * says which). Not pixel-exact by design (the user, 11-11: no crash, no flicker, no wrong poses required).
+ * says which). Not pixel-exact by design (11-11: no crash, no flicker, no wrong poses required).
  */
 public final class EmfAdapter {
     private EmfAdapter() {}

@@ -501,7 +501,7 @@ public final class ParallelRender {
      * are drawn. Burning mobs (zombies at noon, a fight with fire) went to the render thread before - in a horde nearly
      * all of them. A mod's mixin in renderFlame keeps them there (-Dlab.prender.flame=false: always).
      */
-    // On by default (the user, 11-11: a few pixels are acceptable here). An in-frame A/B of a burning horde (hundreds of
+    // On by default (11-11: a few pixels are acceptable here). An in-frame A/B of a burning horde (hundreds of
     // zombies) shows 7-10 of 921 600 pixels where a flame and a body meet at equal depth (the burning entity's draws are
     // ordered against the flames' batch otherwise than vanilla's); next to Iris without shaders the horde runs 1012-1051
     // fps with them on workers, 804 without. -Dlab.prender.flame=false: burning entities on the render thread (exact).
