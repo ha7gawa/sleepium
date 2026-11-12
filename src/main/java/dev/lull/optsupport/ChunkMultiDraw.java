@@ -71,7 +71,7 @@ public final class ChunkMultiDraw {
         if ("rendertype_translucent".equals(name)) {
             // light volumes: the section's volume from the ProbeVolume uniform (vanilla's loop) or the draw's offset (ours)
             String lit = LightVolumes.patchTranslucent(src);
-            if (!TRANSLUCENT || !ssbo() || !indirect()) return lit;
+            if (!TRANSLUCENT || !ssbo() || !indirectPatched()) return lit;
             String d = "uniform vec3 ChunkOffset;", u = "vec3 pos = Position + ChunkOffset;", vol = "probeUV2(float(ProbeVolume))";
             if (!lit.startsWith("#version 150") || !lit.contains(d) || !lit.contains(u)) return lit;
             String out = lit.replaceFirst("#version 150", "#version 150\n#extension GL_ARB_shader_draw_parameters : require"
@@ -671,6 +671,7 @@ public final class ChunkMultiDraw {
             net.minecraft.client.renderer.ShaderInstance shader) {
         int li = LAYERS.indexOf(layer);
         if (li < 0) return false;
+        if (pathTune && !allFaces && layer == RenderType.solid()) PathTune.frame();
 
         if (!PENDING_COMPILED.isEmpty()) drainCompiled();
         int[] ps = programState(shader.getId());
@@ -1215,27 +1216,170 @@ public final class ChunkMultiDraw {
 
     private static ByteBuffer cmdStaging = MemoryUtil.memAlloc(1 << 16);
     private static final IndirectCommands COMMANDS = new IndirectCommands();
-    private static Boolean indirect;
+    /** indirect possible here (GL 4.3 / ARB_multi_draw_indirect, not refused by a flag): decided once, before the shaders are patched */
+    private static Boolean indirectOk;
+    /** the path drawn now: changes only while PathTune measures */
+    private static volatile boolean indirectNow;
+    /** the shaders read the draw index either way (max of both): PathTune may switch the path between frames */
+    private static boolean pathTune;
+    /** -Dlab.chunkmd.pathTune=false: the vendor rule, never measured */
+    private static final boolean PATH_TUNE = !"false".equals(System.getProperty("lab.chunkmd.pathTune"));
+    static String pathChoice = "not measured";
 
     /**
      * GL 4.3 multi-draw indirect: the commands read by the GPU instead of walked by the driver (-Dlab.chunkmd.noIndirect).
-     * Not on Intel's graphics unless forced (-Dlab.chunkmd.indirect=true): there the indirect draws, with the section
-     * index read from the base instance, cost the GPU more than the direct multi-draw saves the CPU - an Intel N100's
-     * terrain view 83 fps indirect, 120 direct, vanilla 88 (11-12); an RTX 4070 SUPER the other way, 3 660 vs 2 040.
-     * Decided once, before the chunk shaders are patched (the shader reads gl_BaseInstanceARB or gl_DrawIDARB).
+     * Which is faster depends on the machine: an Intel N100's terrain view 83 fps indirect, 120 direct, vanilla 88 (11-12);
+     * an RTX 4070 SUPER the other way, 3 660 vs 2 040. Until measured on this machine (PathTune, kept by Calibration): not
+     * on Intel's graphics (there the indirect draws, with the section index read from the base instance, cost the GPU
+     * more than the direct multi-draw saves the CPU), indirect elsewhere; -Dlab.chunkmd.indirect=true/false forces it.
      */
     private static boolean indirect() {
-        Boolean i = indirect;
-        if (i == null) {
+        return indirectOk() && indirectNow;
+    }
+
+    /** the shaders are patched for the indirect path (drawn now or maybe after a measurement) */
+    private static boolean indirectPatched() {
+        return indirectOk() && (indirectNow || pathTune);
+    }
+
+    private static boolean indirectOk() {
+        Boolean ok = indirectOk;
+        if (ok == null) {
             var caps = GL.getCapabilities();
             String forced = System.getProperty("lab.chunkmd.indirect");
             String vendor = String.valueOf(GL11C.glGetString(GL11C.GL_VENDOR));
             boolean intel = vendor.toLowerCase(java.util.Locale.ROOT).contains("intel");
-            boolean want = forced != null ? Boolean.parseBoolean(forced) : !intel;
-            indirect = i = (caps.OpenGL43 || caps.GL_ARB_multi_draw_indirect) && !Boolean.getBoolean("lab.chunkmd.noIndirect") && want;
-            System.out.println("[sleep/opt] chunk multidraw: indirect " + i + (forced == null && intel ? " (Intel graphics: direct multi-draw, faster there)" : ""));
+            ok = (caps.OpenGL43 || caps.GL_ARB_multi_draw_indirect) && !Boolean.getBoolean("lab.chunkmd.noIndirect") && !"false".equals(forced);
+            String why;
+            if (!ok) {
+                why = "";
+            } else if (forced != null) {
+                indirectNow = true;
+                why = " (forced)";
+            } else {
+                String c = Calibration.get("chunks");
+                if ("indirect".equals(c) || "direct".equals(c)) {   // measured on this machine before: the single-path shaders
+                    indirectNow = "indirect".equals(c);
+                    pathChoice = c + " (calibrated earlier: " + Calibration.get("chunks.why") + ")";
+                    why = " - " + pathChoice;
+                } else {
+                    indirectNow = !intel;
+                    pathTune = PATH_TUNE && ssbo();
+                    why = (intel ? " (Intel graphics: direct multi-draw until measured)" : "") + (pathTune ? " - measured in the game" : "");
+                }
+            }
+            indirectOk = ok;
+            System.out.println("[sleep/opt] chunk multidraw: indirect " + (ok && indirectNow) + why);
         }
-        return i;
+        return ok;
+    }
+
+    /**
+     * Indirect or direct by whole frames of the running game (a synthetic probe at start chose wrongly: the real costs
+     * are the driver's command walk and the CPU's, 11-12): once the terrain view has run 20 s with no screen open,
+     * windows of the starting path and the other in turn, each frames' mean without the slowest tenth; the other path
+     * kept only when at least 3 % faster; far slower (1.3x) at its first window: stopped there. Driven by the solid
+     * layer's draw (once a frame). Stored for this machine: the next start uses it from the first frame.
+     */
+    static final class PathTune {
+        private static final int WINDOW = 180, SETTLE = 30, ROUNDS = 2;
+        private static final long QUIET = 20_000_000_000L, HITCH = 250_000_000L;
+        private static final double GAIN = 0.97, FAR = 1.3;
+        private static int phase, frames, window;
+        private static long last, since;
+        private static boolean start;
+        private static final double[] START = new double[ROUNDS], OTHER = new double[ROUNDS];
+        private static final Samples S = new Samples(WINDOW);
+
+        static void frame() {
+            if (!pathTune || phase == 3) return;
+            long now = System.nanoTime();
+            long dt = last == 0 ? 0 : now - last;
+            last = now;
+            if (net.minecraft.client.Minecraft.getInstance().screen != null) {
+                if (phase == 0) since = 0;
+                last = 0;
+                return;
+            }
+            if (dt <= 0 || dt > HITCH) return;
+            if (GpuAnim.measuring() || ParallelRender.measuring()) {   // (one measured choice at a time: this window starts over)
+                if (phase == 2) {
+                    frames = 0;
+                    S.clear();
+                }
+                return;
+            }
+            switch (phase) {
+                case 0 -> {
+                    if (since == 0) since = now;
+                    if (now - since < QUIET) return;
+                    start = indirectNow;
+                    window = 0;
+                    phase = 1;
+                    frames = 0;
+                    System.out.println("[sleep/opt] chunk multidraw: measuring indirect / direct");
+                }
+                case 1 -> {
+                    if (++frames < SETTLE) return;
+                    phase = 2;
+                    frames = 0;
+                    S.clear();
+                }
+                case 2 -> {
+                    S.add(dt);
+                    if (++frames < WINDOW) return;
+                    double t = S.trimmed();
+                    if (window % 2 == 0) START[window / 2] = t; else OTHER[window / 2] = t;
+                    window++;
+                    if (window == 2 && OTHER[0] > START[0] * FAR) {   // far slower: no second round of it
+                        decide(START[0], OTHER[0], 1);
+                        return;
+                    }
+                    if (window < 2 * ROUNDS) {
+                        indirectNow = window % 2 == 0 ? start : !start;
+                        phase = 1;
+                        frames = 0;
+                        return;
+                    }
+                    double a = 0, b = 0;
+                    for (int r = 0; r < ROUNDS; r++) {
+                        a += START[r];
+                        b += OTHER[r];
+                    }
+                    decide(a / ROUNDS, b / ROUNDS, ROUNDS);
+                }
+                default -> { }
+            }
+        }
+
+        private static void decide(double startNs, double otherNs, int rounds) {
+            boolean other = otherNs < startNs * GAIN;
+            indirectNow = other != start;
+            double ind = start ? startNs : otherNs, dir = start ? otherNs : startNs;
+            pathChoice = String.format(java.util.Locale.ROOT, "%s (a frame %.3f ms indirect, %.3f direct; %d round%s)",
+                    indirectNow ? "indirect" : "direct", ind / 1e6, dir / 1e6, rounds, rounds == 1 ? "" : "s");
+            System.out.println("[sleep/opt] chunk multidraw: " + pathChoice);
+            phase = 3;
+            Calibration.put("chunks", indirectNow ? "indirect" : "direct", pathChoice);
+        }
+
+        /** Calibration.reset: measured again (only where the shaders read both indices; else at the next start) */
+        static void recalibrate() {
+            if (!pathTune) {
+                pathChoice = "measured at the next start";
+                return;
+            }
+            phase = 0;
+            frames = 0;
+            window = 0;
+            since = 0;
+            last = 0;
+            pathChoice = "not measured";
+        }
+    }
+
+    public static void recalibrate() {
+        PathTune.recalibrate();
     }
 
     private static void queue(Arena a, Entry e, net.minecraft.core.BlockPos o, double x, double y, double z, float ox, float oy, float oz,
@@ -1295,6 +1439,7 @@ public final class ChunkMultiDraw {
      * else the draw ID (the non-indirect fallback, whose commands carry no base instance).
      */
     public static String drawIndex() {
+        if (indirectOk() && pathTune) return "max(gl_BaseInstanceARB, gl_DrawIDARB)";   // (direct: the base instance is 0)
         return indirect() && ssbo() ? "gl_BaseInstanceARB" : "gl_DrawIDARB";
     }
     /** -Dlab.chunkmd.sortNear: the camera's sections ordered nearest first (a reused array; experiment) */
