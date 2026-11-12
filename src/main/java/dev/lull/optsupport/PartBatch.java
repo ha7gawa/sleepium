@@ -67,6 +67,18 @@ public final class PartBatch {
      * The intercepted part paths (ModelPart, SuperByteBuffer, GeckoLib bones: records without a shaderpack's per-vertex
      * ids) - not under sleep's shaderpack pipeline; resident recordings (mode 2) are, their vertices carry the ids.
      */
+    /**
+     * Records in a texture buffer, parts grouped by geometry and drawn instanced (drivers without gl_DrawID or vertex
+     * storage buffers: Android's GL translators). Model parts only (modes 1, 3); items, residents, Create's parts and the
+     * lit / persistent modes need the full path (full()).
+     */
+    static boolean tbo;
+
+    /** the storage-buffer path: every mode */
+    public static boolean full() {
+        return capable() && !tbo;
+    }
+
     public static boolean partsAllowed() {
         return capable();   // (1.21.1: not under sleep's shaderpack pipeline, not on 1.20.1 yet)
     }
@@ -75,8 +87,15 @@ public final class PartBatch {
         Boolean c = capable;
         if (c == null) {
             GLCapabilities caps = GL.getCapabilities();
-            capable = c = (caps.OpenGL46 || caps.GL_ARB_shader_draw_parameters) && GlLimits.vertexStorageBlocks() > 0;
-            System.out.println("[sleep/opt] part batch: " + (c ? "available" : "not available (needs shader draw parameters and storage buffers)"));
+            boolean full = (caps.OpenGL46 || caps.GL_ARB_shader_draw_parameters) && GlLimits.vertexStorageBlocks() > 0;
+            GlLimits.vertexStorageBlocks();   // (decides GlLimits.texelBuffer where storage buffers are out)
+            boolean texels = (caps.OpenGL31 || caps.GL_ARB_texture_buffer_object) && (caps.OpenGL31 || caps.GL_ARB_draw_instanced)
+                    && (caps.OpenGL32 || caps.GL_ARB_draw_elements_base_vertex) && caps.OpenGL33 && (GlLimits.texelBuffer || full)
+                    && !Boolean.getBoolean("lab.partbatch.noTbo");
+            tbo = texels && (!full || Boolean.getBoolean("lab.partbatch.forceTbo"));
+            capable = c = full || tbo;
+            System.out.println("[sleep/opt] part batch: " + (tbo ? "available through texture buffers (no draw parameters / vertex storage buffers here): model parts only"
+                    : c ? "available" : "not available (needs shader draw parameters and storage buffers, or texture buffers)"));
         }
         return c;
     }
@@ -99,6 +118,7 @@ public final class PartBatch {
         String uv1 = types.get("UV1"), uv2 = types.get("UV2");
         if (uv1 != null && !uv1.equals("ivec2") && !uv1.equals("vec2")) return src;
         if (uv2 != null && !uv2.equals("ivec2")) return src;
+        boolean EXTRA = PartBatch.EXTRA && !tbo, LIT_ON = PartBatch.LIT_ON && !tbo;   // (the texture-buffer variant: model parts only)
         boolean uv0 = EXTRA && Pattern.compile("\\bin\\s+vec2\\s+UV0\\s*;").matcher(src).find();
         int at = src.indexOf("void main() {");
         String head = src.substring(0, at), body = src.substring(at + "void main() {".length());
@@ -227,7 +247,47 @@ public final class PartBatch {
         return out;
     }
 
+    /**
+     * The storage-buffer shader rewritten for texture buffers: the record (9 texels: pose, normal rows, colour; the ints
+     * from an integer view of the same buffer - read as floats they would be denormals a GPU may flush) fetched at
+     * ProbeRecordBase + gl_InstanceID; GLSL 3.30 for the flags attribute's location without the extension.
+     */
+    public static String texelVariant(String s) {
+        s = s.replaceFirst("#version 150\n#extension GL_ARB_shader_draw_parameters : require\n#extension GL_ARB_shader_storage_buffer_object : require\n#extension GL_ARB_explicit_attrib_location : require",
+                "#version 330");
+        s = s.replace("layout(std430) buffer ProbeParts { ProbePart probeParts[]; };\n",
+                "uniform samplerBuffer ProbePartTex;\nuniform isamplerBuffer ProbePartInts;\nuniform int ProbeRecordBase;\n"
+                        + "ProbePart probeFetch(int i) {\n    int b = i * 9;\n    ProbePart p;\n"
+                        + "    p.pose = mat4(texelFetch(ProbePartTex, b), texelFetch(ProbePartTex, b + 1), texelFetch(ProbePartTex, b + 2), texelFetch(ProbePartTex, b + 3));\n"
+                        + "    p.n0 = texelFetch(ProbePartTex, b + 4);\n    p.n1 = texelFetch(ProbePartTex, b + 5);\n    p.n2 = texelFetch(ProbePartTex, b + 6);\n"
+                        + "    p.color = texelFetch(ProbePartTex, b + 7);\n    p.lo = texelFetch(ProbePartInts, b + 8);\n    return p;\n}\n");
+        return s.replace("probeParts[gl_DrawIDARB]", "probeFetch(ProbeRecordBase + gl_InstanceID)");
+    }
+
     // ------------------------------------------------------------------ geometry arena (position 3f, uv 2f, normal 3b+flags, colour 4b, light 2s: 32 bytes)
+
+    /**
+     * A matrix into a record, column by column as JOML's getToAddress writes it - without JOML's Unsafe path, which some
+     * JVMs refuse at its first use (Java on Android: "Unexpected Matrix4f element offset", the game stopped).
+     */
+    static void putMatrix(org.joml.Matrix4f m, long a) {
+        MemoryUtil.memPutFloat(a, m.m00());
+        MemoryUtil.memPutFloat(a + 4, m.m01());
+        MemoryUtil.memPutFloat(a + 8, m.m02());
+        MemoryUtil.memPutFloat(a + 12, m.m03());
+        MemoryUtil.memPutFloat(a + 16, m.m10());
+        MemoryUtil.memPutFloat(a + 20, m.m11());
+        MemoryUtil.memPutFloat(a + 24, m.m12());
+        MemoryUtil.memPutFloat(a + 28, m.m13());
+        MemoryUtil.memPutFloat(a + 32, m.m20());
+        MemoryUtil.memPutFloat(a + 36, m.m21());
+        MemoryUtil.memPutFloat(a + 40, m.m22());
+        MemoryUtil.memPutFloat(a + 44, m.m23());
+        MemoryUtil.memPutFloat(a + 48, m.m30());
+        MemoryUtil.memPutFloat(a + 52, m.m31());
+        MemoryUtil.memPutFloat(a + 56, m.m32());
+        MemoryUtil.memPutFloat(a + 60, m.m33());
+    }
 
     static final int STRIDE = 32;
     private static int vbo, vao, capacity, used;   // in vertices
@@ -449,7 +509,7 @@ public final class PartBatch {
             // BLOCK: QuadGpu's runs (block entities' baked quads into the block layers), drawn with their own vertex array
             ok = (t.format() == DefaultVertexFormat.NEW_ENTITY || t.format() == DefaultVertexFormat.BLOCK) && t.mode() == VertexFormat.Mode.QUADS
                     && (EntityBatch.commutes(t) || t.format() == DefaultVertexFormat.NEW_ENTITY && ItemGpu.sortedOk(t))
-                    && typeOk(t) && capable();
+                    && typeOk(t) && full();
             ITEM_TYPE_OK.put(t, ok);
         }
         return ok && partsAllowed();
@@ -587,24 +647,24 @@ public final class PartBatch {
 
     private static boolean residentOk0(RenderType t, VertexConsumer vc, net.minecraft.client.renderer.MultiBufferSource buffers) {
         if (!RESIDENT_ON || !(vc instanceof BufferBuilder bb) || t.format() != DefaultVertexFormat.NEW_ENTITY || t.mode() != VertexFormat.Mode.QUADS) return false;
-        if (EntityBatch.typeOf(bb) == t) return typeOk(t) && capable();
+        if (EntityBatch.typeOf(bb) == t) return typeOk(t) && full();
         // a fixed buffer of the source (vanilla's Sheets: item frames' frames, chests, signs) of a type whose draws commute:
         // drawn once per frame like a batch, the residents right after it
         if (FIXED_RESIDENT && buffers instanceof net.minecraft.client.renderer.MultiBufferSource.BufferSource bs && EntityBatch.commutes(t)
                 && ((dev.lull.opt.BufferSourceAccessor) bs).sleep$fixed().get(t) == bb && ((dev.lull.opt.BufferSourceAccessor) bs).sleep$started().contains(bb))
-            return typeOk(t) && capable();
+            return typeOk(t) && full();
         // another mod's batching source in place of vanilla's (Oculus / Iris' FullyBufferedMultiBufferSource, ImmediatelyFast):
         // a BufferSource subclass with builders of its own, each type drawn once per batch (RenderType.end or its state set
         // up: PartShardMixin); a type whose draws commute takes the residents right after that draw, as a batch of ours
         if (OTHER_SOURCES && buffers instanceof net.minecraft.client.renderer.MultiBufferSource.BufferSource
                 && buffers.getClass() != net.minecraft.client.renderer.MultiBufferSource.BufferSource.class && EntityBatch.commutes(t))
-            return typeOk(t) && capable();
+            return typeOk(t) && full();
         // experiment (-Dlab.rcache.translucentResident): a sorted (translucent) type, drawn per object back to front (1.20.1:
         // the builder getBuffer just gave for it, started in this source)
         return TRANSLUCENT_RESIDENT && t.sortOnUpload && buffers instanceof net.minecraft.client.renderer.MultiBufferSource.BufferSource bs
                 && (((dev.lull.opt.BufferSourceAccessor) bs).sleep$started().contains(bb)
                     || OTHER_SOURCES && translucentOther && bs.getClass() != net.minecraft.client.renderer.MultiBufferSource.BufferSource.class)   // ImmediatelyFast
-                && typeOk(t) && capable();
+                && typeOk(t) && full();
     }
 
     /**
@@ -657,7 +717,7 @@ public final class PartBatch {
         Queue q = RESIDENT.computeIfAbsent(t, x -> new Queue());
         q.ensure();
         long rec = q.mem + 144L * q.n;
-        m.getToAddress(rec);
+        putMatrix(m, rec);
         MemoryUtil.memPutFloat(rec + 64, nm.m00());
         MemoryUtil.memPutFloat(rec + 68, nm.m01());
         MemoryUtil.memPutFloat(rec + 72, nm.m02());
@@ -688,6 +748,10 @@ public final class PartBatch {
      * Only for a buffer EntityBatch batches, of the NEW_ENTITY format, whose render type's shader is patched.
      */
     public static boolean capture(ModelPart part, PoseStack.Pose pose, VertexConsumer buffer, int light, int overlay, int color, PartCompiler compiler) {
+        if (buffer instanceof RecordingBuilder rb) {
+            JobParts jp;
+            return PARTS_IN_JOBS && rb.type != null && (jp = ParallelRender.jobParts()) != null && captureInJob(part, compiler, pose, rb.type, jp, light, overlay, color);
+        }
         RenderType type = batchedType(buffer);
         if (type == null) return false;
         int[] g = geometry(part, compiler);
@@ -850,7 +914,7 @@ public final class PartBatch {
     /** A SuperByteBuffer record (queueSbb's layout); lo.z / lo.w hold the overlay's halves (or, mode 6, lo.z the light box). */
     private static void writeSbbRecord(long rec, Matrix4f m, Matrix3f nm, float r, float g, float b, float alpha, boolean diffuse, float fakeNormalY,
             int light, int overlay) {
-        m.getToAddress(rec);
+        putMatrix(m, rec);
         MemoryUtil.memPutFloat(rec + 64, nm.m00());
         MemoryUtil.memPutFloat(rec + 68, nm.m01());
         MemoryUtil.memPutFloat(rec + 72, nm.m02());
@@ -975,7 +1039,7 @@ public final class PartBatch {
             int light, int overlay, int axis, float speed, float offsetDeg, float[] sprites, float scrollU, float scrollSpeed, float scrollPhase,
             float scrollScale) {
         long rec = pMem + 144L * i;
-        m.getToAddress(rec);
+        putMatrix(m, rec);
         MemoryUtil.memPutFloat(rec + 64, nm.m00());
         MemoryUtil.memPutFloat(rec + 68, nm.m01());
         MemoryUtil.memPutFloat(rec + 72, nm.m02());
@@ -1144,7 +1208,7 @@ public final class PartBatch {
      *  the entity's height, Coatings), colour (RGBA floats), light / overlay (ints). */
     static void writeRecord(long r, PoseStack.Pose pose, int light, int overlay, int color, float coat, float coat2, float height) {
         Matrix4f m = pose.pose();
-        m.getToAddress(r);
+        putMatrix(m, r);
         Matrix3f nm = pose.normal();
         MemoryUtil.memPutFloat(r + 64, nm.m00());
         MemoryUtil.memPutFloat(r + 68, nm.m01());
@@ -1178,7 +1242,8 @@ public final class PartBatch {
     public static final class JobParts {
         RenderType[] types = new RenderType[64];
         int[] first = new int[64], quads = new int[64];
-        boolean[] item = new boolean[64];   // an item model's record (ItemGpu), else a bone's
+        /** per record: 0 a GeckoLib bone, 1 an item model (ItemGpu), 2 a vanilla model part */
+        byte[] kind = new byte[64];
         long mem = MemoryUtil.nmemAlloc(144L * 64);
         int n, cap = 64;
         /** the job's entity's coatings (packed) and height, for its records (Coatings) */
@@ -1193,26 +1258,30 @@ public final class PartBatch {
         }
 
         long next(RenderType t, int[] g) {
-            return next(t, g[0], g[1], false);
+            return next(t, g[0], g[1], (byte) 0);
         }
 
         long nextItem(RenderType t, int f, int q) {
-            return next(t, f, q, true);
+            return next(t, f, q, (byte) 1);
         }
 
-        private long next(RenderType t, int f, int q, boolean it) {
+        long nextPart(RenderType t, int[] g) {
+            return next(t, g[0], g[1], (byte) 2);
+        }
+
+        private long next(RenderType t, int f, int q, byte k) {
             if (n == cap) {
                 cap *= 2;
                 types = java.util.Arrays.copyOf(types, cap);
                 first = java.util.Arrays.copyOf(first, cap);
                 quads = java.util.Arrays.copyOf(quads, cap);
-                item = java.util.Arrays.copyOf(item, cap);
+                kind = java.util.Arrays.copyOf(kind, cap);
                 mem = MemoryUtil.nmemRealloc(mem, 144L * cap);
             }
             types[n] = t;
             first[n] = f;
             quads[n] = q;
-            item[n] = it;
+            kind[n] = k;
             return mem + 144L * n++;
         }
     }
@@ -1253,6 +1322,38 @@ public final class PartBatch {
         return true;
     }
 
+    /**
+     * -Dlab.partbatch.partsInJobs=false: vanilla model parts inside ParallelRender jobs drawn the CPU way (as before).
+     * On: they become records in the job as on the render thread - the workers' entities (a phone's: the render cache
+     * replays slower than four workers draw) keep the VRAM parts.
+     */
+    static final boolean PARTS_IN_JOBS = !"false".equals(System.getProperty("lab.partbatch.partsInJobs"));
+    public static long jobParts;
+
+    /**
+     * Inside a ParallelRender job: a model part becomes a record in the job when its render type and geometry are
+     * known (else they are prepared on the render thread through the job's journal; the part is compiled this time).
+     */
+    private static boolean captureInJob(ModelPart part, PartCompiler compiler, PoseStack.Pose pose, RenderType type, JobParts jp, int light, int overlay, int color) {
+        if (!workerTypes.contains(type)) {
+            if (ASKED.add(type)) ParallelRender.journal(() -> learnType(type));
+            return false;
+        }
+        int[] g = geoSnapshot.get(part);
+        if (g == null) {
+            if (ASKED_GEO.add(part)) ParallelRender.journal(() -> {
+                ASKED_GEO.remove(part);
+                geometry(part, compiler);
+                publishGeo(part);
+            });
+            return false;
+        }
+        if (g[0] < 0) return false;
+        writeRecord(jp.nextPart(type, g), pose, light, overlay, color, jp.coat, jp.coat2, jp.height);
+        jobParts++;
+        return true;
+    }
+
     /** Render thread: whether PartBatch can draw this type from VRAM (checked here: GL queries); published for workers. */
     private static void learnType(RenderType type) {
         ASKED.remove(type);
@@ -1279,11 +1380,13 @@ public final class PartBatch {
     public static boolean mergeJob(JobParts parts, net.minecraft.client.renderer.MultiBufferSource buffers) {
         // the buffer is looked up once per run of records of one type (an object's bones are mostly one type)
         RenderType last = null;
+        byte lastKind = -1;
         boolean lastItem = false;
         for (int i = 0; i < parts.n; i++) {
-            if (parts.types[i] == last && parts.item[i] == lastItem) continue;
+            if (parts.types[i] == last && parts.kind[i] == lastKind) continue;
             last = parts.types[i];
-            lastItem = parts.item[i];
+            lastKind = parts.kind[i];
+            lastItem = lastKind == 1;
             boolean ok;
             if (lastItem)   // a fixed buffer of the level's source (asked for it before: no batch of another type ended)
                 ok = buffers == net.minecraft.client.Minecraft.getInstance().renderBuffers().bufferSource()
@@ -1304,17 +1407,20 @@ public final class PartBatch {
             }
         }
         last = null;
+        lastKind = -1;
         BufferBuilder bb = null;
         Queue q = null;
+        Map<RenderType, Queue> queues = GEO_QUEUES;
         for (int i = 0; i < parts.n; i++) {
-            if (parts.types[i] != last || parts.item[i] != lastItem) {
+            if (parts.types[i] != last || parts.kind[i] != lastKind) {
                 last = parts.types[i];
-                lastItem = parts.item[i];
+                lastKind = parts.kind[i];
+                queues = lastKind == 1 ? ITEM_QUEUES : lastKind == 2 ? QUEUES : GEO_QUEUES;
                 bb = (BufferBuilder) buffers.getBuffer(last);
-                q = (lastItem ? ITEM_QUEUES : GEO_QUEUES).get(last);
-                if (lastItem && itemBackoff != 120) itemBackoff = 120;   // the source takes item records again
+                q = queues.get(last);
+                if (lastKind == 1 && itemBackoff != 120) itemBackoff = 120;   // the source takes item records again
             }
-            if (q == null || q.n == q.cap || ((dev.lull.opt.BufferBuilderAccessor) bb).sleep$vertices() == 0) q = slot(lastItem ? ITEM_QUEUES : GEO_QUEUES, last, bb);
+            if (q == null || q.n == q.cap || ((dev.lull.opt.BufferBuilderAccessor) bb).sleep$vertices() == 0) q = slot(queues, last, bb);
             MemoryUtil.memCopy(parts.mem + 144L * i, q.mem + 144L * q.n, 144);
             commit(q, parts.first[i], parts.quads[i]);
         }
@@ -1468,6 +1574,10 @@ public final class PartBatch {
     }
 
     private static void drawQueue(ShaderInstance shader, Queue q, int mode) {
+        if (tbo) {
+            drawQueueTexels(shader, q, mode);
+            return;
+        }
         int[] st = programState(shader);
         int flag = st[0];
         if (flag < 0 || st[1] == GL31C.GL_INVALID_INDEX) {
@@ -1538,6 +1648,82 @@ public final class PartBatch {
         if (mat) Materials.end(shader);
         GL15C.glBindBuffer(org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER, 0);
         GL20C.glUniform1i(flag, 0);
+        draws++;
+        q.n = 0;
+        q.maxIndices = 0;
+    }
+
+    // ------------------------------------------------------------------ the texture-buffer variant
+
+    private static final java.util.HashMap<Integer, int[]> TEXEL_PROGRAMS = new java.util.HashMap<>();
+    private static int texelBuf, texelTex, texelInts;
+    private static long texelMem, texelCap;
+    private static final int TEXEL_UNIT = 12, INT_UNIT = 13;
+    public static long texelGroups, texelRecords;
+
+    /**
+     * Modes 1 and 3: the queue's records grouped by their geometry (index count, base vertex) - many entities share a
+     * model - and uploaded in that order into the texture buffer; each group one glDrawElementsInstancedBaseVertex,
+     * ProbeRecordBase at its first record. Other modes do not reach here (full()).
+     */
+    private static void drawQueueTexels(ShaderInstance shader, Queue q, int mode) {
+        int n = q.n;
+        int[] st = TEXEL_PROGRAMS.computeIfAbsent(shader.getId(), id -> new int[] {GL20C.glGetUniformLocation(id, "ProbePartMode"),
+                GL20C.glGetUniformLocation(id, "ProbePartTex"), GL20C.glGetUniformLocation(id, "ProbePartInts"), GL20C.glGetUniformLocation(id, "ProbeRecordBase")});
+        if (st[0] < 0 || st[1] < 0 || st[2] < 0 || st[3] < 0 || (mode != 1 && mode != 3)) {
+            fallbacks += n;
+            q.n = 0;
+            q.maxIndices = 0;
+            return;
+        }
+        // the order: by geometry
+        long[] keys = new long[n];
+        for (int i = 0; i < n; i++)
+            keys[i] = ((long) (MemoryUtil.memGetInt(q.bases + 4L * i) & 0xFFFFFF) << 40) | ((long) (MemoryUtil.memGetInt(q.counts + 4L * i) & 0xFFFFF) << 20) | i;
+        java.util.Arrays.sort(keys);
+        long bytes = 144L * n;
+        if (texelCap < bytes) {
+            if (texelMem != 0) MemoryUtil.nmemFree(texelMem);
+            texelCap = Math.max(bytes, texelCap * 2);
+            texelMem = MemoryUtil.nmemAlloc(texelCap);
+        }
+        for (int k = 0; k < n; k++) MemoryUtil.memCopy(q.mem + 144L * (int) (keys[k] & 0xFFFFF), texelMem + 144L * k, 144);
+        if (texelBuf == 0) {
+            texelBuf = GL15C.glGenBuffers();
+            texelTex = GL11C.glGenTextures();
+            texelInts = GL11C.glGenTextures();
+        }
+        GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, texelBuf);
+        GL15C.nglBufferData(GL31C.GL_TEXTURE_BUFFER, bytes, texelMem, GL15C.GL_STREAM_DRAW);
+        GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, 0);
+        int prevUnit = com.mojang.blaze3d.platform.GlStateManager._getActiveTexture();
+        com.mojang.blaze3d.platform.GlStateManager._activeTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + TEXEL_UNIT);
+        GL11C.glBindTexture(GL31C.GL_TEXTURE_BUFFER, texelTex);
+        GL31C.glTexBuffer(GL31C.GL_TEXTURE_BUFFER, GL30C.GL_RGBA32F, texelBuf);
+        com.mojang.blaze3d.platform.GlStateManager._activeTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + INT_UNIT);
+        GL11C.glBindTexture(GL31C.GL_TEXTURE_BUFFER, texelInts);
+        GL31C.glTexBuffer(GL31C.GL_TEXTURE_BUFFER, GL30C.GL_RGBA32I, texelBuf);
+        com.mojang.blaze3d.platform.GlStateManager._activeTexture(prevUnit);
+        GL20C.glUniform1i(st[1], TEXEL_UNIT);
+        GL20C.glUniform1i(st[2], INT_UNIT);
+        if (vaoStale || vao == 0) setupVao();
+        GL30C.glBindVertexArray(vao);
+        RenderSystem.AutoStorageIndexBuffer seq = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
+        seq.bind(q.maxIndices);
+        GL20C.glUniform1i(st[0], mode);
+        int type = seq.type().asGLType;
+        for (int k = 0; k < n; ) {
+            long g = keys[k] >>> 20;
+            int e = k + 1;
+            while (e < n && (keys[e] >>> 20) == g) e++;
+            int count = (int) (g & 0xFFFFF), baseVertex = (int) (g >>> 20);
+            GL20C.glUniform1i(st[3], k);
+            org.lwjgl.opengl.GL32C.glDrawElementsInstancedBaseVertex(GL11C.GL_TRIANGLES, count, type, 0L, e - k, baseVertex);
+            texelGroups++;
+            k = e;
+        }
+        texelRecords += n;
+        GL20C.glUniform1i(st[0], 0);
         draws++;
         q.n = 0;
         q.maxIndices = 0;
@@ -1639,8 +1825,8 @@ public final class PartBatch {
 
     public static String report() {
         SbbRecorder rcd = sbbRecorder;
-        return (rcd != null ? rcd.report() + "; " : "") + ItemGpu.report() + "; " + QuadGpu.report() + " (" + PartsPrograms.report() + "); " + String.format(java.util.Locale.ROOT, "part batch: SuperByteBuffer calls %d, parts %d (not taken %d %s %s %s, UV shift %d, level light %d); shaders patched %s, parts %d (EMF %d), GeckoLib bones %d (from workers %d, jobs refused at merge %d), multi-draws %d, geometries %d (%.1f MB), lost %d; resident draws %d, uploads %d (arena %.1f MB); persistent records %d, draws %d, uploads %d; level-lit parts %d (refused %d); %s",
-                sbbCalls, sbbParts, sbbRefused, java.util.Arrays.toString(SBB_WHY), SBB_CONSUMERS, SBB_TYPES, sbbShift, sbbLevelLight, PATCHED, parts, emfParts, geoParts, jobMerged, jobRefused, draws, geometries, (double) used * STRIDE / 1048576.0, fallbacks, residentDraws, residentUploads,
+        return (rcd != null ? rcd.report() + "; " : "") + ItemGpu.report() + "; " + QuadGpu.report() + " (" + PartsPrograms.report() + "); " + String.format(java.util.Locale.ROOT, "part batch: SuperByteBuffer calls %d, parts %d (not taken %d %s %s %s, UV shift %d, level light %d); shaders patched %s, parts %d (EMF %d), GeckoLib bones %d (from workers %d, jobs refused at merge %d), model parts from workers %d, multi-draws %d, geometries %d (%.1f MB), lost %d; resident draws %d, uploads %d (arena %.1f MB); persistent records %d, draws %d, uploads %d; level-lit parts %d (refused %d); %s",
+                sbbCalls, sbbParts, sbbRefused, java.util.Arrays.toString(SBB_WHY), SBB_CONSUMERS, SBB_TYPES, sbbShift, sbbLevelLight, PATCHED, parts, emfParts, geoParts, jobMerged, jobRefused, jobParts, draws, geometries, (double) used * STRIDE / 1048576.0, fallbacks, residentDraws, residentUploads,
                 (double) RES_ARENA.capacity * RES_ARENA.stride / 1048576.0, pUsed - pFreeN, persistDraws, persistUploads, litParts, litRefused,
                 LightBoxes.report());
     }
