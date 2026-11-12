@@ -444,6 +444,14 @@ public final class GpuAnim {
         }
         int table = table(d);
         if (!interpBound) interpBegin();
+        if (!selfTested) {
+            selfTested = true;
+            if (!selfTest(c, sheet, table, fx0, fy0, fx1, fy1, d)) {
+                interpBroken = true;
+                interpEnd();
+                return false;
+            }
+        }
         org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + SHEET_UNIT);
         GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, sheet);
         org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + TABLE_UNIT);
@@ -466,11 +474,14 @@ public final class GpuAnim {
                 }
             }
             GL11C.glViewport(x >> k, y >> k, lw, lh);
+            GL11C.glEnable(GL11C.GL_SCISSOR_TEST);   // (the rectangle twice: a translator that bends the viewport cannot spill)
+            GL11C.glScissor(x >> k, y >> k, lw, lh);
             org.lwjgl.opengl.GL20C.glUniform3i(uSrc0, fx0 >> k, fy0 >> k, k);
             org.lwjgl.opengl.GL20C.glUniform2i(uSrc1, fx1 >> k, fy1 >> k);
             org.lwjgl.opengl.GL20C.glUniform2i(uDst, x >> k, y >> k);
             GL11C.glDrawArrays(GL11C.GL_TRIANGLE_STRIP, 0, 4);
         }
+        GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
         if (ok && !interpChecked) {
             interpChecked = true;
             int err = GL11C.glGetError();
@@ -540,6 +551,87 @@ public final class GpuAnim {
     }
 
     public static final boolean VERIFY_BLEND = VERIFY;
+
+    private static boolean selfTested;
+
+    /**
+     * Before the first blend touches the atlas: the same draw (level 0) into a scratch texture three times the sprite's
+     * size, filled with a marker, the blend aimed at its middle; read back whole (glReadPixels: GLES has it) and
+     * compared - inside against the CPU blend (SpriteMix.mix), outside the marker kept. 11-12: on the phone (LTW) the
+     * first version wiped the whole block atlas (the quad covered the attachment, not the sprite) - this finds such a
+     * driver before the atlas is drawn into, and logs where the draw landed. The program and state are the blend's
+     * (interpBegin ran).
+     */
+    private static boolean selfTest(SpriteContents c, int sheet, int table, int fx0, int fy0, int fx1, int fy1, double d) {
+        int w = c.width(), h = c.height(), tw = w * 3, th = h * 3;
+        NativeImage src = c.byMipLevel[0];
+        int scratch = TextureUtil.generateTextureId();
+        org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + SHEET_UNIT);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, scratch);
+        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MIN_FILTER, GL11C.GL_NEAREST);
+        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MAG_FILTER, GL11C.GL_NEAREST);
+        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, org.lwjgl.opengl.GL12C.GL_TEXTURE_MAX_LEVEL, 0);
+        GL11C.glTexImage2D(GL11C.GL_TEXTURE_2D, 0, GL11C.GL_RGBA8, tw, th, 0, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, (ByteBuffer) null);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, sheet);
+        org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + TABLE_UNIT);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, table);
+        org.lwjgl.opengl.GL13C.glActiveTexture(savedUnit);
+        int prevRead = GL11C.glGetInteger(org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER_BINDING);
+        org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER, interpFbo);
+        org.lwjgl.opengl.GL30C.glFramebufferTexture2D(org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER, org.lwjgl.opengl.GL30C.GL_COLOR_ATTACHMENT0, GL11C.GL_TEXTURE_2D, scratch, 0);
+        int status = org.lwjgl.opengl.GL30C.glCheckFramebufferStatus(org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER);
+        String verdict;
+        boolean ok = false;
+        if (status != org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER_COMPLETE) {
+            verdict = "scratch framebuffer incomplete (" + status + ")";
+        } else {
+            final int MARK = 0x7F3F1F0F;   // (bytes 0F 1F 3F 7F: R G B A)
+            GL11C.glViewport(0, 0, tw, th);
+            GL11C.glClearColor((MARK & 255) / 255f, (MARK >> 8 & 255) / 255f, (MARK >> 16 & 255) / 255f, (MARK >>> 24) / 255f);
+            GL11C.glClear(GL11C.GL_COLOR_BUFFER_BIT);
+            GL11C.glClearColor(0f, 0f, 0f, 0f);
+            GL11C.glViewport(w, h, w, h);
+            int[] vp = new int[4];
+            GL11C.glGetIntegerv(GL11C.GL_VIEWPORT, vp);
+            GL11C.glEnable(GL11C.GL_SCISSOR_TEST);
+            GL11C.glScissor(w, h, w, h);
+            org.lwjgl.opengl.GL20C.glUniform3i(uSrc0, fx0, fy0, 0);
+            org.lwjgl.opengl.GL20C.glUniform2i(uSrc1, fx1, fy1);
+            org.lwjgl.opengl.GL20C.glUniform2i(uDst, w, h);
+            GL11C.glDrawArrays(GL11C.GL_TRIANGLE_STRIP, 0, 4);
+            GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
+            ByteBuffer px = MemoryUtil.memAlloc(tw * th * 4);
+            GL11C.glPixelStorei(GL11C.GL_PACK_ALIGNMENT, 4);
+            GL11C.glReadPixels(0, 0, tw, th, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, px);
+            int inBad = 0, outChanged = 0, minX = tw, minY = th, maxX = -1, maxY = -1, firstBad = 0, firstWant = 0;
+            for (int yy = 0; yy < th; yy++)
+                for (int xx = 0; xx < tw; xx++) {
+                    int got = px.getInt((yy * tw + xx) * 4);
+                    boolean inside = xx >= w && xx < 2 * w && yy >= h && yy < 2 * h;
+                    if (got != MARK) {
+                        minX = Math.min(minX, xx); minY = Math.min(minY, yy); maxX = Math.max(maxX, xx); maxY = Math.max(maxY, yy);
+                    }
+                    if (inside) {
+                        int px0 = xx - w, py0 = yy - h;
+                        int a = src.getPixelRGBA(fx0 + px0, fy0 + py0), b = src.getPixelRGBA(fx1 + px0, fy1 + py0);
+                        int want = a & 0xFF000000 | SpriteMix.mix(d, a >> 16 & 255, b >> 16 & 255) << 16 | SpriteMix.mix(d, a >> 8 & 255, b >> 8 & 255) << 8 | SpriteMix.mix(d, a & 255, b & 255);
+                        if (got != want && inBad++ == 0) { firstBad = got; firstWant = want; }
+                    } else if (got != MARK) outChanged++;
+                }
+            MemoryUtil.memFree(px);
+            ok = inBad == 0 && outChanged == 0;
+            verdict = String.format(java.util.Locale.ROOT, "%s: sprite %dx%d, viewport asked (%d,%d %dx%d) reads back (%d,%d %dx%d), written box %s, inside wrong %d of %d%s, outside changed %d",
+                    ok ? "passed" : "FAILED", w, h, w, h, w, h, vp[0], vp[1], vp[2], vp[3],
+                    maxX < 0 ? "none" : "(" + minX + "," + minY + ")-(" + maxX + "," + maxY + ")", inBad, w * h,
+                    inBad > 0 ? String.format(" (first %08x, want %08x)", firstBad, firstWant) : "", outChanged);
+        }
+        org.lwjgl.opengl.GL30C.glFramebufferTexture2D(org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER, org.lwjgl.opengl.GL30C.GL_COLOR_ATTACHMENT0, GL11C.GL_TEXTURE_2D, 0, 0);
+        org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER, prevRead);
+        org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, interpFbo);
+        TextureUtil.releaseTextureId(scratch);
+        LOG.info("[sleep/opt] gpu anim: blend self-test {}{}", verdict, ok ? "" : " - the atlas is not drawn into (interpolated frames on the CPU)");
+        return ok;
+    }
 
     private static boolean interpBound, savedBlend, savedDepth, savedCull, savedScissorI;
     private static int savedProgram, savedVao, savedFboI, savedUnit;
