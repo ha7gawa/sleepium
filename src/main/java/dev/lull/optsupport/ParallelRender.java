@@ -324,6 +324,7 @@ public final class ParallelRender {
         j.parallel = eligible(e, buffers);
         j.claimed.set(!j.parallel);   // set last: a stale pool entry of this reused job may run it only when it is a complete parallel job
         jobs++;
+        if (size == 1) frameEntitiesAt = System.nanoTime();   // (the job just queued is the frame's first)
         if (j.parallel) {
             if (!setsChecked) {   // the renderer sets when an entity first goes to the workers: never, when none does
                 ensureSets();
@@ -478,6 +479,81 @@ public final class ParallelRender {
     static final boolean FLAME_ON_WORKERS = !"false".equals(System.getProperty("lab.prender.flame"))
             && !MixinTouch.touched("net/minecraft/client/renderer/entity/EntityRenderDispatcher", "renderFlame");
 
+    /**
+     * -Dlab.prender.cachedOnWorkers: the render cache's recorded objects replayed on the workers too (off: on 1.20.1 the
+     * in-place check found such jobs' bytes different from a render in place). Recording stays on the render thread.
+     */
+    static final boolean CACHED_ON_WORKERS = Boolean.getBoolean("lab.prender.cachedOnWorkers");
+
+    private static long frameEntitiesAt;
+
+    /**
+     * The render cache or the workers, by measurement (-Dlab.rcache.tune=false: the cache always, as before). A desktop
+     * CPU replays a record in ~2 us, cheaper than a job; a phone's core took 28 us (client_entities: 17 ms a frame on
+     * the render thread) and the four workers without the cache were 30 % faster. The entities' time per entity is
+     * measured in a window with the cache and one without; the cache is left only for a clear win (10 %). Again after
+     * 5 minutes, or once the entities per frame halve or double; frames with fewer than 100 entities change nothing.
+     */
+    static final class CacheTune {
+        private static final boolean ON = !"false".equals(System.getProperty("lab.rcache.tune")) && Boolean.getBoolean("lab.opt.RenderCacheMixin");
+        private static final int WINDOW = 120, SETTLE = 10, MIN_ENTITIES = 100;
+        private static final long HOLD = 5L * 60 * 1_000_000_000L;
+        private static int phase, frames, decidedEntities;   // phase: 0 waiting, 1 cache window, 2 settling, 3 bypass window, 4 decided
+        private static long nanos, entities, decidedAt, startAt = System.nanoTime();
+        private static double perCache;
+        static String last = "not measured";
+
+        static void frame(long ns, int n) {
+            if (!ON) return;
+            long now = System.nanoTime();
+            switch (phase) {
+                case 0, 4 -> {
+                    boolean due = phase == 0 ? now - startAt > 10_000_000_000L
+                            : now - decidedAt > HOLD || n > 2 * decidedEntities || n * 2 < decidedEntities;
+                    if (!due || n < MIN_ENTITIES) return;
+                    RenderCache.bypass = false;
+                    phase = 2;   // settle into the cache first
+                    frames = 0;
+                    nanos = entities = 0;
+                }
+                case 1, 3 -> {
+                    nanos += ns;
+                    entities += n;
+                    if (++frames < WINDOW) return;
+                    double per = (double) nanos / Math.max(1, entities);
+                    if (phase == 1) {
+                        perCache = per;
+                        RenderCache.bypass = true;
+                        phase = 2;
+                        frames = -1;   // (marks the settle before the bypass window)
+                        nanos = entities = 0;
+                        return;
+                    }
+                    boolean workers = per < perCache * 0.9;
+                    RenderCache.bypass = workers;
+                    last = String.format(java.util.Locale.ROOT, "%s (%.1f us an entity with the cache, %.1f without; %d entities a frame)",
+                            workers ? "the workers, no cache" : "the cache", perCache / 1e3, per / 1e3, n);
+                    System.out.println("[sleep/opt] render cache tune: " + last);
+                    phase = 4;
+                    decidedAt = now;
+                    decidedEntities = n;
+                }
+                case 2 -> {
+                    if (frames < 0) {   // after the cache window: settle with the bypass on, then measure it
+                        if (--frames > -1 - SETTLE) return;
+                        phase = 3;
+                    } else {
+                        if (++frames < SETTLE) return;
+                        phase = 1;
+                    }
+                    frames = 0;
+                    nanos = entities = 0;
+                }
+                default -> { }
+            }
+        }
+    }
+
     /** -Dlab.prender.why=true: why entities stayed on the render thread (counts in the report) */
     private static final boolean WHY = Boolean.getBoolean("lab.prender.why");
     static final long[] WHY_N = new long[8];
@@ -501,7 +577,8 @@ public final class ParallelRender {
                 || d.shouldRenderHitBoxes()) return no(4);
         if (listened != 0 && (anyListener || EventSites.postsListened(d.getRenderer(e).getClass(), listened))) return no(5);   // its renderer posts a listened event
         if (dev.lull.api.Compat.parallelRenderExcluded(e)) return no(6);
-        if (!(!Boolean.getBoolean("lab.opt.RenderCacheMixin") || RenderCache.animated(e) || dev.lull.api.Compat.renderCacheExcluded(e))) return no(7);
+        if (!(!Boolean.getBoolean("lab.opt.RenderCacheMixin") || RenderCache.bypass || RenderCache.animated(e) || dev.lull.api.Compat.renderCacheExcluded(e))
+                && !(CACHED_ON_WORKERS && RenderCache.replayable(e))) return no(7);
         // with the render cache on: what it draws the vanilla way (animated, or excluded from it by Compat)
         return true;
     }
@@ -658,6 +735,7 @@ public final class ParallelRender {
             if (clean) leakCheck(j);
             j.entity = null;
         }
+        if (size > 0) CacheTune.frame(System.nanoTime() - frameEntitiesAt, size);
         size = 0;
     }
 

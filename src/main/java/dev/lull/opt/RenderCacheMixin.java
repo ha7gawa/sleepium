@@ -32,6 +32,10 @@ public abstract class RenderCacheMixin {
     private void sleep$cached(EntityRenderer r, Entity e, float yaw, float pt, PoseStack pose, MultiBufferSource buffers, int light, Operation<Void> original) {
         // a ParallelRender job merged inside the dispatcher (another mod's mixin in render: ParallelRender.INNER)
         if (dev.lull.optsupport.ParallelRender.innerMerge(e, yaw, pt, pose, buffers, light)) return;
+        if (dev.lull.optsupport.RenderCache.bypass) {   // CacheTune: the workers draw entities faster here than the cache replays them
+            original.call(r, e, yaw, pt, pose, buffers, light);
+            return;
+        }
         dev.lull.DrawStats.phaseBegin(8);
         try {
             cached(r, e, yaw, pt, pose, buffers, light, original);
