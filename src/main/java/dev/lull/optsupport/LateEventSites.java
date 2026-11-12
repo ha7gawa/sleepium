@@ -96,6 +96,7 @@ public final class LateEventSites implements IExtension {
         java.util.Map<String, Integer> before = BEFORE.remove(cn.name);
         if (MARKED.remove(cn.name)) EventSiteTransformer.transform(cn, true, before);
         OverrideHooks.apply(cn);
+        if (FieldLog.any()) FieldLog.rewrite(cn);   // reads checked at the merge (RenderFieldFlow, notes/71)
     }
 
     /** true when the extension runs (postApply after every other mixin) */

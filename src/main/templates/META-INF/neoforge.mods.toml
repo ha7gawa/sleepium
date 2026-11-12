@@ -73,3 +73,5 @@ config="sleepium-catnip.mixins.json"
 config="sleepium-veil.mixins.json"
 [[mixins]]
 config="sleepium-shaders.mixins.json"
+[[mixins]]
+config = "sleepium-flow.mixins.json"

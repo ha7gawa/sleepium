@@ -1,0 +1,10 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.lull.flowmixin",
+  "plugin": "dev.lull.flowmixin.FlowMixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "FlowCarrierMixin"
+  ]
+}
