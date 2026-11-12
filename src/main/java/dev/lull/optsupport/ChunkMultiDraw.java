@@ -1245,13 +1245,23 @@ public final class ChunkMultiDraw {
     private static final IndirectCommands COMMANDS = new IndirectCommands();
     private static Boolean indirect;
 
-    /** GL 4.3 multi-draw indirect: the commands read by the GPU instead of walked by the driver (-Dlab.chunkmd.noIndirect). */
+    /**
+     * GL 4.3 multi-draw indirect: the commands read by the GPU instead of walked by the driver (-Dlab.chunkmd.noIndirect).
+     * Not on Intel's graphics unless forced (-Dlab.chunkmd.indirect=true): there the indirect draws, with the section
+     * index read from the base instance, cost the GPU more than the direct multi-draw saves the CPU - an Intel N100's
+     * terrain view 83 fps indirect, 120 direct, vanilla 88 (11-12); an RTX 4070 SUPER the other way, 3 660 vs 2 040.
+     * Decided once, before the chunk shaders are patched (the shader reads gl_BaseInstanceARB or gl_DrawIDARB).
+     */
     private static boolean indirect() {
         Boolean i = indirect;
         if (i == null) {
             var caps = GL.getCapabilities();
-            indirect = i = (caps.OpenGL43 || caps.GL_ARB_multi_draw_indirect) && !Boolean.getBoolean("lab.chunkmd.noIndirect");
-            System.out.println("[sleep/opt] chunk multidraw: indirect " + i);
+            String forced = System.getProperty("lab.chunkmd.indirect");
+            String vendor = String.valueOf(GL11C.glGetString(GL11C.GL_VENDOR));
+            boolean intel = vendor.toLowerCase(java.util.Locale.ROOT).contains("intel");
+            boolean want = forced != null ? Boolean.parseBoolean(forced) : !intel;
+            indirect = i = (caps.OpenGL43 || caps.GL_ARB_multi_draw_indirect) && !Boolean.getBoolean("lab.chunkmd.noIndirect") && want;
+            System.out.println("[sleep/opt] chunk multidraw: indirect " + i + (forced == null && intel ? " (Intel graphics: direct multi-draw, faster there)" : ""));
         }
         return i;
     }
