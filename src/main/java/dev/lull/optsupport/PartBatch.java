@@ -1834,6 +1834,7 @@ public final class PartBatch {
     /** End of a frame's level render: nothing queued may outlive it (a type never drawn this frame). */
     public static void endFrame() {
         frame++;
+        ParallelRender.CacheTune.endFrame();   // (the cache or the workers: by whole frames too)
         ParallelRender.PartsTune.endFrame();   // (whether parts in worker jobs pay here: measured by whole frames)
         ASKED.clear();   // a request journaled by a job that then failed was dropped: asked again next frame
         ASKED_GEO.clear();

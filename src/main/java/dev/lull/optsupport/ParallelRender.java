@@ -531,77 +531,139 @@ public final class ParallelRender {
      */
     static final class CacheTune {
         static final boolean ON = !"false".equals(System.getProperty("lab.rcache.tune")) && Boolean.getBoolean("lab.opt.RenderCacheMixin");
-        static final int WINDOW = 120, SETTLE = 10, MIN_ENTITIES = 100;
+        static final int WINDOW = 120, SETTLE = 10, MIN_ENTITIES = 100, ROUNDS = 2;
+        /** the workers must make whole frames this much faster: a tie (a frame bound by the graphics card) keeps the
+         *  cache - it takes less of the processor, which the tick threads (and an integrated GPU's power budget) share */
+        private static final double FRAME_GAIN = Double.parseDouble(System.getProperty("lab.rcache.frameGain", "0.97"));
         private static final long QUIET = 10_000_000_000L;
-        /** 0 waiting, 1 cache window, 2 settling, 3 helper-thread window, 4 decided (for good: Calibration keeps it) */
+        /** 0 waiting, 1 settling, 2 measuring (cache / workers in turn), 4 decided (for good: Calibration keeps it) */
         static int phase;
-        private static int frames;
-        private static long crowdSince;
-        private static double perCache;
-        private static final Samples S = new Samples(WINDOW);
+        private static int frames, window;
+        private static long crowdSince, lastEnd;
+        private static final double[] FRAME_CACHE = new double[ROUNDS], FRAME_WORKERS = new double[ROUNDS],
+                ENT_CACHE = new double[ROUNDS], ENT_WORKERS = new double[ROUNDS];
+        private static final Samples S = new Samples(WINDOW), E = new Samples(WINDOW);
         private static boolean calibChecked;
+        /** PartBatch.endFrame drives the windows by whole frames (else each queue drain counts, by its time an entity) */
+        private static boolean framed;
+        /** this frame's drains: their time and entities */
+        private static long frameNs;
+        private static int frameN;
         static String last = "not measured";
 
+        /** a drain of the entity queue (several a frame) */
         static void frame(long ns, int n) {
             if (!ON || phase == 4) return;
-            if (!calibChecked) {
-                calibChecked = true;
-                String c = Calibration.get("cache");
-                if ("workers".equals(c) || "cache".equals(c)) {   // measured on this machine before: no measuring
-                    RenderCache.bypass = "workers".equals(c);
-                    phase = 4;
-                    last = c + " (calibrated earlier: " + Calibration.get("cache.why") + ")";
-                    System.out.println("[sleep/opt] render cache tune: " + last);
-                    return;
-                }
-                // until measured: a driver without per-draw data or storage buffers (a phone's translator) starts with the
-                // helper threads - a phone's cores replay the cache slower than they draw
-                RenderCache.bypass = PartBatch.capable() && !PartBatch.full();
+            if (!calibChecked && !calibrated()) return;
+            if (framed) {
+                frameNs += ns;
+                frameN += n;
+                return;
             }
+            sample(System.nanoTime(), 0, ns, n);
+        }
+
+        /** PartBatch.endFrame: once a frame */
+        static void endFrame() {
+            if (!ON || phase == 4) return;
+            long now = System.nanoTime();
+            long dt = lastEnd == 0 ? 0 : now - lastEnd;
+            lastEnd = now;
+            if (!framed) {   // (from now on the drains are summed per frame)
+                framed = true;
+                phase = 0;
+                crowdSince = 0;
+                frameNs = 0;
+                frameN = 0;
+                return;
+            }
+            long ns = frameNs;
+            int n = frameN;
+            frameNs = 0;
+            frameN = 0;
+            if (dt > 0) sample(now, dt, ns, n);
+        }
+
+        /** a stored choice used at once; the prior until measured. False: decided, nothing to measure */
+        private static boolean calibrated() {
+            calibChecked = true;
+            String c = Calibration.get("cache");
+            if ("workers".equals(c) || "cache".equals(c)) {   // measured on this machine before: no measuring
+                RenderCache.bypass = "workers".equals(c);
+                phase = 4;
+                last = c + " (calibrated earlier: " + Calibration.get("cache.why") + ")";
+                System.out.println("[sleep/opt] render cache tune: " + last);
+                return false;
+            }
+            // until measured: a driver without per-draw data or storage buffers (a phone's translator) starts with the
+            // helper threads - a phone's cores replay the cache slower than they draw
+            RenderCache.bypass = PartBatch.capable() && !PartBatch.full();
+            return true;
+        }
+
+        /** one sample: a whole frame (dt > 0) or, without frame ends, one drain (dt 0: judged by the time an entity) */
+        private static void sample(long now, long dt, long ns, int n) {
             if (n < MIN_ENTITIES || net.minecraft.client.Minecraft.getInstance().screen != null) {
                 if (phase == 0) crowdSince = 0;
                 return;
             }
-            long now = System.nanoTime();
             switch (phase) {
                 case 0 -> {
                     if (crowdSince == 0) crowdSince = now;
                     if (now - crowdSince < QUIET) return;
-                    RenderCache.bypass = false;
-                    phase = 2;   // settle into the cache first
+                    window = 0;
+                    RenderCache.bypass = false;   // the cache first
+                    phase = 1;
+                    frames = 0;
+                }
+                case 1 -> {
+                    if (++frames < SETTLE) return;
+                    phase = 2;
                     frames = 0;
                     S.clear();
+                    E.clear();
                 }
-                case 1, 3 -> {
-                    S.add((double) ns / n);
+                case 2 -> {
+                    S.add(dt);
+                    E.add((double) ns / n);
                     if (++frames < WINDOW) return;
-                    double per = S.trimmed();
-                    S.clear();
-                    if (phase == 1) {
-                        perCache = per;
-                        RenderCache.bypass = true;
-                        phase = 2;
-                        frames = -1;   // (marks the settle before the helper-thread window)
+                    int r = window / 2;
+                    if (window % 2 == 0) {
+                        FRAME_CACHE[r] = S.trimmed();
+                        ENT_CACHE[r] = E.trimmed();
+                    } else {
+                        FRAME_WORKERS[r] = S.trimmed();
+                        ENT_WORKERS[r] = E.trimmed();
+                    }
+                    window++;
+                    int rounds = dt > 0 ? ROUNDS : 1;   // (per drain: one window each, the old way)
+                    if (window < 2 * rounds) {
+                        RenderCache.bypass = window % 2 == 1;
+                        phase = 1;
+                        frames = 0;
                         return;
                     }
-                    boolean workers = per < perCache * 0.9;   // (a tie: the cache, 1.2.0's way)
+                    double fc = 0, fw = 0, ec = 0, ew = 0;
+                    for (int k = 0; k < rounds; k++) {
+                        fc += FRAME_CACHE[k];
+                        fw += FRAME_WORKERS[k];
+                        ec += ENT_CACHE[k];
+                        ew += ENT_WORKERS[k];
+                    }
+                    fc /= rounds;
+                    fw /= rounds;
+                    ec /= rounds;
+                    ew /= rounds;
+                    boolean workers = dt > 0 ? fw < fc * FRAME_GAIN : ew < ec * 0.9;   // (a tie: the cache, 1.2.0's way)
                     RenderCache.bypass = workers;
-                    last = String.format(java.util.Locale.ROOT, "%s (%.1f us an entity with the cache, %.1f without; %d entities a frame)",
-                            workers ? "the workers, no cache" : "the cache", perCache / 1e3, per / 1e3, n);
+                    last = dt > 0
+                            ? String.format(java.util.Locale.ROOT, "%s (a frame %.3f ms with the cache, %.3f without; %.1f / %.1f us an entity; %d entities a frame)",
+                                    workers ? "the workers, no cache" : "the cache", fc / 1e6, fw / 1e6, ec / 1e3, ew / 1e3, n)
+                            : String.format(java.util.Locale.ROOT, "%s (%.1f us an entity with the cache, %.1f without; %d entities a frame)",
+                                    workers ? "the workers, no cache" : "the cache", ec / 1e3, ew / 1e3, n);
                     System.out.println("[sleep/opt] render cache tune: " + last);
                     phase = 4;
                     Calibration.put("cache", workers ? "workers" : "cache", last);
-                }
-                case 2 -> {
-                    if (frames < 0) {   // after the cache window: settle with the helper threads, then measure them
-                        if (--frames > -1 - SETTLE) return;
-                        phase = 3;
-                    } else {
-                        if (++frames < SETTLE) return;
-                        phase = 1;
-                    }
-                    frames = 0;
-                    S.clear();
                 }
                 default -> { }
             }
@@ -611,9 +673,13 @@ public final class ParallelRender {
             if (!ON) return;
             phase = 0;
             frames = 0;
+            window = 0;
             crowdSince = 0;
+            frameNs = 0;
+            frameN = 0;
             calibChecked = true;   // (the file was just emptied)
             S.clear();
+            E.clear();
             last = "not measured";
         }
     }
