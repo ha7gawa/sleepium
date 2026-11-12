@@ -159,6 +159,7 @@
     "EntityFluidLoopMixin"
   ],
   "client": [
+    "ArmorResourceMemoMixin",
     "DebugScreenCacheMixin",
     "ForgeHudTextBatchMixin",
     "VoxelStreamCompileMixin",

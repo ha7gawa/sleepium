@@ -202,6 +202,8 @@
 -Dlab.opt.GpuAnim=true
 # the F3 screen's lines gathered 10 times a second instead of every frame (sleep.f3.refreshMs)
 -Dlab.opt.DebugScreenCacheMixin=true
+# Forge's armour texture path kept per item / slot / type (no String.format per piece per frame; not for items that override getArmorTexture)
+-Dlab.opt.ArmorResourceMemoMixin=true
 # Forge's F3 text drawn in one batch (as vanilla's) instead of a draw per line
 -Dlab.opt.ForgeHudTextBatchMixin=true
 -Dlab.opt.OffThreadEntity=true

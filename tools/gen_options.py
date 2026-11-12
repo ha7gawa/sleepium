@@ -20,7 +20,7 @@ OUT = os.path.join(ROOT, 'src', 'main', 'resources', 'assets', 'sleepium', 'opti
 # first matching rule wins: (group, name regex)
 GROUPS = [
     ('lighting', r'^(Light|ShaderLight|ClientLight)'),
-    ('chunks', r'^(Chunk(Multi|Section|Shader|Upload)|Section(Layer|Lists|ModCount)|BlockMesh|VertexSort|SamplerUnit|Uniform|ShaderSampler|Frame|RenderCache|RenderCall|OverworldFog|AmbientParticle|ItemFrame|Texture|ParallelReload|ClientBiome|ClientChunkCacheBiome|GpuAnim|DebugScreen|ForgeHudText)'),
+    ('chunks', r'^(Chunk(Multi|Section|Shader|Upload)|Section(Layer|Lists|ModCount)|BlockMesh|VertexSort|SamplerUnit|Uniform|ShaderSampler|Frame|RenderCache|RenderCall|OverworldFog|AmbientParticle|ItemFrame|Texture|ParallelReload|ClientBiome|ClientChunkCacheBiome|GpuAnim|DebugScreen|ForgeHudText|ArmorResource)'),
     ('entities_render', r'^(EntityBatch|ItemGpu|QuadGpu|Part|ParallelParticles|ModelPart|PoseStack|EntityCull|EntityLight|BlockEntityCull|Vec3FromRgb)'),
     ('animation', r'^(Geo|Molang|Keyframe|AnimStream)'),
     ('threads', r'^(MainReactor|Reactor|ParallelEntities|ParallelEntityTicks|LabPools|PersistentPools|MailboxBatch|ForgeBus|RenderPriority)'),
@@ -62,6 +62,7 @@ DESCRIPTIONS = {
     'ObservedModSleep': "Machines of mods whose tick the analysis cannot follow (Industrial Foregoing, Functional Storage, PneumaticCraft...) sleep while Sleepium sees them idle and wake on any change it observes: idle machines cost less. Checked exact on the mods we test; if a machine of some mod stops or misbehaves, turn this off and please tell us which one.",
     'ForgeHudTextBatchMixin': "Forge draws the F3 text a line at a time, each line sent to the graphics card on its own; with this on it is drawn in one batch, as vanilla Minecraft does: F3 open costs far less.",
     'DebugScreenCacheMixin': "The F3 debug screen's lines are gathered 10 times a second instead of every frame (its FPS line changes once a second anyway): opening F3 no longer costs a large part of your frame rate. sleep.f3.refreshMs sets the interval.",
+    'ArmorResourceMemoMixin': "Forge works out each armour piece's texture path with text formatting for every mob in every frame; with this on it is worked out once per item, slot and layer and reused (items that choose their texture per stack or wearer are left as they are): crowds in armour draw faster.",
     'GpuAnim': "Animated textures (water, lava, fire, mods' animated blocks) change frames by a GPU copy instead of an upload from the CPU: less work on the render thread, the same picture.",
 }
 
