@@ -525,43 +525,72 @@ public final class GpuAnim {
      * a world). The phone (LTW): ~2.0 against ~6.4 ms. The GPU is kept for a 10 % win; ticks without interpolated
      * frames are not counted.
      */
+    private static final Samples TUNE = new Samples(WINDOW);
+    private static boolean calibChecked;
+
     private static void tuneTick(long ns, boolean hadInterp) {
         if (tunePhase >= 4 || !hadInterp) return;
+        if (!calibChecked) {   // measured on this machine before (Calibration): no measuring
+            calibChecked = true;
+            String c = Calibration.get("interp");
+            if ("gpu".equals(c) || "cpu".equals(c)) {
+                tunePhase = "gpu".equals(c) ? 4 : 5;
+                interpChoice = c.toUpperCase(java.util.Locale.ROOT) + " (calibrated earlier: " + Calibration.get("interp.why") + ")";
+                LOG.info("[sleep/opt] gpu anim: interpolated frames blended on the {}", interpChoice);
+                return;
+            }
+        }
+        if (net.minecraft.client.Minecraft.getInstance().screen != null) return;   // (a screen open: not counted)
         switch (tunePhase) {
             case 0 -> {
                 if (++tuneTicks >= SETTLE) {
                     tunePhase = 1;
-                    tuneTicks = tuneNs = 0;
+                    tuneTicks = 0;
+                    TUNE.clear();
                 }
             }
             case 1 -> {
-                tuneNs += ns;
+                TUNE.add(ns);
                 if (++tuneTicks >= WINDOW) {
-                    cpuPer = (double) tuneNs / tuneTicks;
+                    cpuPer = TUNE.trimmed();
                     tunePhase = 2;
                     tuneTicks = tuneNs = 0;
+                    TUNE.clear();
                 }
             }
             case 2 -> {
                 if (++tuneTicks >= WARM) {
                     tunePhase = 3;
                     tuneTicks = tuneNs = 0;
+                    TUNE.clear();
                 }
             }
             default -> {   // 3
                 tuneNs += ns;
+                TUNE.add(ns);
                 ++tuneTicks;
-                double gpuPer = (double) tuneNs / tuneTicks;
-                boolean early = tuneTicks >= EARLY && gpuPer > cpuPer * 1.5;
+                boolean early = tuneTicks >= EARLY && (double) tuneNs / tuneTicks > cpuPer * 1.5;
                 if (tuneTicks >= WINDOW || early) {
-                    boolean gpu = !early && gpuPer < cpuPer * 0.9;
+                    double gpuPer = early ? (double) tuneNs / tuneTicks : TUNE.trimmed();
+                    boolean gpu = !early && gpuPer < cpuPer * 0.9;   // (a tie: the CPU, vanilla's way)
                     tunePhase = gpu ? 4 : 5;
                     interpChoice = String.format(java.util.Locale.ROOT, "%s (an atlas tick %.3f ms with the GPU blends%s, %.3f with the CPU's)", gpu ? "GPU" : "CPU",
                             gpuPer / 1e6, early ? " after " + tuneTicks + " ticks" : "", cpuPer / 1e6);
                     LOG.info("[sleep/opt] gpu anim: interpolated frames blended on the {}", interpChoice);
+                    Calibration.put("interp", gpu ? "gpu" : "cpu", interpChoice);
                 }
             }
         }
+    }
+
+    /** Calibration.reset (the settings' Recalibrate): measured again, from the next atlas tick */
+    static void recalibrate() {
+        if (!"tune".equals(INTERP_WAY)) return;
+        tunePhase = 0;
+        tuneTicks = tuneNs = 0;
+        calibChecked = true;   // (the file was just emptied)
+        TUNE.clear();
+        interpChoice = "not decided";
     }
 
     /** interpolated frames went through interpolate this atlas tick (the GPU's or the CPU's) */
