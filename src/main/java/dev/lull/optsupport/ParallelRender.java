@@ -199,7 +199,8 @@ public final class ParallelRender {
         @Override
         public void run() {
             if (!claimed.compareAndSet(false, true)) return;   // the render thread took it while waiting
-            if (PIN_WORKERS != null && !PINNED.get()) pinWorker();
+            if (PIN_WORKERS != null && !PINNED.get() && !com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()) pinWorker();   // (the render thread helping keeps its own CPU)
+            if (CPU_STATS) countCpu(CPU_WORKER);
             Set s = SETS.poll();
             calls.clear();
             locals.clear();
@@ -259,7 +260,8 @@ public final class ParallelRender {
 
     /**
      * -Dlab.prender.pin=render;w1,w2,...: the render thread pinned to one logical CPU and each worker, at its first
-     * job, to the next of the list (experiment: separate physical cores; the default spreads over even numbers).
+     * job, to the next of the list (experiment: separate physical cores; the default spreads over even numbers). An
+     * entry may name several CPUs, a+b+c (one mask: the OS picks among them). Windows and Linux / Android.
      */
     private static final String PIN = System.getProperty("lab.prender.pin");
     private static final long RENDER_PIN;
@@ -274,13 +276,45 @@ public final class ParallelRender {
         if (PIN != null) {
             String spec = PIN.equals("true") ? "2;4,6,8,10" : PIN;
             String[] parts = spec.split(";");
-            rp = 1L << Integer.parseInt(parts[0].trim());
+            rp = cpuMask(parts[0]);
             String[] ws = parts.length > 1 ? parts[1].split(",") : new String[0];
             wp = new long[ws.length];
-            for (int i = 0; i < ws.length; i++) wp[i] = 1L << Integer.parseInt(ws[i].trim());
+            for (int i = 0; i < ws.length; i++) wp[i] = cpuMask(ws[i]);
         }
         RENDER_PIN = rp;
         PIN_WORKERS = wp;
+    }
+
+    private static long cpuMask(String spec) {
+        long m = 0;
+        for (String c : spec.split("\\+")) if (!c.isBlank()) m |= 1L << Integer.parseInt(c.trim());
+        return m;
+    }
+
+    /**
+     * -Dlab.prender.cpuStats=true: on which CPUs the render thread (once a frame) and the workers (once a job) ran -
+     * a census for phones' mixed cores (OsThreads.currentCpu), in the report with each CPU's maximum frequency.
+     */
+    static final boolean CPU_STATS = Boolean.getBoolean("lab.prender.cpuStats");
+    static final java.util.concurrent.atomic.AtomicLongArray CPU_RENDER = new java.util.concurrent.atomic.AtomicLongArray(64),
+            CPU_WORKER = new java.util.concurrent.atomic.AtomicLongArray(64);
+
+    private static void countCpu(java.util.concurrent.atomic.AtomicLongArray a) {
+        int c = dev.lab.runtime.OsThreads.currentCpu();
+        if (c >= 0 && c < 64) a.incrementAndGet(c);
+    }
+
+    private static String cpuReport() {
+        long[] khz = dev.lab.runtime.OsThreads.cpuMaxKhz();
+        StringBuilder b = new StringBuilder("; CPUs (render frames / worker jobs");
+        b.append(khz != null ? " @ max MHz):" : "):");
+        for (int i = 0; i < 64; i++) {
+            long r = CPU_RENDER.get(i), w = CPU_WORKER.get(i);
+            if (r == 0 && w == 0) continue;
+            b.append(" cpu").append(i).append(' ').append(r).append('/').append(w);
+            if (khz != null && i < khz.length && khz[i] > 0) b.append(" @").append(khz[i] / 1000);
+        }
+        return b.toString();
     }
 
     private static void pinWorker() {
@@ -305,6 +339,7 @@ public final class ParallelRender {
             }
             setsChecked = false;
             listened = EventSites.renderListenedMask();   // once per frame
+            if (CPU_STATS) countCpu(CPU_RENDER);
         }
         Job j = size < QUEUE.size() ? QUEUE.get(size) : null;
         if (j == null) {
@@ -874,6 +909,6 @@ public final class ParallelRender {
             System.out.println(w);
         }
         return String.format(java.util.Locale.ROOT, "parallel render: %d workers, jobs %d, on workers %d (render thread helped %d), on the render thread %d, failed %d, refused %d, journaled calls %d, part records merged in %.0f ms%s", THREADS, jobs, parallel,
-                helped, sequential, failed, refused, journaled, mergeNanos / 1e6, (WORKER_REFUSED.isEmpty() ? "" : ", kept on the render thread " + WORKER_REFUSED) + (CHECK ? ", checked in place " + checked + (checkMismatches > 0 ? " (differed " + checkMismatches + ")" : "") : "") + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches + (MISMATCH_TYPES.isEmpty() ? "" : " " + MISMATCH_TYPES) : ""));
+                helped, sequential, failed, refused, journaled, mergeNanos / 1e6, (CPU_STATS ? cpuReport() : "") + (WORKER_REFUSED.isEmpty() ? "" : ", kept on the render thread " + WORKER_REFUSED) + (CHECK ? ", checked in place " + checked + (checkMismatches > 0 ? " (differed " + checkMismatches + ")" : "") : "") + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches + (MISMATCH_TYPES.isEmpty() ? "" : " " + MISMATCH_TYPES) : ""));
     }
 }

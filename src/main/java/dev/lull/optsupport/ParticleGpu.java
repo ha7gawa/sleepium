@@ -147,7 +147,7 @@ public final class ParticleGpu {
         // the sheet's shader (its begin may set its own: a mod's sheet) must be the patched particle program, else the
         // records would never be drawn
         ShaderInstance shader = RenderSystem.getShader();
-        if (shader == null || program(shader).length == 0) {
+        if (shader == null || (tbo ? !texelProgram(shader) : program(shader).length == 0)) {
             listsVanilla++;
             return;
         }
@@ -275,8 +275,13 @@ public final class ParticleGpu {
 
     public static void beforeDraw(ShaderInstance shader, com.mojang.blaze3d.vertex.VertexBuffer vb) {
         if (!hookSeen) hookSeen = true;
+        if (tbo && patched) texelUnit(shader);
         if (!pending) return;
         pending = false;
+        if (tbo) {
+            drawTexels(shader, vb);
+            return;
+        }
         int[] st = program(shader);
         if (st.length == 0) {
             lost += n;
@@ -314,6 +319,68 @@ public final class ParticleGpu {
 
     public static long lost;
 
+    private static int tboVao;
+    private static final Map<Integer, Integer> MODE_AT = new ConcurrentHashMap<>();
+    private static final Map<Integer, Boolean> TEXEL_OK = new ConcurrentHashMap<>();
+
+    /** the texel variant's program: its mode uniform and corner sampler are there */
+    private static boolean texelProgram(ShaderInstance shader) {
+        return TEXEL_OK.computeIfAbsent(shader.getId(), id -> GL20C.glGetUniformLocation(id, "ProbeParticleMode") >= 0
+                && GL20C.glGetUniformLocation(id, "ProbeParticleCorners") >= 0);
+    }
+
+    /** The texel variant: records as instance attributes (Color 2, UV2 3, ProbePPos 12, ProbePUv 13, ProbePCi 14), corners from a texture buffer. */
+    private static void drawTexels(ShaderInstance shader, com.mojang.blaze3d.vertex.VertexBuffer vb) {
+        int mode = MODE_AT.computeIfAbsent(shader.getId(), id -> GL20C.glGetUniformLocation(id, "ProbeParticleMode"));
+        if (mode < 0 || GL20C.glGetUniformLocation(shader.getId(), "ProbeParticleCorners") < 0) {
+            lost += n;
+            return;
+        }
+        if (recBuf == 0) {
+            recBuf = GL15C.glGenBuffers();
+            cornerBuf = GL15C.glGenBuffers();
+        }
+        if (tboVao == 0) {
+            tboVao = GL30C.glGenVertexArrays();
+            cornerTex = GL11C.glGenTextures();
+            GL30C.glBindVertexArray(tboVao);
+            GL15C.glBindBuffer(GL15C.GL_ARRAY_BUFFER, recBuf);
+            GL20C.glEnableVertexAttribArray(2);
+            GL20C.glVertexAttribPointer(2, 4, GL11C.GL_UNSIGNED_BYTE, true, REC, 32);
+            GL33C.glVertexAttribDivisor(2, 1);
+            GL20C.glEnableVertexAttribArray(3);
+            GL30C.glVertexAttribIPointer(3, 2, GL11C.GL_SHORT, REC, 36);
+            GL33C.glVertexAttribDivisor(3, 1);
+            GL20C.glEnableVertexAttribArray(12);
+            GL20C.glVertexAttribPointer(12, 4, GL11C.GL_FLOAT, false, REC, 0);
+            GL33C.glVertexAttribDivisor(12, 1);
+            GL20C.glEnableVertexAttribArray(13);
+            GL20C.glVertexAttribPointer(13, 4, GL11C.GL_FLOAT, false, REC, 16);
+            GL33C.glVertexAttribDivisor(13, 1);
+            GL20C.glEnableVertexAttribArray(14);
+            GL30C.glVertexAttribIPointer(14, 1, GL11C.GL_INT, REC, 40);
+            GL33C.glVertexAttribDivisor(14, 1);
+        }
+        GL15C.glBindBuffer(GL15C.GL_ARRAY_BUFFER, recBuf);
+        GL15C.nglBufferData(GL15C.GL_ARRAY_BUFFER, (long) n * REC, MemoryUtil.memAddress(rec), GL15C.GL_STREAM_DRAW);
+        GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, cornerBuf);
+        GL15C.nglBufferData(GL31C.GL_TEXTURE_BUFFER, (long) nRot * 64, MemoryUtil.memAddress(corners), GL15C.GL_STREAM_DRAW);
+        GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, 0);
+        int prevUnit = com.mojang.blaze3d.platform.GlStateManager._getActiveTexture();
+        com.mojang.blaze3d.platform.GlStateManager._activeTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + CORNER_UNIT);
+        GL11C.glBindTexture(GL31C.GL_TEXTURE_BUFFER, cornerTex);
+        GL31C.glTexBuffer(GL31C.GL_TEXTURE_BUFFER, GL30C.GL_RGBA32F, cornerBuf);
+        com.mojang.blaze3d.platform.GlStateManager._activeTexture(prevUnit);
+        GL30C.glBindVertexArray(tboVao);
+        RenderSystem.AutoStorageIndexBuffer ib = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
+        ib.bind(6);
+        GL20C.glUniform1i(mode, 1);
+        GL31C.glDrawElementsInstanced(GL11C.GL_TRIANGLES, 6, ib.type().asGLType, 0L, n);
+        GL20C.glUniform1i(mode, 0);
+        draws++;
+        vb.bind();
+    }
+
     private static Boolean ready;
 
     /** storage buffers and instancing (GL 4.3 or the extensions) */
@@ -324,6 +391,22 @@ public final class ParticleGpu {
     }
 
     private static Boolean capable;
+    /** the texture-buffer variant: the record's position, UVs and rotation index as instance attributes, corners in a texture buffer */
+    static boolean tbo;
+    private static final int CORNER_UNIT = 14;
+    private static int cornerTex;
+    /** programs whose corner sampler has its unit (see texelUnit) */
+    private static final java.util.Set<ShaderInstance> UNIT_SET = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+
+    /**
+     * The particle program's corner sampler on its own unit before its first draw - vanilla's draws too: unset it shares
+     * unit 0 with Sampler0's 2D texture, a draw Adreno drops (PartBatch.texelUnits: every item vanished on the phone).
+     */
+    private static void texelUnit(ShaderInstance shader) {
+        if (!UNIT_SET.add(shader)) return;
+        int at = GL20C.glGetUniformLocation(shader.getId(), "ProbeParticleCorners");
+        if (at >= 0) GL20C.glUniform1i(at, CORNER_UNIT);
+    }
 
     /**
      * Storage buffers and GL 3.3 (GL 4.3 or ARB_shader_storage_buffer_object): the shader patch and the draws both ask.
@@ -334,8 +417,13 @@ public final class ParticleGpu {
         Boolean c = capable;
         if (c == null) {
             var caps = org.lwjgl.opengl.GL.getCapabilities();
-            capable = c = GlLimits.vertexStorageBlocks() > 0 && caps.OpenGL33;
-            if (!c) System.out.println("[sleep/opt] particle records: not available (needs GL 4.3 or ARB_shader_storage_buffer_object, and GL 3.3): particles drawn the vanilla way");
+            boolean full = GlLimits.vertexStorageBlocks() > 0 && caps.OpenGL33;
+            boolean texels = caps.OpenGL33 && (caps.OpenGL31 || caps.GL_ARB_texture_buffer_object) && (GlLimits.texelBuffer || full)
+                    && !Boolean.getBoolean("lab.particles.noTbo");
+            tbo = texels && (!full || Boolean.getBoolean("lab.particles.forceTbo"));
+            capable = c = full || tbo;
+            System.out.println("[sleep/opt] particle records: " + (tbo ? "through instance attributes and a texture buffer (no vertex storage buffers here)"
+                    : c ? "available" : "not available (needs storage buffers or texture buffers, and GL 3.3): particles drawn the vanilla way"));
         }
         return c;
     }
@@ -368,6 +456,21 @@ public final class ParticleGpu {
                 // corners (1,-1) (1,1) (-1,1) (-1,-1): UVs (u1,v1) (u1,v0) (u0,v0) (u0,v1); uv = (u0, u1, v0, v1)
                 + "        probe_UV0 = probe_k == 0 ? probe_p.uv.yw : probe_k == 1 ? probe_p.uv.yz : probe_k == 2 ? probe_p.uv.xz : probe_p.uv.xw;\n"
                 + "    }";
+        if (tbo) {   // GLSL 3.30: the record from instance attributes, the corner from a texture buffer
+            pre = pre.replace("struct ProbeParticle { vec4 pos; vec4 uv; ivec4 misc; };\n"
+                            + "layout(std430) buffer ProbeParticles { ProbeParticle probeParticles[]; };\n"
+                            + "layout(std430) buffer ProbeParticleCorners { vec4 probeCorners[]; };\n",
+                    "layout(location = 12) in vec4 ProbePPos;\nlayout(location = 13) in vec4 ProbePUv;\nlayout(location = 14) in int ProbePCi;\n"
+                            + "uniform samplerBuffer ProbeParticleCorners;\n")
+                    .replace("        ProbeParticle probe_p = probeParticles[gl_InstanceID];\n", "")
+                    .replace("probeCorners[probe_p.misc.z * 4 + probe_k]", "texelFetch(ProbeParticleCorners, ProbePCi * 4 + probe_k)")
+                    .replace("probe_p.pos", "ProbePPos").replace("probe_p.uv", "ProbePUv");
+            if (pre.contains("probe_p.") || pre.contains("probeParticles")) return src;   // (the record path changed: vanilla's shader)
+            patched = true;
+            // (the extension enabled for `precise`: a driver defining its macro without it refuses the keyword - NVIDIA;
+            // where it is missing, enable is only a warning and the macro undefined)
+            return head.replaceFirst("#version 150", "#version 330\n#extension GL_ARB_gpu_shader5 : enable") + pre + body;
+        }
         String out = head.replaceFirst("#version 150", "#version 150\n#extension GL_ARB_shader_storage_buffer_object : require\n#extension GL_ARB_gpu_shader5 : enable")
                 + pre + body;
         patched = true;

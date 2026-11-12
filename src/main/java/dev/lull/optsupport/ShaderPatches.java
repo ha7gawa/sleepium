@@ -39,7 +39,7 @@ public final class ShaderPatches {
         if (FAILED.contains(type + ":" + name)) return src;
         if (type == Program.Type.VERTEX) {
             if (name.startsWith(PartsPrograms.PREFIX)) {   // a block program's copy for QuadGpu's records (PartsPrograms)
-                if (Boolean.getBoolean("lab.opt.PartBatchMixin") && PartBatch.capable()) src = PartBatch.patch(name, src);
+                if (Boolean.getBoolean("lab.opt.PartBatchMixin") && PartBatch.full()) src = PartBatch.patch(name, src);
             } else if ("particle".equals(name)) {   // particle records (ParticleGpuMixin)
                 if (Boolean.getBoolean("lab.opt.ParticleGpuMixin")) src = ParticleGpu.patch(src);
             } else if ("rendertype_translucent".equals(name)) {
@@ -53,12 +53,13 @@ public final class ShaderPatches {
                 // programs, and every terrain vertex paid for the records (N100 terrain view 82 -> 77 fps, 11-11)
                 if (Boolean.getBoolean("lab.opt.SbbPartsMixin") && Boolean.getBoolean("lab.opt.PartBatchMixin")
                         && !"rendertype_translucent".equals(name)
-                        && PartBatch.capable()) src = PartBatch.patch(name, src);
+                        && PartBatch.full()) src = PartBatch.patch(name, src);
             } else if (Boolean.getBoolean("lab.opt.PartBatchMixin") && (name.startsWith("rendertype_entity") || name.startsWith("rendertype_armor")
                     || name.startsWith("rendertype_item_entity"))
                     && PartBatch.capable()) {
                 src = PartBatch.patch(name, src);
                 src = Materials.patchVertex(name, src);
+                if (PartBatch.tbo && PartBatch.PATCHED.contains(name)) src = PartBatch.texelVariant(src);   // after Materials (it reads the records too)
             }
         } else if (type == Program.Type.FRAGMENT && Boolean.getBoolean("lab.opt.PartBatchMixin")) {
             src = Materials.patchFragment(name, src);
