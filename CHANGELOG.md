@@ -4,6 +4,91 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.2.0 - 2026-11-12
+
+Final numbers on the release build, against the same game without Sleepium's optimisations: an Intel N100 laptop
+(Intel UHD Graphics) and a desktop (Ryzen 7 5800X + RTX 4070 SUPER), Minecraft 1.21.1 unless noted.
+
+| | vanilla | Sleepium 1.1.11 | Sleepium 1.2.0 |
+|---|---:|---:|---:|
+| N100, plain terrain view, fps | 88 | 81-82 | 118-120 |
+| N100, the same with the experimental GPU terrain | | | 181-184 |
+| N100, armour stands, item frames, chests, signs, skulls | 36-42 | 109-110 | 134-135 |
+| N100, a pile of dropped items | 49-56 | 140-141 | 182 |
+| N100, a horde of mobs | 112-119 | 137-142 | 161-180 |
+| desktop, the same entity scene | 69 | | 2 152 |
+| desktop, terrain view | 332 | | 3 739 |
+| 1.20.1, 1 440 mobs with Entity Model Features + Fresh Animations | 11 | 25 | 43 |
+| 1.20.1, 144 such mobs | 42 | 541 | 594 |
+| 1.20.1, Biohazard (474 mods, Embeddium + Oculus) | 427-430 | 466-472 | 461-482 |
+| world generation, chunks per second (desktop / N100) | 54 / 13 | | 107 / 35 |
+
+- **Laptops and mini PCs with Intel graphics: about 1.4x faster on terrain.** On Intel's integrated graphics the way
+  Sleepium hands chunks to the graphics card in one call (the "indirect" draw) cost the graphics chip more than it saved
+  the processor: on an Intel N100 the plain terrain view ran at 82 fps with Sleepium against vanilla's 88. Sleepium now
+  uses the direct form of the same call there: the terrain view 82 -> 120 fps, a view over water 151 -> 210, and the
+  entity, item and mob scenes above gained 12-30 % from it too. Same picture. Other graphics keep the indirect form (on
+  an RTX 4070 SUPER it is the faster one: 3 660 vs 2 040 fps); -Dlab.chunkmd.indirect=true / false overrides.
+- **1.20.1: mobs with Entity Model Features drawn on several threads.** EMF 3.3.12 with Entity Texture Features 7.2.x
+  (the versions in many current 1.20.1 packs) kept every entity on the main thread: both mods keep "the entity being
+  drawn" in shared fields. Sleepium now gives each drawing thread its own copy of those fields and makes their caches
+  safe to share - only when the two mods are exactly the versions it was built against (anything else: as before, and
+  the log says why). 1 440 mobs with Fresh Animations: 25 -> 43 fps (vanilla 11). Animations are EMF's own; far mobs
+  are animated every frame on the helper threads instead of skipping frames, so their poses are not bit-for-bit those
+  of the main thread. Other EMF versions (3.2.4 in Biohazard, Better MC) and 1.21.1: later.
+- **Particles: up to 2x faster where there are many.** Each particle list is drawn in one go from a small record per
+  particle instead of four corners written per particle every frame; long lists are ticked on several threads (only
+  particles the game can prove touch nothing but themselves; the rest the usual way, in the usual order); a particle's
+  collision shapes and light are looked up once per block instead of every tick. 500 working Immersive Engineering
+  crushers, which throw a lot of particles: 94 -> 192 fps from the threads alone, 253-277 -> 305-323 with the records.
+- **Moving parts of machines drawn from graphics memory.** Machines whose renderers draw baked models every frame
+  (crushers, turrets, ...) hand the graphics card a position per part instead of all its corners. 60 working crushers:
+  vanilla 133, 1.1.11 560, now 979 fps. Same picture, pixel for pixel.
+- **Smoother frames.** On Windows the render thread and the singleplayer server run above normal priority, so background
+  programs and the game's own helper threads do not push them aside (Intel N100: stutters 4.49 % -> 1.35 % of frames,
+  the slowest frames 41.8 -> 22.2 ms; a setting, Threads). Together with the rest, the slowest frames (p99) on the N100
+  scenes above went from 15-21 ms with 1.1.11 to 11-15 ms.
+- **Machines of mods sleep when idle again, now on by default.** Machines whose tick Sleepium's analysis cannot follow
+  (Industrial Foregoing, Functional Storage, PneumaticCraft and other Titanium-based mods) are put to sleep while
+  Sleepium sees them idle and woken by any change it observes. We checked them exact on the mods we test, and a test
+  that removes a wake on purpose shows the difference, so the check works. Mods are many, though: **if a machine of
+  some mod stops, slows down or behaves differently, turn off lab.sleep.ObservedModSleep (Options -> Sleepium -> Ticks
+  & mobs) and please tell us which mod and machine.**
+- **Fixed: a crash next to Bons and Furious** (and any mod that changes the same entity-storage call). When Sleepium gave
+  way to such a mod in one place, a part that depended on it still applied and the server stopped at the first entity
+  move. Contributed by BonsUnleashed (GitHub #6) - thank you. The log now names the whole chain of what was left out.
+- **Entities in modpacks: drawn on several threads again.** Many mods listen to "an entity is being drawn" events
+  (Immersive Engineering does). Until now one such listener kept every entity on the main thread (1.21.1); now only
+  entities whose renderer actually sends that event stay there. Dropped items with IE installed: 1 579 -> 2 233 fps.
+- **Next to Iris / Oculus with shaders off: mobs drawn on several threads.** A horde of mobs with Sodium and Iris: 796 ->
+  1 012 fps (Sodium alone: 1 087). With a shaderpack on, entities stay on the main thread (the shader needs each
+  entity's id there).
+- **Fixed: Immersive Engineering's water wheels, windmills and bucket wheels were invisible.** Their renderers draw into
+  IE's own buffers later in the frame; the render cache saw an empty drawing and skipped them. A renderer that writes
+  nothing is now drawn the vanilla way.
+- **Dropped items and other entities: cheaper physics.** Entities on the client tick on several threads (dropped items,
+  arrows, boats - not mobs), and the checks every moving entity makes each tick ("am I touching fire or lava", "am I in
+  water", "what am I standing on") no longer build lists of positions or ask about every block when there is nothing to
+  find. A pile of 2 500 dropped items: client tick 13.1 -> 11.3-11.6 ms (1.21.1).
+- **Animated textures (water, lava, fire, portals, mods' animated blocks) updated on the graphics card.** A frame change
+  is copied from the texture itself instead of being uploaded from memory again.
+- **Burning entities are drawn on the main thread again.** Drawing their flames on other threads could, where a flame and
+  a body are at the same depth, show a few pixels differently. No measurable speed was lost.
+- **New, experimental, off by default: GPU terrain with level of detail.** Chunks are built into geometry on the graphics
+  card, and far terrain is drawn as larger cells (beyond 6 chunks, coarser beyond 10; a "closer" option uses 4 / 8 for
+  weak graphics). Near terrain looks the same; far terrain is simplified. Intel N100: the terrain view 88 (vanilla) ->
+  181-184 fps. Options -> Sleepium -> Terrain: "GPU terrain", plus "level of detail closer" and "LOD cone". Blocks whose
+  look depends on their neighbours (connected textures, Create's casings) are drawn the vanilla way near you. It turns
+  itself off next to mods that replace the terrain renderer (Sodium, Embeddium and the shader mods on them) and says so
+  in the log.
+- **Machines of more mods are checked before they sleep.** The analysis that decides whether a block entity can be put to
+  sleep finds tick functions created by helper classes, and no longer trusts state it cannot verify.
+- **1.20.1: the command is /sleepium** (as on 1.21.1).
+- **Tested together with:** ModernFix, Fast Noise, Lithostitched (world generation 54-76 -> 107-131 chunks per second,
+  with or without them), Bons and Furious (both versions: no crash,
+  Sleepium steps aside in 14 / 17 places), Industrial Foregoing and Functional Storage (exact, with and without the
+  machines' sleep). Exact: the world and frame checks (23 scenes on each version) as before.
+
 ## 1.1.11 - 2026-11-09
 
 - **World generation with datapacks like JJThunder To The Max: up to 2x faster.** To pick a biome, the game works out a

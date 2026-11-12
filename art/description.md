@@ -35,8 +35,29 @@ Intel N100 (4 cores, 6 W, Intel UHD Graphics), server milliseconds per tick, low
 
 Client, entity / block-entity scene (armour stands, item frames, chests, signs, skulls):
 
-- Intel N100: **39 → 117 fps**, garbage 3 952 → 113 KiB per frame
-- Ryzen 7 5800X + RTX 4070 SUPER: **67 → 1 514 fps**; 300 animated mobs 175 → 1 782 fps
+- Intel N100: **36-42 → 134-135 fps**
+- Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
+
+## New in 1.2.0
+
+| 1.2.0 against vanilla | vanilla | Sleepium 1.2.0 | |
+|---|---:|---:|---:|
+| Intel N100, terrain view, fps | 88 | 118-120 | +34-36 % |
+| Intel N100, dropped items, fps | 49-56 | 182 | ×3.3-3.7 |
+| Intel N100, a horde of mobs, fps | 112-119 | 161-180 | +35-60 % |
+| 1.20.1, 1 440 mobs with Entity Model Features + Fresh Animations, fps | 11 | 43 | ×3.9 |
+| world generation, chunks per second (desktop) | 54 | 107 | ×2.0 |
+
+- **Intel graphics (laptops, mini PCs): terrain about 1.4x faster** - chunks drawn with the call Intel's driver handles
+  best (the N100's terrain view was slower than vanilla before: 82 vs 88 fps; now 120).
+- **1.20.1: Entity Model Features mobs on several threads** (EMF 3.3.12 + ETF 7.2.x): 1 440 animated mobs 25 -> 43 fps.
+- **Particles up to 2x**, machines' moving parts drawn from the graphics card, smoother frames (the slowest frames on the
+  N100 15-21 -> 11-15 ms).
+- **Mods' idle machines sleep, on by default** (Industrial Foregoing, Functional Storage, PneumaticCraft...). If a machine
+  misbehaves, turn off `lab.sleep.ObservedModSleep` and tell us which one.
+- **Experimental GPU terrain with level of detail** (off by default): the N100's terrain view 88 -> 181-184 fps.
+- Tested with ModernFix, Fast Noise, Lithostitched, Bons and Furious; a crash next to Bons and Furious fixed (thanks to
+  BonsUnleashed).
 
 ## New in 1.1.11: tall-world datapacks generate up to 2x faster
 

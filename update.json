@@ -1,6 +1,7 @@
 {
   "homepage": "https://modrinth.com/mod/sleepium",
   "1.21.1": {
+    "1.2.0": "Intel graphics about 1.4x faster on terrain (direct chunk draws); particles up to 2x; machines' moving parts from the GPU; smoother frames; mods' idle machines sleep (report problems); a crash next to Bons and Furious fixed; experimental GPU terrain with LOD.",
     "1.1.11": "World generation with datapacks like JJThunder To The Max up to 2x faster (height-independent climate values computed once per column; same world).",
     "1.1.10": "Fixes world generation far from the centre being slower than vanilla (64 000 blocks out: 20-34 -> 123-126 chunks/s; vanilla 55), long teleports too; moving blocks' light a frame late.",
     "1.1.9": "Fixes 1.1.8 being slower next to ImmediatelyFast (dropped items 498 -> 1 765 fps); mods' entities added from a world-generation thread go where they belong; ObservedModSleep (off by default).",
@@ -19,12 +20,13 @@
     "1.0.0": "The first public release."
   },
   "promos": {
-    "1.21.1-latest": "1.1.11",
-    "1.21.1-recommended": "1.1.11",
-    "1.20.1-latest": "1.1.11",
-    "1.20.1-recommended": "1.1.11"
+    "1.21.1-latest": "1.2.0",
+    "1.21.1-recommended": "1.2.0",
+    "1.20.1-latest": "1.2.0",
+    "1.20.1-recommended": "1.2.0"
   },
   "1.20.1": {
+    "1.2.0": "The same as 1.21.1, plus mobs with Entity Model Features 3.3.12 drawn on several threads (1 440 animated mobs 25 -> 43 fps).",
     "1.1.11": "The same as 1.21.1: world generation with tall datapacks up to 2x faster, same world.",
     "1.1.10": "The same fixes as 1.21.1; blocks moved by pistons drawn from a cache (790-979 -> 1 515-1 552 fps on a piston scene).",
     "1.1.9": "The same as 1.21.1: next to ImmediatelyFast items and transparent entities go to the graphics card again (159 -> 718 fps on an items scene); entities added from a world-generation thread; ObservedModSleep (off).",
