@@ -573,6 +573,7 @@ public final class ChunkMultiDraw {
 
     /** From RenderSection.reset (origin change, release): every layer's entry. */
     public static void release(SectionRenderDispatcher.RenderSection section) {
+        RegionDraw.release(section);
         for (RenderType t : LAYERS) release(section, t);
         if (LightVolumes.ON) LightVolumes.released(section);
     }

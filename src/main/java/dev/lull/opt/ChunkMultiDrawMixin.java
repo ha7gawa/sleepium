@@ -109,7 +109,8 @@ public abstract class ChunkMultiDrawMixin {
             ci.cancel();
             return;
         }
-        if (!ACTIVE || !ChunkMultiDraw.layerSupported(renderType) || ChunkMultiDraw.PATCHED.isEmpty()) return;
+        boolean region = ACTIVE && dev.lull.optsupport.RegionDraw.on();   // drivers without draw parameters: by region, vanilla's shader
+        if (!ACTIVE || !ChunkMultiDraw.layerSupported(renderType) || ChunkMultiDraw.PATCHED.isEmpty() && !region) return;
         RenderSystem.assertOnRenderThread();
         renderType.setupRenderState();
         var profiler = this.minecraft.getProfiler();
@@ -120,7 +121,8 @@ public abstract class ChunkMultiDrawMixin {
         shader.apply();
         if (dev.lull.optsupport.OcclusionCull.ON) dev.lull.optsupport.OcclusionCull.matrices(frustumMatrix, projectionMatrix);
         var uniform = shader.CHUNK_OFFSET;
-        if (!ChunkMultiDraw.draw(renderType, this.visibleSections, x, y, z, shader)) {
+        if (!(region ? dev.lull.optsupport.RegionDraw.draw(renderType, this.visibleSections, x, y, z, shader)
+                : ChunkMultiDraw.draw(renderType, this.visibleSections, x, y, z, shader))) {
             for (SectionRenderDispatcher.RenderSection s : this.visibleSections) {   // vanilla loop
                 if (s.getCompiled().isEmpty(renderType)) continue;
                 VertexBuffer vb = s.getBuffer(renderType);

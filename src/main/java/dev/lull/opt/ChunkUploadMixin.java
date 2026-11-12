@@ -45,6 +45,13 @@ public abstract class ChunkUploadMixin implements ChunkBufferTag {
     @Inject(method = "upload(Lcom/mojang/blaze3d/vertex/MeshData;)V", at = @At("HEAD"), cancellable = true)
     private void sleep$store(MeshData mesh, CallbackInfo ci) {
         if (sleep$section == null) return;
+        if (dev.lull.optsupport.RegionDraw.on()) {   // no draw parameters here (GL translators): the opaque layers by region
+            if (dev.lull.optsupport.RegionDraw.store(sleep$section, sleep$layer, mesh)) {
+                mesh.close();   // what vanilla's upload does at the end
+                ci.cancel();
+            }
+            return;
+        }
         boolean ours = ChunkMultiDraw.store(sleep$section, sleep$layer, mesh);
         if (dev.lull.optsupport.LightVolumes.ON) dev.lull.optsupport.LightVolumes.uploaded(sleep$section, sleep$layer, mesh, ours);
         if (ours && ChunkMultiDraw.replacesVanilla(sleep$layer)) {
