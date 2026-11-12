@@ -137,7 +137,8 @@ public abstract class ChunkMultiDrawMixin {
             ci.cancel();
             return;
         }
-        if (!ACTIVE || !ChunkMultiDraw.layerSupported(renderType) || ChunkMultiDraw.PATCHED.isEmpty()) return;
+        boolean region = ACTIVE && dev.lull.optsupport.RegionDraw.on();   // drivers without draw parameters: by region, vanilla's shader
+        if (!ACTIVE || !ChunkMultiDraw.layerSupported(renderType) || ChunkMultiDraw.PATCHED.isEmpty() && !region) return;
         RenderSystem.assertOnRenderThread();
         renderType.setupRenderState();
         var profiler = this.minecraft.getProfiler();
@@ -148,7 +149,8 @@ public abstract class ChunkMultiDrawMixin {
         shader.apply();
         if (dev.lull.optsupport.OcclusionCull.ON) dev.lull.optsupport.OcclusionCull.matrices(poseStack.last().pose(), projectionMatrix);
         Uniform uniform = shader.CHUNK_OFFSET;
-        if (!ChunkMultiDraw.draw(renderType, this.renderChunksInFrustum, x, y, z, shader)) {
+        if (!(region ? dev.lull.optsupport.RegionDraw.draw(renderType, this.renderChunksInFrustum, x, y, z, shader)
+                : ChunkMultiDraw.draw(renderType, this.renderChunksInFrustum, x, y, z, shader))) {
             for (Object info : this.renderChunksInFrustum) {   // vanilla loop
                 ChunkRenderDispatcher.RenderChunk s = ((ChunkInfoAccessor) info).sleep$chunk();
                 if (s.getCompiledChunk().isEmpty(renderType)) continue;

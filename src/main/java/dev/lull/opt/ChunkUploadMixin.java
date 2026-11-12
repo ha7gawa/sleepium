@@ -59,6 +59,13 @@ public abstract class ChunkUploadMixin implements ChunkBufferTag {
             }
             return;
         }
+        if (dev.lull.optsupport.RegionDraw.on()) {   // no draw parameters here (GL translators): the opaque layers by region
+            if (dev.lull.optsupport.RegionDraw.store(sleep$section, sleep$layer, mesh)) {
+                mesh.release();   // what vanilla's upload does at the end
+                ci.cancel();
+            }
+            return;
+        }
         boolean ours = ChunkMultiDraw.store(sleep$section, sleep$layer, mesh);
         if (dev.lull.optsupport.LightVolumes.ON) dev.lull.optsupport.LightVolumes.uploaded(sleep$section, sleep$layer, mesh, ours);
         if (ours && ChunkMultiDraw.replacesVanilla(sleep$layer)) {
