@@ -35,6 +35,14 @@ public abstract class SpriteInterpolateMixin {
         if (i == j) return;
         SpriteContents c = this$0;
         int width = c.width(), height = c.height();
+        // GpuAnim: the blend drawn on the GPU from the sprite's sheet (vanilla's rounding through a table), nothing uploaded
+        if (dev.lull.optsupport.GpuAnim.on() && dev.lull.optsupport.GpuAnim.interpolate(c, x, y, anim.getFrameX(i) * width, anim.getFrameY(i) * height,
+                anim.getFrameX(j) * width, anim.getFrameY(j) * height, d)) {
+            if (dev.lull.optsupport.GpuAnim.VERIFY_BLEND && SpriteMix.interpolate(c.byMipLevel, activeFrame, width, height, anim.getFrameX(i), anim.getFrameY(i), anim.getFrameX(j), anim.getFrameY(j), d))
+                dev.lull.optsupport.GpuAnim.verifyBlend(activeFrame[0], x, y, width, height);
+            return;
+        }
+        long tuneAt = dev.lull.optsupport.GpuAnim.tuningCpu() ? System.nanoTime() : 0L;   // (GpuAnim measures the CPU way against its blend)
         if (!SpriteMix.interpolate(c.byMipLevel, activeFrame, width, height, anim.getFrameX(i), anim.getFrameY(i), anim.getFrameX(j), anim.getFrameY(j), d)) {
             SpriteMix.slow++;
             for (int k = 0; k < activeFrame.length; k++) {   // vanilla's loop
@@ -70,5 +78,6 @@ public abstract class SpriteInterpolateMixin {
                     + ", verified pixels " + SpriteMix.verified + ", mismatches " + SpriteMix.mismatches);
         }
         c.upload(x, y, 0, 0, activeFrame);
+        if (tuneAt != 0L) dev.lull.optsupport.GpuAnim.tuneCpu(System.nanoTime() - tuneAt);
     }
 }
