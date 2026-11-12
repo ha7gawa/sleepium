@@ -44,9 +44,14 @@ public final class GpuAnim {
         } catch (Throwable t) {
             return false;   // not a GL thread: undecided
         }
-        capable = c = caps.OpenGL45 || caps.OpenGL32 && caps.GL_ARB_copy_image && caps.GL_ARB_direct_state_access && caps.GL_ARB_buffer_storage
-                && caps.GL_ARB_get_texture_sub_image;
-        if (!c) LOG.info("[sleep/opt] gpu anim: not available (needs GL 4.5, or copy_image + direct state access + buffer storage): animated textures the vanilla way");
+        boolean copy = caps.OpenGL43 || caps.GL_ARB_copy_image;
+        boolean fbo = caps.OpenGL30 || caps.GL_ARB_framebuffer_object;
+        blit = fbo && !Boolean.getBoolean("lab.gpuAnim.noBlit") && (!copy || Boolean.getBoolean("lab.gpuAnim.forceBlit"));   // forceBlit: the blit path where copy_image exists too (to check it)
+        pboCapable = copy && (caps.OpenGL45 || caps.GL_ARB_direct_state_access && caps.GL_ARB_buffer_storage);
+        readBack = caps.OpenGL45 || caps.GL_ARB_get_texture_sub_image;
+        capable = c = copy || blit;
+        LOG.info(c ? "[sleep/opt] gpu anim: frame changes copied on the GPU by " + (blit ? "framebuffer blit (no copy_image here)" : "glCopyImageSubData")
+                : "[sleep/opt] gpu anim: not available (needs GL 4.3 / copy_image, or framebuffer objects): animated textures the vanilla way");
         return c;
     }
     private static final boolean VERIFY = Boolean.getBoolean("lab.gpuAnim.verify");
@@ -61,7 +66,7 @@ public final class GpuAnim {
 
     /** in place of SpriteContents.upload(x, y, frameX, frameY, byMipLevel); false: vanilla uploads */
     public static boolean copyFrame(SpriteContents c, NativeImage[] mips, int x, int y, int frameX, int frameY) {
-        if (atlas == 0 || mips.length == 0 || mips[0].format() != NativeImage.Format.RGBA) return false;
+        if (atlas == 0 || mips.length == 0 || mips[0].format() != NativeImage.Format.RGBA || blitBroken) return false;
         long t0 = System.nanoTime();
         Integer sheet = SHEETS.get(c);
         if (sheet == null) {
@@ -72,10 +77,14 @@ public final class GpuAnim {
         int w = c.width(), h = c.height();
         for (int i = 0; i < mips.length; i++) {
             if ((w >> i) <= 0 || (h >> i) <= 0) break;   // NeoForge's bound, as in upload
-            GL43C.glCopyImageSubData(sheet, GL11C.GL_TEXTURE_2D, i, frameX >> i, frameY >> i, 0, atlas, GL11C.GL_TEXTURE_2D, i, x >> i, y >> i, 0, w >> i, h >> i, 1);
+            if (blit) {
+                if (!blitCopy(sheet, i, frameX >> i, frameY >> i, x >> i, y >> i, w >> i, h >> i)) return i == 0 ? false : true;
+            } else {
+                GL43C.glCopyImageSubData(sheet, GL11C.GL_TEXTURE_2D, i, frameX >> i, frameY >> i, 0, atlas, GL11C.GL_TEXTURE_2D, i, x >> i, y >> i, 0, w >> i, h >> i, 1);
+            }
         }
         copyNs += System.nanoTime() - t0;
-        if (VERIFY) verify(mips[0], x, y, frameX, frameY, w, h);
+        if (VERIFY && readBack) verify(mips[0], x, y, frameX, frameY, w, h);
         copies++;
         return true;
     }
@@ -148,6 +157,7 @@ public final class GpuAnim {
 
     /** an atlas's animation tick ends: a fence after the segment's uploads */
     public static void tickEnd() {
+        blitEnd();
         if (pbo != 0 && segUsed > 0) {
             FENCES[seg] = org.lwjgl.opengl.GL32C.glFenceSync(org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
             GL11C.glFlush();
@@ -156,7 +166,7 @@ public final class GpuAnim {
 
     /** in place of SpriteContents.upload during an atlas's tick (only interpolated frames still upload); false: vanilla */
     public static boolean ringUpload(SpriteContents c, int x, int y, int frameX, int frameY, NativeImage[] data) {
-        if (!PBO || atlas == 0) return false;
+        if (!PBO || atlas == 0 || !pboCapable) return false;
         int w = c.width(), h = c.height();
         long need = 0;
         int levels = 0;
@@ -202,8 +212,74 @@ public final class GpuAnim {
             GL43C.glCopyImageSubData(stage, GL11C.GL_TEXTURE_2D, k, 0, 0, 0, atlas, GL11C.GL_TEXTURE_2D, k, x >> k, y >> k, 0, w >> k, h >> k, 1);
         pboNs += System.nanoTime() - t0;
         pboUploads++;
-        if (VERIFY) verify(data[0], x, y, frameX, frameY, w, h);
+        if (VERIFY && readBack) verify(data[0], x, y, frameX, frameY, w, h);
         return true;
+    }
+
+    // ------------------------------------------------------------------ the blit path (no copy_image)
+
+    /** frame copies by glBlitFramebuffer (GL 3.0 / GLES 3.0), the drivers without copy_image (Android's LTW: GL 3.3) */
+    static boolean blit, pboCapable, readBack;
+    private static boolean blitBroken, blitChecked, blitBound;
+    private static int readFbo, drawFbo, savedRead, savedDraw;
+    private static boolean savedScissor;
+    public static long blits;
+
+    /**
+     * One mip level of a frame: the sheet's level on the read framebuffer, the atlas's on the draw one, a nearest blit of
+     * the same size - texel for texel. The bindings are saved once an atlas tick (the first copy) and put back at its
+     * end (blitEnd). false: the first blit failed its checks - the feature stops, vanilla uploads from now on.
+     */
+    private static boolean blitCopy(int sheet, int level, int sx, int sy, int dx, int dy, int w, int h) {
+        if (!blitBound) {
+            savedRead = GL11C.glGetInteger(org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER_BINDING);
+            savedDraw = GL11C.glGetInteger(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER_BINDING);
+            savedScissor = GL11C.glIsEnabled(GL11C.GL_SCISSOR_TEST);
+            if (savedScissor) GL11C.glDisable(GL11C.GL_SCISSOR_TEST);   // a blit is clipped by it
+            if (readFbo == 0) {
+                readFbo = org.lwjgl.opengl.GL30C.glGenFramebuffers();
+                drawFbo = org.lwjgl.opengl.GL30C.glGenFramebuffers();
+            }
+            org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER, readFbo);
+            org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, drawFbo);
+            blitBound = true;
+        }
+        org.lwjgl.opengl.GL30C.glFramebufferTexture2D(org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER, org.lwjgl.opengl.GL30C.GL_COLOR_ATTACHMENT0, GL11C.GL_TEXTURE_2D, sheet, level);
+        org.lwjgl.opengl.GL30C.glFramebufferTexture2D(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, org.lwjgl.opengl.GL30C.GL_COLOR_ATTACHMENT0, GL11C.GL_TEXTURE_2D, atlas, level);
+        if (!blitChecked) {
+            int r = org.lwjgl.opengl.GL30C.glCheckFramebufferStatus(org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER);
+            int d = org.lwjgl.opengl.GL30C.glCheckFramebufferStatus(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER);
+            if (r != org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER_COMPLETE || d != org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER_COMPLETE) {
+                blitBroken = true;
+                LOG.info("[sleep/opt] gpu anim: framebuffer blit not usable here (status {} / {}): animated textures the vanilla way", r, d);
+                blitEnd();
+                return false;
+            }
+        }
+        org.lwjgl.opengl.GL30C.glBlitFramebuffer(sx, sy, sx + w, sy + h, dx, dy, dx + w, dy + h, GL11C.GL_COLOR_BUFFER_BIT, GL11C.GL_NEAREST);
+        if (!blitChecked) {
+            blitChecked = true;
+            int err = GL11C.glGetError();
+            if (err != GL11C.GL_NO_ERROR) {
+                blitBroken = true;
+                LOG.info("[sleep/opt] gpu anim: the first framebuffer blit failed (GL error {}): animated textures the vanilla way", err);
+                blitEnd();
+                return false;
+            }
+        }
+        blits++;
+        return true;
+    }
+
+    /** an atlas tick's end (and a failed check): the framebuffers and the scissor as they were */
+    static void blitEnd() {
+        if (!blitBound) return;
+        org.lwjgl.opengl.GL30C.glFramebufferTexture2D(org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER, org.lwjgl.opengl.GL30C.GL_COLOR_ATTACHMENT0, GL11C.GL_TEXTURE_2D, 0, 0);
+        org.lwjgl.opengl.GL30C.glFramebufferTexture2D(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, org.lwjgl.opengl.GL30C.GL_COLOR_ATTACHMENT0, GL11C.GL_TEXTURE_2D, 0, 0);
+        org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER, savedRead);
+        org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, savedDraw);
+        if (savedScissor) GL11C.glEnable(GL11C.GL_SCISSOR_TEST);
+        blitBound = false;
     }
 
     /** the sprite closed (a resource reload): its sheet goes */
