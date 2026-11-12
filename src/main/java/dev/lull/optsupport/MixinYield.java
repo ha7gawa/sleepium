@@ -159,7 +159,11 @@ public final class MixinYield {
         return null;
     }
 
+    /** a dedicated server has no client classes: asking for one only makes the loader log an error ("invalid dist") */
+    private static final boolean SERVER = !net.minecraftforge.fml.loading.FMLEnvironment.dist.isClient();
+
     private static ClassNode node(String internal) {
+        if (SERVER && internal.startsWith("net/minecraft/client/")) return null;
         try {
             return org.spongepowered.asm.service.MixinService.getService().getBytecodeProvider().getClassNode(internal.replace('/', '.'));
         } catch (Throwable t) {
