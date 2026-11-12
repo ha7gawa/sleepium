@@ -39,7 +39,10 @@ public final class ShaderPatches {
         if (FAILED.contains(type + ":" + name)) return src;
         if (type == Program.Type.VERTEX) {
             if (name.startsWith(PartsPrograms.PREFIX)) {   // a block program's copy for QuadGpu's records (PartsPrograms)
-                if (Boolean.getBoolean("lab.opt.PartBatchMixin") && PartBatch.full()) src = PartBatch.patch(name, src);
+                if (Boolean.getBoolean("lab.opt.PartBatchMixin") && PartBatch.capable()) {
+                    src = PartBatch.patch(name, src);
+                    if (PartBatch.tbo && PartBatch.PATCHED.contains(name)) src = PartBatch.texelVariant(src);   // (texture buffers: QuadGpu's records on GL 3.3)
+                }
             } else if ("particle".equals(name)) {   // particle records (ParticleGpuMixin)
                 if (Boolean.getBoolean("lab.opt.ParticleGpuMixin")) src = ParticleGpu.patch(src);
             } else if ("rendertype_translucent".equals(name)) {

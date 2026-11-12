@@ -488,7 +488,7 @@ public final class PartBatch {
                     && typeOk(t) && (full()
                     // texture buffers: records grouped by geometry (their order changes) - entity types whose order does not
                     // matter only; block-format runs (QuadGpu, the terrain program's copies) not there yet
-                    || tbo && t.format() == DefaultVertexFormat.NEW_ENTITY && EntityBatch.commutes(t));
+                    || tbo && EntityBatch.commutes(t));   // (block types too: QuadGpu's runs through the terrain program's copy)
             ITEM_TYPE_OK.put(t, ok);
         }
         return ok && partsAllowed();
@@ -587,7 +587,11 @@ public final class PartBatch {
      * records, then the batch's vertex array bound again.
      */
     public static void beforeDraw(ShaderInstance shader, com.mojang.blaze3d.vertex.VertexBuffer vb, org.joml.Matrix4f modelView, org.joml.Matrix4f projection) {
-        if (tbo) texelUnits(shader);
+        if (tbo) {
+            texelUnits(shader);
+            lastModelView = modelView;   // (afterDraw binds the terrain program's copy for QuadGpu's records with them)
+            lastProjection = projection;
+        }
         RenderType t = current;
         if (t == null || ITEM_QUEUES.isEmpty() || tbo) return;   // (texture buffers: after the batch, afterDraw)
         Queue q = ITEM_QUEUES.get(t);
@@ -1465,6 +1469,7 @@ public final class PartBatch {
 
     /** From VertexBuffer._drawWithShader right after the batch's own draw: the type's queued parts. */
     private static boolean drewItems;
+    private static org.joml.Matrix4f lastModelView, lastProjection;
 
     /** programs whose texture-buffer samplers have their units (a new program object after a resource reload) */
     private static final java.util.Set<ShaderInstance> TEXEL_UNITS_SET = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
@@ -1493,8 +1498,15 @@ public final class PartBatch {
             // held swords and framed items invisible on the phone)
             Queue iq = ITEM_QUEUES.get(t);
             if (iq != null && iq.n > 0) {
-                itemBlock = false;
-                drawQueue(shader, iq, 7);
+                itemBlock = t.format() == DefaultVertexFormat.BLOCK;
+                ShaderInstance use = shader;
+                if (itemBlock && !PATCHED.contains(shader.getName()))   // the terrain's program: QuadGpu's records through its copy
+                    use = lastModelView == null ? null : PartsPrograms.bind(shader, lastModelView, lastProjection);
+                if (use == null) fallbacks += iq.n;
+                else {
+                    drawQueue(use, iq, 7);
+                    if (use != shader) PartsPrograms.unbind(use, shader);
+                }
                 iq.n = 0;
                 drewItems = true;
             }
@@ -1689,6 +1701,7 @@ public final class PartBatch {
      * ProbeRecordBase at its first record. Other modes do not reach here (full()).
      */
     private static void drawQueueTexels(ShaderInstance shader, Queue q, int mode) {
+        texelUnits(shader);   // (a program drawn only here - the terrain program's copy - never passed beforeDraw: its samplers' units)
         int n = q.n;
         int[] st = TEXEL_PROGRAMS.computeIfAbsent(shader.getId(), id -> new int[] {GL20C.glGetUniformLocation(id, "ProbePartMode"),
                 GL20C.glGetUniformLocation(id, "ProbePartTex"), GL20C.glGetUniformLocation(id, "ProbePartInts"), GL20C.glGetUniformLocation(id, "ProbeRecordBase")});
@@ -1729,7 +1742,7 @@ public final class PartBatch {
         GL20C.glUniform1i(st[1], TEXEL_UNIT);
         GL20C.glUniform1i(st[2], INT_UNIT);
         if (vaoStale || vao == 0 || itemVao == 0) setupVao();
-        GL30C.glBindVertexArray(mode == 7 ? itemVao : vao);   // (item geometry: its own colour and baked light attributes)
+        GL30C.glBindVertexArray(mode == 7 ? (itemBlock ? itemBlockVao : itemVao) : vao);   // (item geometry: its own colour and baked light; BLOCK shaders' order for QuadGpu)
         RenderSystem.AutoStorageIndexBuffer seq = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
         seq.bind(q.maxIndices);
         GL20C.glUniform1i(st[0], mode);
