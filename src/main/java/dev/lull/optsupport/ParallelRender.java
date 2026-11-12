@@ -1000,6 +1000,10 @@ public final class ParallelRender {
             }
         }
 
+        static boolean measuring() {
+            return ON && (phase == 1 || phase == 2);
+        }
+
         /** with nothing measured: the flag's value */
         private static boolean PARTS_DEFAULT() {
             return PartBatch.PARTS_IN_JOBS;
@@ -1016,6 +1020,11 @@ public final class ParallelRender {
             PartBatch.partsInJobs = PartBatch.PARTS_IN_JOBS;
             result = "not measured";
         }
+    }
+
+    /** the entities' measuring windows are running (CacheTune, PartsTune): other measured choices wait */
+    public static boolean measuring() {
+        return CacheTune.ON && (CacheTune.phase == 1 || CacheTune.phase == 2) || PartsTune.measuring();
     }
 
     /** Calibration.reset: the entities' choices measured again */

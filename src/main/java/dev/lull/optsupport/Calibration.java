@@ -110,7 +110,8 @@ public final class Calibration {
         String c = ParallelRender.CacheTune.last.startsWith("the workers") || ParallelRender.CacheTune.last.startsWith("workers") ? "threads"
                 : ParallelRender.CacheTune.last.startsWith("the cache") || ParallelRender.CacheTune.last.startsWith("cache") ? "cache" : "?";
         String pt = ParallelRender.PartsTune.result.startsWith("in the jobs") ? "GPU" : ParallelRender.PartsTune.result.startsWith("the CPU") ? "CPU" : "?";
-        return "blend " + i + " · entities " + c + " · parts " + pt;
+        String ch = ChunkMultiDraw.pathChoice.startsWith("indirect") ? "indirect" : ChunkMultiDraw.pathChoice.startsWith("direct") ? "direct" : "?";
+        return "blend " + i + " · entities " + c + " · parts " + pt + " · chunks " + ch;
     }
 
     /** forget everything measured (the settings' Recalibrate): the choices are measured again */
@@ -123,5 +124,6 @@ public final class Calibration {
         }
         GpuAnim.recalibrate();
         ParallelRender.recalibrate();
+        ChunkMultiDraw.recalibrate();
     }
 }
