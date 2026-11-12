@@ -29,6 +29,8 @@ public final class SleepUi {
         });
         // live numbers: frame times (every frame), the integrated server's tick and the sleep engine (its thread)
         gameBus.addListener(net.neoforged.bus.api.EventPriority.LOWEST, net.neoforged.neoforge.client.event.RenderFrameEvent.Pre.class, e -> SleepStats.frame());
+        // the main menu measures what it can before a world opens (Calibration: then kept, no measuring in the game)
+        gameBus.addListener(net.neoforged.neoforge.client.event.ClientTickEvent.Post.class, e -> dev.lull.optsupport.GpuAnim.menuTick());
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> SleepStats.serverTick(e.getServer()));
         gameBus.addListener(net.neoforged.neoforge.client.event.RenderGuiEvent.Post.class, e -> {
             if (Minecraft.getInstance().screen == null) SleepStats.drawHud(e.getGuiGraphics());
