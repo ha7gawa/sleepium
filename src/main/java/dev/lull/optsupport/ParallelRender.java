@@ -494,6 +494,7 @@ public final class ParallelRender {
         hookers.addAll(MixinTouch.touchers("net/minecraft/client/renderer/LevelRenderer", "renderEntity"));
         dispatchMods = hookers.toString();
         if (hookers.contains("?") || hookers.contains("index")) return "the mods in the dispatcher not known";
+        RenderFieldFlow.of("");   // the analysis and its log (notes/71), whatever is decided here
         // the code a worker job runs for an entity: model parts, models, renderers. A mod with mixins both in the dispatcher
         // and here keeps per-entity state between the two (Entity Model Features: the animated entity in globals its model
         // mixins read) - on a worker that is another entity's, a data race. (A local: INNER, above, is initialised first.)
@@ -507,7 +508,9 @@ public final class ParallelRender {
         for (String[] w : workerCode)
             for (String c : MixinTouch.touchers(w[0], w[1])) {
                 if (c.equals("?")) return "unknown mixins in " + w[0] + "." + w[1];
-                if (hookers.contains(c) && !EmfAdapter.covers(c)) return c + " is in the dispatcher and in " + w[0].substring(w[0].lastIndexOf('/') + 1) + "." + w[1];
+                if (hookers.contains(c) && !EmfAdapter.covers(c) && !RenderFieldFlow.trusted(c))
+                    return c + " is in the dispatcher and in " + w[0].substring(w[0].lastIndexOf('/') + 1) + "." + w[1]
+                            + (RenderFieldFlow.of(c) == null ? "" : " (field flow: " + RenderFieldFlow.of(c).why() + ")");
             }
         return null;
     }

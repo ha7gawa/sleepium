@@ -379,6 +379,55 @@ public final class MixinTouch {
         return out;
     }
 
+    /** a foreign mixin config as its mod file holds it (RenderFieldFlow) */
+    record ForeignConfig(net.minecraftforge.fml.loading.moddiscovery.ModFile file, String mod, String name, String pkg, List<String> mixins,
+                         com.google.gson.JsonObject refmap) {}
+
+    /** every foreign mixin config of every mod file (jar-in-jar mods included), read from the files; mixins: class names (dots) */
+    static List<ForeignConfig> foreignConfigs() {
+        List<ForeignConfig> out = new java.util.ArrayList<>();
+        try {
+            var mods = net.minecraftforge.fml.loading.LoadingModList.get();
+            if (mods == null) return out;
+            for (var info : mods.getModFiles()) {
+                var file = info.getFile();
+                for (String name : mixinConfigs(file)) {
+                    if (ours(name)) continue;
+                    try {
+                        java.nio.file.Path json = file.findResource(name);
+                        if (json == null || !java.nio.file.Files.exists(json)) continue;
+                        com.google.gson.JsonObject o = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(json)).getAsJsonObject();
+                        if (!o.has("package") || !o.get("package").isJsonPrimitive()) continue;
+                        String pkg = o.get("package").getAsString();
+                        if (pkg.startsWith("dev.lull") || pkg.startsWith("dev.probe")) continue;
+                        List<String> mixins = new java.util.ArrayList<>();
+                        for (String key : new String[] {"mixins", "client"})
+                            if (o.has(key) && o.get(key).isJsonArray())
+                                for (var e : o.getAsJsonArray(key)) if (e.isJsonPrimitive()) mixins.add(pkg + "." + e.getAsString());
+                        out.add(new ForeignConfig(file, info.moduleName(), name, pkg, mixins, refMapFile(file, o)));
+                    } catch (Throwable t) {
+                        System.out.println("[sleep/opt] render field flow: " + name + " not read: " + t);
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            System.out.println("[sleep/opt] render field flow: mod files not read: " + t);
+        }
+        return out;
+    }
+
+    /** a mixin method's injector targets (official names; ALL when unclear; empty: not an injector), read through the refmap */
+    static List<String> handlerTargets(com.google.gson.JsonObject refmap, String mixinInternalName, MethodNode m) {
+        REFMAP.set(refMapEntries(refmap, mixinInternalName));
+        try {
+            List<String> out = injectorTargets(m);
+            for (AnnotationNode a : annotations(m)) if ("Lorg/spongepowered/asm/mixin/Overwrite;".equals(a.desc)) out.add(official(m.name));
+            return out;
+        } finally {
+            REFMAP.remove();
+        }
+    }
+
     /** One foreign mixin class's touches, by its target classes (a class without @Mixin adds nothing). */
     private static void indexClass(byte[] bytes, Map<String, Set<String>> m, com.google.gson.JsonObject refmap, String owner) {
         ClassNode cn = new ClassNode();
