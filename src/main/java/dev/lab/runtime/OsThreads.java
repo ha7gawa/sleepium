@@ -27,6 +27,9 @@ public final class OsThreads {
     public interface LinuxC extends com.sun.jna.Library {
         int setpriority(int which, int who, int prio);
         int syscall(int number);
+        /** pid = a thread id acts on that thread; mask = cpu_set_t as longs */
+        int sched_setaffinity(int pid, long cpusetsize, long[] mask);
+        int sched_getcpu();
     }
 
     /** macOS libSystem: the calling thread's QoS class */
@@ -97,12 +100,48 @@ public final class OsThreads {
 
     /** Call from the thread itself. mask 0 = leave as is. Returns false if not supported. */
     public static boolean pinCurrent(long affinityMask) {
-        if (affinityMask == 0 || K32 == null) return false;
-        Kernel32 k = (Kernel32) K32;
-        return k.SetThreadAffinityMask(k.GetCurrentThread(), affinityMask) != 0;
+        if (affinityMask == 0) return false;
+        try {
+            if (K32 != null) {
+                Kernel32 k = (Kernel32) K32;
+                return k.SetThreadAffinityMask(k.GetCurrentThread(), affinityMask) != 0;
+            }
+            if (LIBC instanceof LinuxC c) {   // (Android too: a CPU outside the app's cpuset is refused, -1)
+                int nr = gettidNumber();
+                int tid = nr >= 0 ? c.syscall(nr) : -1;
+                return tid > 0 && c.sched_setaffinity(tid, 8, new long[] {affinityMask}) == 0;
+            }
+        } catch (Throwable t) {
+            // not there
+        }
+        return false;
     }
 
     public static int currentCpu() {
-        return K32 != null ? ((Kernel32) K32).GetCurrentProcessorNumber() : -1;
+        try {
+            if (K32 != null) return ((Kernel32) K32).GetCurrentProcessorNumber();
+            if (LIBC instanceof LinuxC c) return c.sched_getcpu();
+        } catch (Throwable t) {
+            // not there
+        }
+        return -1;
+    }
+
+    /**
+     * Linux: each CPU's maximum frequency in kHz (cpufreq), -1 where unknown; null elsewhere. Phones mix core kinds
+     * (Snapdragon 855: 4 x 1.78, 3 x 2.42, 1 x 2.96 GHz) - the fastest are where a frame's critical threads belong.
+     */
+    public static long[] cpuMaxKhz() {
+        if (!LINUX) return null;
+        int n = Runtime.getRuntime().availableProcessors();
+        long[] f = new long[Math.max(n, 1)];
+        for (int i = 0; i < f.length; i++) {
+            try {
+                f[i] = Long.parseLong(java.nio.file.Files.readString(java.nio.file.Path.of("/sys/devices/system/cpu/cpu" + i + "/cpufreq/cpuinfo_max_freq")).trim());
+            } catch (Throwable t) {
+                f[i] = -1;
+            }
+        }
+        return f;
     }
 }

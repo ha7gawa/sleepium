@@ -111,6 +111,9 @@ public final class PartBatch {
      */
     public static String patch(String name, String src) {
         if (!src.startsWith("#version 150") || !src.contains("void main() {")) return src;
+        // the path decided before the first patch (tbo: a shader patched before it was set got the storage-buffer
+        // variant - on LTW six entity programs failed to compile, items drawn with them vanished, 11-12)
+        if (!capable()) return src;
         Map<String, String> types = new HashMap<>();
         Matcher m = IN.matcher(src);
         while (m.find()) types.put(m.group(2), m.group(1));
@@ -509,7 +512,10 @@ public final class PartBatch {
             // BLOCK: QuadGpu's runs (block entities' baked quads into the block layers), drawn with their own vertex array
             ok = (t.format() == DefaultVertexFormat.NEW_ENTITY || t.format() == DefaultVertexFormat.BLOCK) && t.mode() == VertexFormat.Mode.QUADS
                     && (EntityBatch.commutes(t) || t.format() == DefaultVertexFormat.NEW_ENTITY && ItemGpu.sortedOk(t))
-                    && typeOk(t) && full();
+                    && typeOk(t) && (full()
+                    // texture buffers: records grouped by geometry (their order changes) - entity types whose order does not
+                    // matter only; block-format runs (QuadGpu, the terrain program's copies) not there yet
+                    || tbo && t.format() == DefaultVertexFormat.NEW_ENTITY && EntityBatch.commutes(t));
             ITEM_TYPE_OK.put(t, ok);
         }
         return ok && partsAllowed();
@@ -593,8 +599,9 @@ public final class PartBatch {
      * records, then the batch's vertex array bound again.
      */
     public static void beforeDraw(ShaderInstance shader, com.mojang.blaze3d.vertex.VertexBuffer vb, org.joml.Matrix4f modelView, org.joml.Matrix4f projection) {
+        if (tbo) texelUnits(shader);
         RenderType t = current;
-        if (t == null || ITEM_QUEUES.isEmpty()) return;
+        if (t == null || ITEM_QUEUES.isEmpty() || tbo) return;   // (texture buffers: after the batch, afterDraw)
         Queue q = ITEM_QUEUES.get(t);
         if (q == null || q.n == 0) return;
         itemBlock = t.format() == DefaultVertexFormat.BLOCK;
@@ -1481,10 +1488,41 @@ public final class PartBatch {
     }
 
     /** From VertexBuffer._drawWithShader right after the batch's own draw: the type's queued parts. */
+    private static boolean drewItems;
+
+    /** programs whose texture-buffer samplers have their units (a new program object after a resource reload) */
+    private static final java.util.Set<ShaderInstance> TEXEL_UNITS_SET = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+
+    /**
+     * Texture buffers: the patched program's ProbePartTex / ProbePartInts on their own units (12, 13) before its first
+     * draw. Unset they are unit 0, beside Sampler0's 2D texture: samplers of two types on one unit make a draw invalid -
+     * desktop drivers draw anyway, Adreno (LTW) drops it (11-12: every item on the phone invisible, entity_translucent_cull
+     * never had a part drawn that would set them). The program is bound here (_drawWithShader, before the draw).
+     */
+    private static void texelUnits(ShaderInstance shader) {
+        if (!TEXEL_UNITS_SET.add(shader)) return;
+        int id = shader.getId();
+        int a = GL20C.glGetUniformLocation(id, "ProbePartTex"), b = GL20C.glGetUniformLocation(id, "ProbePartInts");
+        if (a >= 0) GL20C.glUniform1i(a, TEXEL_UNIT);
+        if (b >= 0) GL20C.glUniform1i(b, INT_UNIT);
+    }
+
     public static void afterDraw(ShaderInstance shader) {
         RenderType t = current;
         if (t == null) return;
         Queue q = QUEUES.get(t), r = RESIDENT.get(t), gq = GEO_QUEUES.get(t), sq = SBB_QUEUES.get(t);
+        if (tbo && !ITEM_QUEUES.isEmpty()) {
+            // texture buffers: item records after the batch, as the parts (their types' order does not matter there, see
+            // itemTypeOk); drawn in the batch's draw call, before it, the batch's own vertices vanished on LTW (11-12:
+            // held swords and framed items invisible on the phone)
+            Queue iq = ITEM_QUEUES.get(t);
+            if (iq != null && iq.n > 0) {
+                itemBlock = false;
+                drawQueue(shader, iq, 7);
+                iq.n = 0;
+                drewItems = true;
+            }
+        }
         PQueue pq = PERSIST.isEmpty() ? null : PERSIST.get(t);
         Queue lq = LIT_QUEUES.isEmpty() ? null : LIT_QUEUES.get(t);
         // a source that draws a type in more than one piece a frame (ImmediatelyFast): each queue is drawn after the
@@ -1492,7 +1530,15 @@ public final class PartBatch {
         // blend twice, opaque ones cost the GPU again)
         boolean parts = q != null && q.n > 0, res = r != null && r.n > 0, geo = gq != null && gq.n > 0, sbb = sq != null && sq.n > 0,
                 per = pq != null && pq.n > 0 && pq.drawnFrame != frame, lit = lq != null && lq.n > 0;
-        if (!parts && !res && !geo && !sbb && !per && !lit) return;
+        if (!parts && !res && !geo && !sbb && !per && !lit) {
+            if (drewItems) {   // vanilla's state as below: its next immediate draw must not take our vertex array for its own
+                drewItems = false;
+                com.mojang.blaze3d.vertex.BufferUploader.invalidate();
+                GL30C.glBindVertexArray(0);
+            }
+            return;
+        }
+        drewItems = false;
         if (lit) drawQueue(shader, lq, 6);
         if (parts) drawQueue(shader, q, 1);
         if (geo) drawQueue(shader, gq, 3);
@@ -1662,7 +1708,7 @@ public final class PartBatch {
     public static long texelGroups, texelRecords;
 
     /**
-     * Modes 1 and 3: the queue's records grouped by their geometry (index count, base vertex) - many entities share a
+     * Modes 1, 3 and 7 (items of entity types whose order does not matter): the queue's records grouped by their geometry (index count, base vertex) - many entities share a
      * model - and uploaded in that order into the texture buffer; each group one glDrawElementsInstancedBaseVertex,
      * ProbeRecordBase at its first record. Other modes do not reach here (full()).
      */
@@ -1670,7 +1716,7 @@ public final class PartBatch {
         int n = q.n;
         int[] st = TEXEL_PROGRAMS.computeIfAbsent(shader.getId(), id -> new int[] {GL20C.glGetUniformLocation(id, "ProbePartMode"),
                 GL20C.glGetUniformLocation(id, "ProbePartTex"), GL20C.glGetUniformLocation(id, "ProbePartInts"), GL20C.glGetUniformLocation(id, "ProbeRecordBase")});
-        if (st[0] < 0 || st[1] < 0 || st[2] < 0 || st[3] < 0 || (mode != 1 && mode != 3)) {
+        if (st[0] < 0 || st[1] < 0 || st[2] < 0 || st[3] < 0 || (mode != 1 && mode != 3 && mode != 7)) {
             fallbacks += n;
             q.n = 0;
             q.maxIndices = 0;
@@ -1706,8 +1752,8 @@ public final class PartBatch {
         com.mojang.blaze3d.platform.GlStateManager._activeTexture(prevUnit);
         GL20C.glUniform1i(st[1], TEXEL_UNIT);
         GL20C.glUniform1i(st[2], INT_UNIT);
-        if (vaoStale || vao == 0) setupVao();
-        GL30C.glBindVertexArray(vao);
+        if (vaoStale || vao == 0 || itemVao == 0) setupVao();
+        GL30C.glBindVertexArray(mode == 7 ? itemVao : vao);   // (item geometry: its own colour and baked light attributes)
         RenderSystem.AutoStorageIndexBuffer seq = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
         seq.bind(q.maxIndices);
         GL20C.glUniform1i(st[0], mode);
