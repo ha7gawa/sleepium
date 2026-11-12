@@ -46,7 +46,7 @@ public final class GpuAnim {
         }
         boolean copy = caps.OpenGL43 || caps.GL_ARB_copy_image;
         boolean fbo = caps.OpenGL30 || caps.GL_ARB_framebuffer_object;
-        blit = !copy && fbo && !Boolean.getBoolean("lab.gpuAnim.noBlit");
+        blit = fbo && !Boolean.getBoolean("lab.gpuAnim.noBlit") && (!copy || Boolean.getBoolean("lab.gpuAnim.forceBlit"));   // forceBlit: the blit path where copy_image exists too (to check it)
         pboCapable = copy && (caps.OpenGL45 || caps.GL_ARB_direct_state_access && caps.GL_ARB_buffer_storage);
         readBack = caps.OpenGL45 || caps.GL_ARB_get_texture_sub_image;
         capable = c = copy || blit;
