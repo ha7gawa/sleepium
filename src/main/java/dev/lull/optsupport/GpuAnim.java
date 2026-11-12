@@ -47,7 +47,8 @@ public final class GpuAnim {
         boolean copy = caps.OpenGL43 || caps.GL_ARB_copy_image;
         boolean fbo = caps.OpenGL30 || caps.GL_ARB_framebuffer_object;
         blit = fbo && !Boolean.getBoolean("lab.gpuAnim.noBlit") && (!copy || Boolean.getBoolean("lab.gpuAnim.forceBlit"));   // forceBlit: the blit path where copy_image exists too (to check it)
-        pboCapable = copy && (caps.OpenGL45 || caps.GL_ARB_direct_state_access && caps.GL_ARB_buffer_storage);
+        dsa = (caps.OpenGL45 || caps.GL_ARB_direct_state_access && caps.GL_ARB_buffer_storage) && !Boolean.getBoolean("lab.gpuAnim.noDsa");   // noDsa: the bound-buffer ring (to check it)
+        pboCapable = (copy || blit) && (dsa || (caps.OpenGL44 || caps.GL_ARB_buffer_storage) && caps.OpenGL30);
         readBack = caps.OpenGL45 || caps.GL_ARB_get_texture_sub_image;
         capable = c = copy || blit;
         LOG.info(c ? "[sleep/opt] gpu anim: frame changes copied on the GPU by " + (blit ? "framebuffer blit (no copy_image here)" : "glCopyImageSubData")
@@ -133,7 +134,17 @@ public final class GpuAnim {
      * Mixed on the N100: the 1.21.1 voxel flight's tick 4.1-4.5 -> 3.45 ms, but 1.20.1's entities scene (GPU-bound) 2.48 (copies
      * only) -> 3.15 ms - so opt-in; the copies alone (the default with the feature) gain or tie everywhere measured.
      */
-    static final boolean PBO = ON && Boolean.getBoolean("lab.gpuAnim.pbo");
+    static final boolean PBO_FLAG = ON && Boolean.getBoolean("lab.gpuAnim.pbo");
+
+    /**
+     * the ring for interpolated frames: -Dlab.gpuAnim.pbo only. On Android's LTW (bound buffers, the copy a blit) it cost
+     * more than vanilla's uploads: 3.5 vs 2.7 ms an atlas tick - the translator copies an unpack from a buffer too.
+     */
+    static boolean pbo() {
+        return pboCapable && PBO_FLAG;
+    }
+
+    static boolean dsa;
     // 8 segments of 256 KiB (a tick's interpolated frames are ~15 KiB): a segment comes back ~4 client ticks later, long
     // read by then - with 3 the fence wait blocked the render thread in a GPU-bound scene (1.20.1 N100: tick 2.5 -> 3.6 ms)
     private static final int SEG = 1 << 18, NSEG = 8;
@@ -166,7 +177,7 @@ public final class GpuAnim {
 
     /** in place of SpriteContents.upload during an atlas's tick (only interpolated frames still upload); false: vanilla */
     public static boolean ringUpload(SpriteContents c, int x, int y, int frameX, int frameY, NativeImage[] data) {
-        if (!PBO || atlas == 0 || !pboCapable) return false;
+        if (atlas == 0 || !pbo()) return false;
         int w = c.width(), h = c.height();
         long need = 0;
         int levels = 0;
@@ -178,11 +189,28 @@ public final class GpuAnim {
         }
         if (need > SEG) return false;
         if (pbo == 0) {
-            pbo = GL45C.glCreateBuffers();
             int flags = org.lwjgl.opengl.GL30C.GL_MAP_WRITE_BIT | org.lwjgl.opengl.GL44C.GL_MAP_PERSISTENT_BIT | org.lwjgl.opengl.GL44C.GL_MAP_COHERENT_BIT;
-            GL45C.glNamedBufferStorage(pbo, (long) SEG * NSEG, flags);
-            pboPtr = MemoryUtil.memAddress(GL45C.glMapNamedBufferRange(pbo, 0, (long) SEG * NSEG, flags));
+            if (dsa) {
+                pbo = GL45C.glCreateBuffers();
+                GL45C.glNamedBufferStorage(pbo, (long) SEG * NSEG, flags);
+                pboPtr = MemoryUtil.memAddress(GL45C.glMapNamedBufferRange(pbo, 0, (long) SEG * NSEG, flags));
+            } else {   // bind-based (no DSA: Android's LTW, buffer storage from EXT_buffer_storage)
+                pbo = org.lwjgl.opengl.GL15C.glGenBuffers();
+                org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, pbo);
+                org.lwjgl.opengl.GL44C.glBufferStorage(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, (long) SEG * NSEG, flags);
+                java.nio.ByteBuffer m = org.lwjgl.opengl.GL30C.glMapBufferRange(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, 0, (long) SEG * NSEG, flags);
+                org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, 0);
+                if (m == null) {   // the mapping refused: no ring from now on
+                    org.lwjgl.opengl.GL15C.glDeleteBuffers(pbo);
+                    pbo = 0;
+                    pboCapable = false;
+                    LOG.info("[sleep/opt] gpu anim: the upload ring could not be mapped here: interpolated frames the vanilla way");
+                    return false;
+                }
+                pboPtr = MemoryUtil.memAddress(m);
+            }
             segUsed = 0;
+            LOG.info("[sleep/opt] gpu anim: interpolated frames through a mapped ring ({})", dsa ? "direct state access" : "bound buffers");
         }
         if (segUsed + need > SEG) return false;
         long t0 = System.nanoTime();
@@ -204,12 +232,23 @@ public final class GpuAnim {
             int iw = img.getWidth(), lw = w >> k, lh = h >> k, fx = frameX >> k, fy = frameY >> k;
             long off = (long) seg * SEG + segUsed;
             for (int r = 0; r < lh; r++) MemoryUtil.memCopy(src + ((long) (fy + r) * iw + fx) * 4, pboPtr + off + (long) r * lw * 4, (long) lw * 4);
-            GL45C.glTextureSubImage2D(stage, k, 0, 0, lw, lh, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, off);
+            if (dsa) {
+                GL45C.glTextureSubImage2D(stage, k, 0, 0, lw, lh, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, off);
+            } else {
+                GlStateManager._bindTexture(stage);
+                GL11C.glTexSubImage2D(GL11C.GL_TEXTURE_2D, k, 0, 0, lw, lh, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, off);
+            }
             segUsed += lw * lh * 4;
         }
         org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, 0);
-        for (int k = 0; k < levels; k++)   // into the atlas by a GPU copy, as the plain frames
-            GL43C.glCopyImageSubData(stage, GL11C.GL_TEXTURE_2D, k, 0, 0, 0, atlas, GL11C.GL_TEXTURE_2D, k, x >> k, y >> k, 0, w >> k, h >> k, 1);
+        if (!dsa) GlStateManager._bindTexture(atlas);
+        for (int k = 0; k < levels; k++) {   // into the atlas by a GPU copy, as the plain frames
+            if (blit) {
+                if (!blitCopy(stage, k, 0, 0, x >> k, y >> k, w >> k, h >> k)) break;
+            } else {
+                GL43C.glCopyImageSubData(stage, GL11C.GL_TEXTURE_2D, k, 0, 0, 0, atlas, GL11C.GL_TEXTURE_2D, k, x >> k, y >> k, 0, w >> k, h >> k, 1);
+            }
+        }
         pboNs += System.nanoTime() - t0;
         pboUploads++;
         if (VERIFY && readBack) verify(data[0], x, y, frameX, frameY, w, h);
