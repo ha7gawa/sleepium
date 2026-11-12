@@ -1,8 +1,9 @@
 """The front page's charts (art/gallery/): horizontal bar pairs, the reference in gray and Sleepium in the accent (the
 emphasis form: one series is the point), each bar labelled with its value, one scale per chart.
-    python tools/gen_charts.py
+    python tools/gen_charts.py [file.png ...]   (only the named charts; all without arguments)
 """
 import os
+import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -11,6 +12,8 @@ OUT = os.path.join(ROOT, 'art', 'gallery')
 FONTS = r'C:\Windows\Fonts'
 BG, INK, MUTED, GRID = (20, 24, 46), (236, 239, 255), (150, 160, 200), (52, 58, 92)
 REF, ACCENT = (128, 136, 168), (201, 133, 0)   # #8088a8 de-emphasis, #c98500 accent (validated on #14182e)
+PREV = (135, 92, 34)   # #875c22 the previous release: a dim accent (all pairs >= 15 normal / CVD; 2.99:1, every bar labelled)
+ONLY = sys.argv[1:]
 
 
 def font(size, bold=False):
@@ -35,6 +38,8 @@ def nice_max(v):
 
 def chart(name, title, subtitle, rows, labels, unit, note=None, label_w=520):
     """rows: (label, ref value, sleepium value, ref text, sleepium text)"""
+    if ONLY and name not in ONLY:
+        return
     W = 1600
     row_h = 112
     top = 230
@@ -105,3 +110,96 @@ chart('next-to-mods-110.png', 'Next to other optimisation mods: what 1.1.0 bring
        ('EMF 3.3 + Fresh Animations (1.21.1)', 372, 498, '335-408', '490-506')],
       ('Sleepium before 1.1.0, with the same mod', 'Sleepium 1.1.0'), 'fps', label_w=600,
       note='Same machine; frames as before (EMF parts drawn from VRAM: to float rounding). Server: items next to Lithium 4.32 -> 3.37 ms/tick.')
+
+
+def multi(name, title, subtitle, series, sections, note=None, label_w=560):
+    """series: (legend text, colour) top to bottom in each row; sections: (heading or None, unit, rows), each section its
+    own scale and axis (small multiples); rows: (label, [value or None per series], [text per series])"""
+    if ONLY and name not in ONLY:
+        return
+    W, bar, gap = 1600, 32, 6
+    n = len(series)
+    row_h = n * (bar + gap) + 30
+    H = 210
+    for head, unit, rows in sections:
+        H += (52 if head else 0) + row_h * len(rows) + 56
+    H += 80 if note else 30
+    img = Image.new('RGB', (W, H), BG)
+    d = ImageDraw.Draw(img)
+    d.text((60, 40), title, font=font(44, True), fill=INK)
+    d.text((60, 102), subtitle, font=font(26), fill=MUTED)
+    lx = 60
+    for txt, col in series:
+        d.rounded_rectangle([lx, 160, lx + 28, 184], 4, fill=col)
+        d.text((lx + 40, 154), txt, font=font(26), fill=INK)
+        lx += 40 + d.textlength(txt, font=font(26)) + 60
+    y = 230
+    left, right = label_w, W - 260
+    for head, unit, rows in sections:
+        if head:
+            d.text((60, y), head, font=font(28), fill=MUTED)
+            y += 52
+        vmax, step = nice_max(max(v for r in rows for v in r[1] if v is not None))
+        scale = (right - left) / vmax
+        y0, y1 = y - 12, y + row_h * len(rows) - 18
+        t = 0.0
+        while t <= vmax + 1e-9:
+            gx = left + t * scale
+            d.line([(gx, y0), (gx, y1)], fill=GRID, width=2)
+            sv = '{:,}'.format(int(t)).replace(',', ' ') if t == int(t) else '%g' % t
+            d.text((gx - d.textlength(sv, font=font(22)) / 2, y1 + 8), sv, font=font(22), fill=MUTED)
+            t += step
+        d.text((right + 50, y1 + 8), unit, font=font(22), fill=MUTED)
+        for lab, vals, texts in rows:
+            d.text((60, y + (n * (bar + gap)) / 2 - 20), lab, font=font(28, True), fill=INK)
+            for j, ((_, col), v, txt) in enumerate(zip(series, vals, texts)):
+                by = y + j * (bar + gap)
+                if v is None:
+                    d.text((left + 14, by + 1), txt or '-', font=font(24), fill=MUTED)
+                    continue
+                x1 = left + max(v * scale, 6)
+                d.rounded_rectangle([left, by, x1, by + bar], 4, fill=col)   # 4px rounded end
+                d.rectangle([left, by, left + 4, by + bar], fill=col)          # square at the baseline
+                d.text((x1 + 14, by), txt, font=font(26, True), fill=INK)
+            y += row_h
+        y += 56
+    if note:
+        d.text((60, H - 70), note, font=font(22), fill=MUTED)
+    img.save(os.path.join(OUT, name))
+    print(name, img.size)
+
+
+S3 = (('without Sleepium (the same jars, optimisations off)', REF), ('Sleepium 1.1.11', PREV), ('Sleepium 1.2.0', ACCENT))
+
+multi('n100-120.png', 'An Intel N100 laptop with Intel graphics',
+      'Minecraft 1.21.1, production client, frames per second, higher is better; Intel UHD Graphics',
+      S3, [(None, 'fps', [
+          ('Terrain view', [88, 81.5, 119], ['88', '81-82', '118-120']),
+          ('Terrain, experimental GPU terrain', [88, None, 182.5], ['88', 'not in 1.1.11', '181-184']),
+          ('Armour stands, frames, chests, signs', [39, 109.5, 134.5], ['36-42', '109-110', '134-135']),
+          ('A pile of dropped items', [52.5, 140.5, 182], ['49-56', '140-141', '182']),
+          ('A horde of mobs', [115.5, 139.5, 170.5], ['112-119', '137-142', '161-180'])])],
+      note='Bars at the middle of each measured range. GPU terrain is off by default (Options -> Sleepium -> Terrain).', label_w=600)
+
+multi('forge-1201-120.png', 'Minecraft 1.20.1 / Forge: mobs with Entity Model Features',
+      'production client, frames per second, higher is better; RTX 4070 SUPER; EMF 3.3.12 + ETF 7.2 + Fresh Animations',
+      S3, [('A crowd: scale up to 50 fps', 'fps', [
+          ('1 440 mobs', [11, 25, 43], ['11', '25', '43'])]),
+          ('Fewer mobs and a modpack: scale up to 600 fps', 'fps', [
+          ('144 mobs', [42, 541, 594], ['42', '541', '594']),
+          ('Biohazard, 474 mods', [428.5, 469, 471.5], ['427-430', '466-472', '461-482'])])],
+      note='Biohazard ships EMF 3.2.4: its mobs stay on the main thread until 1.2.1. Bars at the middle of each range.', label_w=600)
+
+multi('desktop-120.png', 'Without Sleepium and with 1.2.0',
+      'production clients, Minecraft 1.21.1; Ryzen 7 5800X + RTX 4070 SUPER unless noted; higher is better',
+      (('without Sleepium (the same jars, optimisations off)', REF), ('Sleepium 1.2.0', ACCENT)),
+      [('Frames per second', 'fps', [
+          ('Terrain view', [332, 3739], ['332', '3 739']),
+          ('Armour stands, frames, chests, signs', [69, 2152], ['69', '2 152']),
+          ('60 working IE crushers', [177, 1786], ['177', '1 786']),
+          ('500 crushers with particles', [265, 2103], ['265', '2 103']),
+          ('500 crushers piling ~2 000 items', [32, 423], ['32  (p99 94 ms)', '423  (p99 15 ms)'])]),
+       ('World generation, chunks per second', 'chunks/s', [
+          ('Desktop', [54, 107], ['54', '107']),
+          ('Intel N100', [13, 35], ['13', '35'])])],
+      note='IE: Immersive Engineering. p99: the slowest 1 % of frames.', label_w=600)
