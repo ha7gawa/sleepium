@@ -2,6 +2,8 @@ package dev.lull.opt;
 
 import com.mojang.blaze3d.preprocessor.GlslPreprocessor;
 import com.mojang.blaze3d.shaders.Program;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import java.io.InputStream;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -28,8 +30,35 @@ public abstract class ChunkShaderPatchMixin {
         sleep$name = name;
     }
 
+    /** the source as read, before the patches (the fallback compiles it), and whether a patch changed it */
+    @Unique private static String sleep$original;
+    @Unique private static boolean sleep$changed;
+
     @ModifyVariable(method = "compileShaderInternal", at = @At("STORE"), index = 5)
     private static String sleep$patch(String src) {
-        return src == null ? null : dev.lull.optsupport.ShaderPatches.apply(sleep$type, sleep$name, src);
+        sleep$original = src;
+        String out = src == null ? null : dev.lull.optsupport.ShaderPatches.apply(sleep$type, sleep$name, src);
+        sleep$changed = out != null && !out.equals(src);
+        return out;
+    }
+
+    /**
+     * A patched shader the driver does not compile: vanilla's source compiled instead (ShaderPatches.failed), not a
+     * crash. Vanilla's own failure is rethrown as it was.
+     */
+    @WrapMethod(method = "compileShaderInternal")
+    private static int sleep$fallback(Program.Type type, String name, InputStream in, String sourceName, GlslPreprocessor preprocessor,
+            Operation<Integer> original) throws java.io.IOException {
+        try {
+            return original.call(type, name, in, sourceName, preprocessor);
+        } catch (Exception e) {
+            if (!(e instanceof java.io.IOException io) || !sleep$changed || sleep$original == null) throw e;
+            String vanilla = sleep$original;
+            sleep$changed = false;
+            String msg = io.getMessage();
+            int colon = msg == null ? -1 : msg.indexOf(") : ");
+            dev.lull.optsupport.ShaderPatches.failed(type, name, colon < 0 ? msg : msg.substring(colon + 4));
+            return original.call(type, name, new java.io.ByteArrayInputStream(vanilla.getBytes(java.nio.charset.StandardCharsets.UTF_8)), sourceName, preprocessor);
+        }
     }
 }

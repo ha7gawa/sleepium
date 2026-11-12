@@ -13,7 +13,7 @@ public abstract class GpuAnimCloseMixin {
     /** inside an atlas's animation tick only interpolated frames still upload (the rest are copied): their upload timed */
     @Inject(method = "upload", at = @At("HEAD"), cancellable = true)
     private void sleep$uploadIn(int x, int y, int frameX, int frameY, com.mojang.blaze3d.platform.NativeImage[] data, CallbackInfo ci) {
-        if (!GpuAnim.ON || GpuAnim.atlas == 0) return;
+        if (!GpuAnim.on() || GpuAnim.atlas == 0) return;
         if (GpuAnim.ringUpload((SpriteContents) (Object) this, x, y, frameX, frameY, data)) {   // through the mapped ring
             ci.cancel();
             return;
@@ -23,7 +23,7 @@ public abstract class GpuAnimCloseMixin {
 
     @Inject(method = "upload", at = @At("RETURN"))
     private void sleep$uploadOut(int x, int y, int frameX, int frameY, com.mojang.blaze3d.platform.NativeImage[] data, CallbackInfo ci) {
-        if (GpuAnim.ON && GpuAnim.atlas != 0 && GpuAnim.uploadT0 != 0) {
+        if (GpuAnim.on() && GpuAnim.atlas != 0 && GpuAnim.uploadT0 != 0) {
             GpuAnim.interpUploadNs += System.nanoTime() - GpuAnim.uploadT0;
             GpuAnim.interpUploads++;
             GpuAnim.uploadT0 = 0;
@@ -32,6 +32,6 @@ public abstract class GpuAnimCloseMixin {
 
     @Inject(method = "close", at = @At("HEAD"))
     private void sleep$releaseSheet(CallbackInfo ci) {
-        if (GpuAnim.ON) GpuAnim.release((SpriteContents) (Object) this);
+        if (GpuAnim.on()) GpuAnim.release((SpriteContents) (Object) this);
     }
 }

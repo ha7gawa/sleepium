@@ -22,7 +22,7 @@ public abstract class GpuAnimFrameMixin {
 
     @Inject(method = "uploadFrame", at = @At("HEAD"), cancellable = true)
     private void sleep$gpuFrame(int x, int y, int frameIndex, CallbackInfo ci) {
-        if (!GpuAnim.ON) return;
+        if (!GpuAnim.on()) return;
         SpriteContents c = this$0;
         if (GpuAnim.copyFrame(c, c.byMipLevel, x, y, getFrameX(frameIndex) * c.width(), getFrameY(frameIndex) * c.height())) ci.cancel();
     }
