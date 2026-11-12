@@ -664,6 +664,13 @@ public final class ParallelRender {
      */
     private static final boolean LISTENERS_ON_WORKERS = Boolean.getBoolean("lab.prender.listenersOnWorkers");
 
+    /**
+     * -Dlab.prender.cachedOnWorkers: the render cache's recorded objects replayed on the workers too (else the render
+     * thread replays them: cheaper than a job on a desktop CPU; on a phone's cores 28 us an object, 17 ms a frame in
+     * client_entities, where the workers without the cache were faster). Recording stays on the render thread.
+     */
+    static final boolean CACHED_ON_WORKERS = Boolean.getBoolean("lab.prender.cachedOnWorkers");
+
     /** -Dlab.prender.why=true: why entities stayed on the render thread (counts in the report) */
     private static final boolean WHY = Boolean.getBoolean("lab.prender.why");
     static final long[] WHY_N = new long[8];
@@ -686,7 +693,8 @@ public final class ParallelRender {
                 || d.shouldRenderHitBoxes()) return no(4);
         if (listened != 0 && !LISTENERS_ON_WORKERS && (anyListener || EventSites.postsListened(d.getRenderer(e).getClass(), listened))) return no(5);
         if (dev.lull.api.Compat.parallelRenderExcluded(e)) return no(6);
-        if (!(!Boolean.getBoolean("lab.opt.RenderCacheMixin") || RenderCache.animated(e) || dev.lull.api.Compat.renderCacheExcluded(e))) return no(7);
+        if (!(!Boolean.getBoolean("lab.opt.RenderCacheMixin") || RenderCache.animated(e) || dev.lull.api.Compat.renderCacheExcluded(e))
+                && !(CACHED_ON_WORKERS && RenderCache.replayable(e))) return no(7);
         // with the render cache on: what it draws the vanilla way (animated, or excluded from it by Compat)
         return true;
     }

@@ -260,7 +260,8 @@ public final class RenderCache {
     private static final PoseStack LOCAL = new PoseStack();
     private static int recordDepth;
     private static final Rec PROBE = new Rec();
-    private static final Map<Object, Rec> RECS = new WeakHashMap<>();
+    /** locked: render workers look their objects up too (replays there, ParallelRender.cachedOnWorkers) */
+    private static final Map<Object, Rec> RECS = java.util.Collections.synchronizedMap(new WeakHashMap<>());
 
     /**
      * Renderers of animation libraries animate by time by design (their output changes every frame): marked learned
@@ -479,7 +480,8 @@ public final class RenderCache {
             return;
         }
         // where a renderer drawing past its recorder ends up: the source itself, or the frame's one behind a wrapper
-        real = buffers instanceof MultiBufferSource.BufferSource bs ? bs : Minecraft.getInstance().renderBuffers().bufferSource();
+        boolean worker = !com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread();
+        if (!worker) real = buffers instanceof MultiBufferSource.BufferSource bs ? bs : Minecraft.getInstance().renderBuffers().bufferSource();
         long tick = level.getGameTime();
         long[] cs = BY_CLASS.computeIfAbsent(rendererClass, RenderCache::classCounters);
         Rec rec = RECS.get(obj);
@@ -501,7 +503,7 @@ public final class RenderCache {
             if (WHY) why(obj, rec);
         }
         if (rec.recorded && rec.state == rec.stateNow && rec.key == key && rec.light == light && rec.overlay == overlay && rec.yaw == yaw && tick < rec.refreshAt) {
-            if (VERIFY && record(d, pt, PROBE) == OK) {
+            if (VERIFY && !worker && record(d, pt, PROBE) == OK) {
                 verified++;
                 if (!PROBE.sameAs(rec)) {
                     mismatches++;
@@ -511,6 +513,12 @@ public final class RenderCache {
             replay(rec, buffers, pose);
             hits++;
             cs[0]++;
+            return;
+        }
+        if (worker) {   // recordings belong to the render thread: drawn here, recorded there next frame (ParallelRender keeps it)
+            rec.recorded = false;
+            vanilla++;
+            d.draw(pose, buffers, pt);
             return;
         }
         if (frameRecordNanos >= RECORD_BUDGET && recordDepth == 0) {   // the frame's recording time is spent: next frame
@@ -666,15 +674,29 @@ public final class RenderCache {
 
     /** ParallelRender: recorded camera-relative output appended as it is (no transform). */
     static void append(Rec rec, MultiBufferSource buffers) {
-        M.identity();
-        N.identity();
+        Ctx ctx = CTX.get();
+        ctx.m.identity();
+        ctx.n.identity();
         replay(rec, buffers, null);
     }
 
     // ------------------------------------------------------------------ replay
 
-    private static final Matrix4f M = new Matrix4f();
-    private static final Matrix3f N = new Matrix3f(), IDENTITY3 = new Matrix3f();
+    /** a replay's pose and the vertex tags it puts back: per thread (render workers replay too) */
+    private static final class Ctx {
+        final Matrix4f m = new Matrix4f();
+        final Matrix3f n = new Matrix3f();
+        final int[] tags = new int[3];
+    }
+
+    private static final ThreadLocal<Ctx> CTX = ThreadLocal.withInitial(Ctx::new);
+    private static final Matrix3f IDENTITY3 = new Matrix3f();
+
+    /** recorded objects a render worker may replay (the recording itself stays on the render thread) */
+    static boolean replayable(Object obj) {
+        Rec rec = RECS.get(obj);
+        return rec != null && rec.recorded && rec.skipUntil <= 0;
+    }
 
     private static void replay(Rec rec, MultiBufferSource buffers, PoseStack pose) {
         if (!TIME) {
@@ -687,6 +709,10 @@ public final class RenderCache {
     }
 
     private static void replay0(Rec rec, MultiBufferSource buffers, PoseStack pose) {
+        Ctx ctx = CTX.get();
+        Matrix4f M = ctx.m;
+        Matrix3f N = ctx.n;
+        int[] TAGS_SAVED = ctx.tags;
         boolean asIs = pose == null;
         if (!asIs) {
             M.set(pose.last().pose());
@@ -748,9 +774,11 @@ public final class RenderCache {
         if (tags) VertexTags.write(TAGS_SAVED, 0);
     }
 
-    private static final int[] TAGS_SAVED = new int[3];
 
     private static void transform(long base, int n, VertexFormat f, boolean normalIdentity) {
+        Ctx ctx = CTX.get();
+        Matrix4f M = ctx.m;
+        Matrix3f N = ctx.n;
         int vs = f.getVertexSize(), po = RecordingBuilder.offset(f, DefaultVertexFormat.ELEMENT_POSITION), no = RecordingBuilder.offset(f, DefaultVertexFormat.ELEMENT_NORMAL);
         if (normalIdentity && M.m00() == 1 && M.m11() == 1 && M.m22() == 1 && M.m01() == 0 && M.m02() == 0 && M.m10() == 0 && M.m12() == 0 && M.m20() == 0
                 && M.m21() == 0 && M.m03() == 0 && M.m13() == 0 && M.m23() == 0 && M.m33() == 1) {
@@ -863,6 +891,9 @@ public final class RenderCache {
     }
 
     private static void generic(VertexConsumer vc, long src, int n, VertexFormat f, Rec rec, int seg) {
+        Ctx ctx = CTX.get();
+        Matrix4f M = ctx.m;
+        Matrix3f N = ctx.n;
         int vs = f.getVertexSize();
         int[] kinds = KINDS.computeIfAbsent(f, RenderCache::kinds);   // the elements' kinds, worked out once per format
         int ne = kinds.length / 2;
