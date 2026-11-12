@@ -41,6 +41,10 @@ public final class SleepUi {
         gameBus.addListener(EventPriority.LOWEST, false, TickEvent.RenderTickEvent.class, e -> {
             if (e.phase == TickEvent.Phase.START) SleepStats.frame();
         });
+        // the main menu measures what it can before a world opens (Calibration: then kept, no measuring in the game)
+        gameBus.addListener(EventPriority.NORMAL, false, TickEvent.ClientTickEvent.class, e -> {
+            if (e.phase == TickEvent.Phase.END) dev.lull.optsupport.GpuAnim.menuTick();
+        });
         gameBus.addListener(EventPriority.NORMAL, false, TickEvent.ServerTickEvent.class, e -> {
             if (e.phase == TickEvent.Phase.END) SleepStats.serverTick(e.getServer());
         });

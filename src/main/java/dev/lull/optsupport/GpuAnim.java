@@ -540,7 +540,8 @@ public final class GpuAnim {
                 return;
             }
         }
-        if (net.minecraft.client.Minecraft.getInstance().screen != null) return;   // (a screen open: not counted)
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        if (mc.level != null && mc.screen != null) return;   // (a screen over the world: not counted; the main menu's ticks are - menuTick)
         switch (tunePhase) {
             case 0 -> {
                 if (++tuneTicks >= SETTLE) {
@@ -581,6 +582,25 @@ public final class GpuAnim {
                 }
             }
         }
+    }
+
+    private static boolean menuLogged;
+
+    /**
+     * Client tick, on the main menu: while the blend choice is not made (nor kept from an earlier launch), the block
+     * atlas's animation tick is run here - the game runs it only with a world - so the choice is measured before the
+     * player joins one, where nothing shows it (the menu does not draw the block atlas). The same path as in the game
+     * (GpuAnimAtlasMixin's tick, the copies, the blends): ~460 atlas ticks, about 25 s; joining earlier finishes it there.
+     */
+    public static void menuTick() {
+        if (!INTERP || interpBroken || tunePhase >= 4 || !"tune".equals(INTERP_WAY)) return;
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        if (mc.level != null || !(mc.screen instanceof net.minecraft.client.gui.screens.TitleScreen) || mc.getOverlay() != null || !on()) return;
+        if (!menuLogged) {
+            menuLogged = true;
+            LOG.info("[sleep/opt] gpu anim: measuring the blend choice on the main menu");
+        }
+        mc.getModelManager().getAtlas(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS).cycleAnimationFrames();
     }
 
     /** Calibration.reset (the settings' Recalibrate): measured again, from the next atlas tick */
