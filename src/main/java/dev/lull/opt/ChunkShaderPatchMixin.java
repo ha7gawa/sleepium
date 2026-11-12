@@ -58,6 +58,15 @@ public abstract class ChunkShaderPatchMixin {
             String msg = io.getMessage();
             int colon = msg == null ? -1 : msg.indexOf(") : ");
             dev.lull.optsupport.ShaderPatches.failed(type, name, colon < 0 ? msg : msg.substring(colon + 4));
+            // the preprocessor remembers the files it imported and leaves them out the second time (fog_distance undefined):
+            // its sets of imported paths emptied for the vanilla attempt
+            for (Class<?> k = preprocessor.getClass(); k != null && k != Object.class; k = k.getSuperclass())
+                for (java.lang.reflect.Field f : k.getDeclaredFields())
+                    if (java.util.Set.class.isAssignableFrom(f.getType()) && !java.lang.reflect.Modifier.isStatic(f.getModifiers()))
+                        try {
+                            f.setAccessible(true);
+                            ((java.util.Set<?>) f.get(preprocessor)).clear();
+                        } catch (Throwable t) { /* a set we cannot reach: the attempt may still fail as before */ }
             return original.call(type, name, new java.io.ByteArrayInputStream(vanilla.getBytes(java.nio.charset.StandardCharsets.UTF_8)), sourceName, preprocessor);
         }
     }

@@ -215,6 +215,29 @@ public final class PartBatch {
 
     // ------------------------------------------------------------------ geometry arena (position 3f, uv 2f, normal 3b+flags, colour 4b, light 2s: 32 bytes)
 
+    /**
+     * A matrix into a record, column by column as JOML's getToAddress writes it - without JOML's Unsafe path, which some
+     * JVMs refuse at its first use (Java on Android: "Unexpected Matrix4f element offset", the game stopped).
+     */
+    static void putMatrix(org.joml.Matrix4f m, long a) {
+        MemoryUtil.memPutFloat(a, m.m00());
+        MemoryUtil.memPutFloat(a + 4, m.m01());
+        MemoryUtil.memPutFloat(a + 8, m.m02());
+        MemoryUtil.memPutFloat(a + 12, m.m03());
+        MemoryUtil.memPutFloat(a + 16, m.m10());
+        MemoryUtil.memPutFloat(a + 20, m.m11());
+        MemoryUtil.memPutFloat(a + 24, m.m12());
+        MemoryUtil.memPutFloat(a + 28, m.m13());
+        MemoryUtil.memPutFloat(a + 32, m.m20());
+        MemoryUtil.memPutFloat(a + 36, m.m21());
+        MemoryUtil.memPutFloat(a + 40, m.m22());
+        MemoryUtil.memPutFloat(a + 44, m.m23());
+        MemoryUtil.memPutFloat(a + 48, m.m30());
+        MemoryUtil.memPutFloat(a + 52, m.m31());
+        MemoryUtil.memPutFloat(a + 56, m.m32());
+        MemoryUtil.memPutFloat(a + 60, m.m33());
+    }
+
     static final int STRIDE = 32;
     private static int vbo, vao, capacity, used;   // in vertices
     private static boolean vaoStale = true;
@@ -656,7 +679,7 @@ public final class PartBatch {
         if (a.sleep$vertices() == 0) for (int i = 0; i < 4; i++) bb.addVertex(0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0);
         Queue q = RESIDENT.computeIfAbsent(t, x -> new Queue());
         q.ensure();
-        m.getToAddress(q.mem + 144L * q.n);
+        putMatrix(m, q.mem + 144L * q.n);
         if (q.keys.length <= q.n) q.keys = java.util.Arrays.copyOf(q.keys, Math.max(64, q.keys.length * 2));
         q.keys[q.n] = m.m30() * m.m30() + m.m31() * m.m31() + m.m32() * m.m32();   // the object's origin, camera-relative
         int idx = n / 4 * 6;
@@ -673,6 +696,10 @@ public final class PartBatch {
      * Only for a buffer EntityBatch batches, of the NEW_ENTITY format, whose render type's shader is patched.
      */
     public static boolean capture(ModelPart part, PoseStack.Pose pose, VertexConsumer buffer, int light, int overlay, int color, PartCompiler compiler) {
+        if (buffer instanceof RecordingBuilder rb) {
+            JobParts jp;
+            return PARTS_IN_JOBS && rb.type != null && (jp = ParallelRender.jobParts()) != null && captureInJob(part, compiler, pose, rb.type, jp, light, overlay, color);
+        }
         RenderType type = batchedType(buffer);
         if (type == null) return false;
         int[] g = geometry(part, compiler);
@@ -835,7 +862,7 @@ public final class PartBatch {
     /** A SuperByteBuffer record (queueSbb's layout); lo.z / lo.w hold the overlay's halves (or, mode 6, lo.z the light box). */
     private static void writeSbbRecord(long rec, Matrix4f m, Matrix3f nm, float r, float g, float b, float alpha, boolean diffuse, float fakeNormalY,
             int light, int overlay) {
-        m.getToAddress(rec);
+        putMatrix(m, rec);
         MemoryUtil.memPutFloat(rec + 64, nm.m00());
         MemoryUtil.memPutFloat(rec + 68, nm.m01());
         MemoryUtil.memPutFloat(rec + 72, nm.m02());
@@ -953,7 +980,7 @@ public final class PartBatch {
             int light, int overlay, int axis, float speed, float offsetDeg, float[] sprites, float scrollU, float scrollSpeed, float scrollPhase,
             float scrollScale) {
         long rec = pMem + 144L * i;
-        m.getToAddress(rec);
+        putMatrix(m, rec);
         MemoryUtil.memPutFloat(rec + 64, nm.m00());
         MemoryUtil.memPutFloat(rec + 68, nm.m01());
         MemoryUtil.memPutFloat(rec + 72, nm.m02());
@@ -1118,7 +1145,7 @@ public final class PartBatch {
      *  the entity's height, Coatings), colour (RGBA floats), light / overlay (ints). */
     static void writeRecord(long r, PoseStack.Pose pose, int light, int overlay, int color, float coat, float coat2, float height) {
         Matrix4f m = pose.pose();
-        m.getToAddress(r);
+        putMatrix(m, r);
         Matrix3f nm = pose.normal();
         MemoryUtil.memPutFloat(r + 64, nm.m00());
         MemoryUtil.memPutFloat(r + 68, nm.m01());
@@ -1152,7 +1179,8 @@ public final class PartBatch {
     public static final class JobParts {
         RenderType[] types = new RenderType[64];
         int[] first = new int[64], quads = new int[64];
-        boolean[] item = new boolean[64];   // an item model's record (ItemGpu), else a bone's
+        /** per record: 0 a GeckoLib bone, 1 an item model (ItemGpu), 2 a vanilla model part */
+        byte[] kind = new byte[64];
         long mem = MemoryUtil.nmemAlloc(144L * 64);
         int n, cap = 64;
         /** the job's entity's coatings (packed) and height, for its records (Coatings) */
@@ -1167,26 +1195,30 @@ public final class PartBatch {
         }
 
         long next(RenderType t, int[] g) {
-            return next(t, g[0], g[1], false);
+            return next(t, g[0], g[1], (byte) 0);
         }
 
         long nextItem(RenderType t, int f, int q) {
-            return next(t, f, q, true);
+            return next(t, f, q, (byte) 1);
         }
 
-        private long next(RenderType t, int f, int q, boolean it) {
+        long nextPart(RenderType t, int[] g) {
+            return next(t, g[0], g[1], (byte) 2);
+        }
+
+        private long next(RenderType t, int f, int q, byte k) {
             if (n == cap) {
                 cap *= 2;
                 types = java.util.Arrays.copyOf(types, cap);
                 first = java.util.Arrays.copyOf(first, cap);
                 quads = java.util.Arrays.copyOf(quads, cap);
-                item = java.util.Arrays.copyOf(item, cap);
+                kind = java.util.Arrays.copyOf(kind, cap);
                 mem = MemoryUtil.nmemRealloc(mem, 144L * cap);
             }
             types[n] = t;
             first[n] = f;
             quads[n] = q;
-            item[n] = it;
+            kind[n] = k;
             return mem + 144L * n++;
         }
     }
@@ -1227,6 +1259,38 @@ public final class PartBatch {
         return true;
     }
 
+    /**
+     * -Dlab.partbatch.partsInJobs=false: vanilla model parts inside ParallelRender jobs drawn the CPU way (as before).
+     * On: they become records in the job as on the render thread - the workers' entities (a phone's: the render cache
+     * replays slower than four workers draw) keep the VRAM parts.
+     */
+    static final boolean PARTS_IN_JOBS = !"false".equals(System.getProperty("lab.partbatch.partsInJobs"));
+    public static long jobParts;
+
+    /**
+     * Inside a ParallelRender job: a model part becomes a record in the job when its render type and geometry are
+     * known (else they are prepared on the render thread through the job's journal; the part is compiled this time).
+     */
+    private static boolean captureInJob(ModelPart part, PartCompiler compiler, PoseStack.Pose pose, RenderType type, JobParts jp, int light, int overlay, int color) {
+        if (!workerTypes.contains(type)) {
+            if (ASKED.add(type)) ParallelRender.journal(() -> learnType(type));
+            return false;
+        }
+        int[] g = geoSnapshot.get(part);
+        if (g == null) {
+            if (ASKED_GEO.add(part)) ParallelRender.journal(() -> {
+                ASKED_GEO.remove(part);
+                geometry(part, compiler);
+                publishGeo(part);
+            });
+            return false;
+        }
+        if (g[0] < 0) return false;
+        writeRecord(jp.nextPart(type, g), pose, light, overlay, color, jp.coat, jp.coat2, jp.height);
+        jobParts++;
+        return true;
+    }
+
     /** Render thread: whether PartBatch can draw this type from VRAM (checked here: GL queries); published for workers. */
     private static void learnType(RenderType type) {
         ASKED.remove(type);
@@ -1253,11 +1317,13 @@ public final class PartBatch {
     public static boolean mergeJob(JobParts parts, net.minecraft.client.renderer.MultiBufferSource buffers) {
         // the buffer is looked up once per run of records of one type (an object's bones are mostly one type)
         RenderType last = null;
+        byte lastKind = -1;
         boolean lastItem = false;
         for (int i = 0; i < parts.n; i++) {
-            if (parts.types[i] == last && parts.item[i] == lastItem) continue;
+            if (parts.types[i] == last && parts.kind[i] == lastKind) continue;
             last = parts.types[i];
-            lastItem = parts.item[i];
+            lastKind = parts.kind[i];
+            lastItem = lastKind == 1;
             boolean ok;
             if (lastItem)   // a fixed buffer of the level's source (asked for it before: no batch of another type ended)
                 ok = buffers == net.minecraft.client.Minecraft.getInstance().renderBuffers().bufferSource()
@@ -1278,17 +1344,20 @@ public final class PartBatch {
             }
         }
         last = null;
+        lastKind = -1;
         BufferBuilder bb = null;
         Queue q = null;
+        Map<RenderType, Queue> queues = GEO_QUEUES;
         for (int i = 0; i < parts.n; i++) {
-            if (parts.types[i] != last || parts.item[i] != lastItem) {
+            if (parts.types[i] != last || parts.kind[i] != lastKind) {
                 last = parts.types[i];
-                lastItem = parts.item[i];
+                lastKind = parts.kind[i];
+                queues = lastKind == 1 ? ITEM_QUEUES : lastKind == 2 ? QUEUES : GEO_QUEUES;
                 bb = (BufferBuilder) buffers.getBuffer(last);
-                q = (lastItem ? ITEM_QUEUES : GEO_QUEUES).get(last);
-                if (lastItem && itemBackoff != 120) itemBackoff = 120;   // the source takes item records again
+                q = queues.get(last);
+                if (lastKind == 1 && itemBackoff != 120) itemBackoff = 120;   // the source takes item records again
             }
-            if (q == null || q.n == q.cap || ((dev.lull.opt.BufferBuilderAccessor) bb).sleep$vertices() == 0) q = slot(lastItem ? ITEM_QUEUES : GEO_QUEUES, last, bb);
+            if (q == null || q.n == q.cap || ((dev.lull.opt.BufferBuilderAccessor) bb).sleep$vertices() == 0) q = slot(queues, last, bb);
             MemoryUtil.memCopy(parts.mem + 144L * i, q.mem + 144L * q.n, 144);
             commit(q, parts.first[i], parts.quads[i]);
         }
@@ -1613,8 +1682,8 @@ public final class PartBatch {
 
     public static String report() {
         SbbRecorder rcd = sbbRecorder;
-        return (rcd != null ? rcd.report() + "; " : "") + ItemGpu.report() + "; " + QuadGpu.report() + " (" + PartsPrograms.report() + "); " + String.format(java.util.Locale.ROOT, "part batch: SuperByteBuffer calls %d, parts %d (not taken %d %s %s %s, UV shift %d, level light %d); shaders patched %s, parts %d (EMF %d), GeckoLib bones %d (from workers %d, jobs refused at merge %d), multi-draws %d, geometries %d (%.1f MB), lost %d; resident draws %d, uploads %d (arena %.1f MB); persistent records %d, draws %d, uploads %d; level-lit parts %d (refused %d); %s",
-                sbbCalls, sbbParts, sbbRefused, java.util.Arrays.toString(SBB_WHY), SBB_CONSUMERS, SBB_TYPES, sbbShift, sbbLevelLight, PATCHED, parts, emfParts, geoParts, jobMerged, jobRefused, draws, geometries, (double) used * STRIDE / 1048576.0, fallbacks, residentDraws, residentUploads,
+        return (rcd != null ? rcd.report() + "; " : "") + ItemGpu.report() + "; " + QuadGpu.report() + " (" + PartsPrograms.report() + "); " + String.format(java.util.Locale.ROOT, "part batch: SuperByteBuffer calls %d, parts %d (not taken %d %s %s %s, UV shift %d, level light %d); shaders patched %s, parts %d (EMF %d), GeckoLib bones %d (from workers %d, jobs refused at merge %d), model parts from workers %d, multi-draws %d, geometries %d (%.1f MB), lost %d; resident draws %d, uploads %d (arena %.1f MB); persistent records %d, draws %d, uploads %d; level-lit parts %d (refused %d); %s",
+                sbbCalls, sbbParts, sbbRefused, java.util.Arrays.toString(SBB_WHY), SBB_CONSUMERS, SBB_TYPES, sbbShift, sbbLevelLight, PATCHED, parts, emfParts, geoParts, jobMerged, jobRefused, jobParts, draws, geometries, (double) used * STRIDE / 1048576.0, fallbacks, residentDraws, residentUploads,
                 (double) RES_ARENA.capacity * RES_ARENA.stride / 1048576.0, pUsed - pFreeN, persistDraws, persistUploads, litParts, litRefused,
                 LightBoxes.report()) + (RESIDENT_WHY ? System.lineSeparator() + residentWhyReport() : "");
     }
