@@ -33,6 +33,11 @@ public final class Materials {
     public static final boolean ON = !"false".equals(System.getProperty("sleep.materials"));
     static final int UNIT = 7;   // a texture unit the entity shaders do not use
     /** the fragment stage reads what the vertex stage of the same name writes: patched only after it */
+    /** ShaderPatches.failed: this shader stays vanilla's */
+    static void unpatched(String name) {
+        VERTEX_PATCHED.remove(name);
+    }
+
     private static final java.util.Set<String> VERTEX_PATCHED = java.util.concurrent.ConcurrentHashMap.newKeySet();
     public static long bound, missing;
 

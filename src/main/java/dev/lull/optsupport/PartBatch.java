@@ -75,7 +75,7 @@ public final class PartBatch {
         Boolean c = capable;
         if (c == null) {
             GLCapabilities caps = GL.getCapabilities();
-            capable = c = (caps.OpenGL46 || caps.GL_ARB_shader_draw_parameters) && (caps.OpenGL43 || caps.GL_ARB_shader_storage_buffer_object);
+            capable = c = (caps.OpenGL46 || caps.GL_ARB_shader_draw_parameters) && GlLimits.vertexStorageBlocks() > 0;
             System.out.println("[sleep/opt] part batch: " + (c ? "available" : "not available (needs shader draw parameters and storage buffers)"));
         }
         return c;

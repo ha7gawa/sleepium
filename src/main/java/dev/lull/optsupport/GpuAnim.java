@@ -26,6 +26,29 @@ public final class GpuAnim {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger("sleep");
     public static final boolean ON = Boolean.getBoolean("lab.opt.GpuAnim") || Boolean.getBoolean("lab.opt.all");
+    private static Boolean capable;
+
+    /**
+     * The switch the mixins ask: on, and the driver has what the copies call - GL 4.5, or copy_image, direct state
+     * access, buffer storage and texture sub-image reads on GL 3.2 (fences). Asked on the render thread (its
+     * capabilities); elsewhere false without deciding. 1.2.0 asked nothing and Android launchers' GL4ES (GL 2.1)
+     * aborted the game at the first animated frame (glCopyImageSubData: no such function).
+     */
+    public static boolean on() {
+        if (!ON) return false;
+        Boolean c = capable;
+        if (c != null) return c;
+        org.lwjgl.opengl.GLCapabilities caps;
+        try {
+            caps = org.lwjgl.opengl.GL.getCapabilities();
+        } catch (Throwable t) {
+            return false;   // not a GL thread: undecided
+        }
+        capable = c = caps.OpenGL45 || caps.OpenGL32 && caps.GL_ARB_copy_image && caps.GL_ARB_direct_state_access && caps.GL_ARB_buffer_storage
+                && caps.GL_ARB_get_texture_sub_image;
+        if (!c) LOG.info("[sleep/opt] gpu anim: not available (needs GL 4.5, or copy_image + direct state access + buffer storage): animated textures the vanilla way");
+        return c;
+    }
     private static final boolean VERIFY = Boolean.getBoolean("lab.gpuAnim.verify");
     /** the atlas cycleAnimationFrames is ticking (0 outside it: the first frames at stitching go vanilla's way) */
     public static int atlas;

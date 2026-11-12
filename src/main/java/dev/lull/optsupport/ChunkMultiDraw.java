@@ -1441,7 +1441,7 @@ public final class ChunkMultiDraw {
         Boolean s = ssbo;
         if (s == null) {
             var caps = GL.getCapabilities();
-            ssbo = s = (caps.OpenGL43 || caps.GL_ARB_shader_storage_buffer_object) && !Boolean.getBoolean("lab.chunkmd.noSsbo");
+            ssbo = s = GlLimits.vertexStorageBlocks() > 0 && !Boolean.getBoolean("lab.chunkmd.noSsbo");
             System.out.println("[sleep/opt] chunk multidraw: offsets in a storage buffer " + s);
         }
         return s;

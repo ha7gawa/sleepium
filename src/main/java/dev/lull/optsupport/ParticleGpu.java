@@ -327,11 +327,25 @@ public final class ParticleGpu {
     /** storage buffers and instancing (GL 4.3 or the extensions) */
     private static boolean partsReady() {
         Boolean r = ready;
-        if (r == null) {
-            var caps = org.lwjgl.opengl.GL.getCapabilities();
-            ready = r = (caps.OpenGL43 || caps.GL_ARB_shader_storage_buffer_object) && caps.OpenGL33 && !dev.lull.shaders.ShaderPipeline.active;
-        }
+        if (r == null) ready = r = capable() && !dev.lull.shaders.ShaderPipeline.active;
         return r && !dev.lull.shaders.ShaderPipeline.active;
+    }
+
+    private static Boolean capable;
+
+    /**
+     * Storage buffers and GL 3.3 (GL 4.3 or ARB_shader_storage_buffer_object): the shader patch and the draws both ask.
+     * Without them the particle shader stays vanilla's - 1.2.0 patched it unconditionally and the game crashed at the
+     * first resource load where the driver has none (Android launchers' GL4ES: GL 2.1; macOS: GL 4.1).
+     */
+    static boolean capable() {
+        Boolean c = capable;
+        if (c == null) {
+            var caps = org.lwjgl.opengl.GL.getCapabilities();
+            capable = c = GlLimits.vertexStorageBlocks() > 0 && caps.OpenGL33;
+            if (!c) System.out.println("[sleep/opt] particle records: not available (needs GL 4.3 or ARB_shader_storage_buffer_object, and GL 3.3): particles drawn the vanilla way");
+        }
+        return c;
     }
 
     // ------------------------------------------------------------------ the particle vertex shader
@@ -339,7 +353,7 @@ public final class ParticleGpu {
     /** The particle vertex shader with the record path: Position and UV0 from the record (gl_InstanceID), corner by gl_VertexID. */
     public static String patch(String src) {
         String main = "void main() {";
-        if (!src.startsWith("#version 150") || !src.contains(main) || !src.contains("in vec3 Position;") || !src.contains("in vec2 UV0;")) return src;
+        if (!capable() || !src.startsWith("#version 150") || !src.contains(main) || !src.contains("in vec3 Position;") || !src.contains("in vec2 UV0;")) return src;
         int at = src.indexOf(main);
         String head = src.substring(0, at), body = src.substring(at + main.length());
         body = body.replaceAll("\\bPosition\\b", "probe_Position").replaceAll("\\bUV0\\b", "probe_UV0");

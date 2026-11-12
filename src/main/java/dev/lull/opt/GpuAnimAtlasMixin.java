@@ -18,12 +18,12 @@ public abstract class GpuAnimAtlasMixin {
 
     @Inject(method = "cycleAnimationFrames", at = @At("HEAD"), cancellable = true)
     private void sleep$atlasIn(CallbackInfo ci) {
-        if (GpuAnim.ON && animatedTextures.isEmpty()) {   // nothing animated in this atlas: no bind, no loop
+        if (GpuAnim.on() && animatedTextures.isEmpty()) {   // nothing animated in this atlas: no bind, no loop
             GpuAnim.emptyAtlasTicks++;
             ci.cancel();
             return;
         }
-        if (GpuAnim.ON) {
+        if (GpuAnim.on()) {
             GpuAnim.atlas = ((AbstractTexture) (Object) this).getId();
             sleep$t0 = System.nanoTime();
             GpuAnim.tickBegin();
@@ -34,7 +34,7 @@ public abstract class GpuAnimAtlasMixin {
 
     @Inject(method = "cycleAnimationFrames", at = @At("RETURN"))
     private void sleep$atlasOut(CallbackInfo ci) {
-        if (GpuAnim.ON && GpuAnim.atlas != 0) {
+        if (GpuAnim.on() && GpuAnim.atlas != 0) {
             GpuAnim.tickEnd();
             GpuAnim.tickDone(System.nanoTime() - sleep$t0);
         }

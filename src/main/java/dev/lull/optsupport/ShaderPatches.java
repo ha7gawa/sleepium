@@ -12,7 +12,32 @@ import com.mojang.blaze3d.shaders.Program;
 public final class ShaderPatches {
     private ShaderPatches() {}
 
+    /** shaders whose patched source did not compile (type:name): compiled from vanilla's source from then on */
+    static final java.util.Set<String> FAILED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /**
+     * ChunkShaderPatchMixin: the patched source of this shader did not compile - the driver (or a GL translator such as
+     * Android launchers' LTW) refused what its capabilities promised. Vanilla's source is compiled instead, and the
+     * features that patched it forget it, so they draw the vanilla way with it (1.2.0: the game stopped at the first
+     * resource load).
+     */
+    public static void failed(Program.Type type, String name, String why) {
+        if (!FAILED.add(type + ":" + name)) return;
+        System.out.println("[sleep/opt] shader " + name + " (" + type + "): the patched source did not compile on this driver, vanilla's used instead"
+                + (why == null || why.isBlank() ? " (no log)" : ": " + why.lines().limit(3).reduce((a, b) -> a + " | " + b).orElse("")));
+        ChunkMultiDraw.PATCHED.remove(name);
+        ChunkMultiDraw.LIGHT_PATCHED.remove(name);
+        PartBatch.PATCHED.remove(name);
+        Materials.unpatched(name);
+        if ("particle".equals(name)) ParticleGpu.patched = false;
+        if ("rendertype_translucent".equals(name)) {
+            ChunkMultiDraw.translucentPatched = false;
+            LightVolumes.translucentPatched = false;
+        }
+    }
+
     public static String apply(Program.Type type, String name, String src) {
+        if (FAILED.contains(type + ":" + name)) return src;
         if (type == Program.Type.VERTEX) {
             if (name.startsWith(PartsPrograms.PREFIX)) {   // a block program's copy for QuadGpu's records (PartsPrograms)
                 if (Boolean.getBoolean("lab.opt.PartBatchMixin") && PartBatch.capable()) src = PartBatch.patch(name, src);
