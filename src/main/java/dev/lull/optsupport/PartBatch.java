@@ -742,7 +742,7 @@ public final class PartBatch {
     public static boolean capture(ModelPart part, PoseStack.Pose pose, VertexConsumer buffer, int light, int overlay, int color, PartCompiler compiler) {
         if (buffer instanceof RecordingBuilder rb) {
             JobParts jp;
-            return PARTS_IN_JOBS && rb.type != null && (jp = ParallelRender.jobParts()) != null && captureInJob(part, compiler, pose, rb.type, jp, light, overlay, color);
+            return partsInJobs && rb.type != null && (jp = ParallelRender.jobParts()) != null && captureInJob(part, compiler, pose, rb.type, jp, light, overlay, color);
         }
         RenderType type = batchedType(buffer);
         if (type == null) return false;
@@ -1309,6 +1309,8 @@ public final class PartBatch {
      * replays slower than four workers draw) keep the VRAM parts.
      */
     static final boolean PARTS_IN_JOBS = !"false".equals(System.getProperty("lab.partbatch.partsInJobs"));
+    /** now (ParallelRender.PartsTune turns it off where whole frames measure faster without) */
+    static volatile boolean partsInJobs = PARTS_IN_JOBS;
     public static long jobParts;
 
     /**
@@ -1819,6 +1821,7 @@ public final class PartBatch {
     /** End of a frame's level render: nothing queued may outlive it (a type never drawn this frame). */
     public static void endFrame() {
         frame++;
+        ParallelRender.PartsTune.endFrame();   // (whether parts in worker jobs pay here: measured by whole frames)
         ASKED.clear();   // a request journaled by a job that then failed was dropped: asked again next frame
         ASKED_GEO.clear();
         ASKED_ITEM.clear();
