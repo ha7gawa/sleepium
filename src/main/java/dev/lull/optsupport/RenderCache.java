@@ -690,6 +690,12 @@ public final class RenderCache {
     }
 
     private static final ThreadLocal<Ctx> CTX = ThreadLocal.withInitial(Ctx::new);
+
+    /**
+     * CacheTune's choice: entities drawn by their renderers (on the render workers) instead of replayed from records on
+     * the render thread - where that measured faster (a phone's cores). Both give the vanilla frame.
+     */
+    public static volatile boolean bypass;
     private static final Matrix3f IDENTITY3 = new Matrix3f();
 
     /** recorded objects a render worker may replay (the recording itself stays on the render thread) */
