@@ -530,51 +530,70 @@ public final class ParallelRender {
      * 5 minutes, or once the entities per frame halve or double; frames with fewer than 100 entities change nothing.
      */
     static final class CacheTune {
-        private static final boolean ON = !"false".equals(System.getProperty("lab.rcache.tune")) && Boolean.getBoolean("lab.opt.RenderCacheMixin");
-        private static final int WINDOW = 120, SETTLE = 10, MIN_ENTITIES = 100;
-        private static final long HOLD = 5L * 60 * 1_000_000_000L;
-        private static int phase, frames, decidedEntities;   // phase: 0 waiting, 1 cache window, 2 settling, 3 bypass window, 4 decided
-        private static long nanos, entities, decidedAt, startAt = System.nanoTime();
+        static final boolean ON = !"false".equals(System.getProperty("lab.rcache.tune")) && Boolean.getBoolean("lab.opt.RenderCacheMixin");
+        static final int WINDOW = 120, SETTLE = 10, MIN_ENTITIES = 100;
+        private static final long QUIET = 10_000_000_000L;
+        /** 0 waiting, 1 cache window, 2 settling, 3 helper-thread window, 4 decided (for good: Calibration keeps it) */
+        static int phase;
+        private static int frames;
+        private static long crowdSince;
         private static double perCache;
+        private static final Samples S = new Samples(WINDOW);
+        private static boolean calibChecked;
         static String last = "not measured";
 
         static void frame(long ns, int n) {
-            if (!ON) return;
+            if (!ON || phase == 4) return;
+            if (!calibChecked) {
+                calibChecked = true;
+                String c = Calibration.get("cache");
+                if ("workers".equals(c) || "cache".equals(c)) {   // measured on this machine before: no measuring
+                    RenderCache.bypass = "workers".equals(c);
+                    phase = 4;
+                    last = c + " (calibrated earlier: " + Calibration.get("cache.why") + ")";
+                    System.out.println("[sleep/opt] render cache tune: " + last);
+                    return;
+                }
+                // until measured: a driver without per-draw data or storage buffers (a phone's translator) starts with the
+                // helper threads - a phone's cores replay the cache slower than they draw
+                RenderCache.bypass = PartBatch.capable() && !PartBatch.full();
+            }
+            if (n < MIN_ENTITIES || net.minecraft.client.Minecraft.getInstance().screen != null) {
+                if (phase == 0) crowdSince = 0;
+                return;
+            }
             long now = System.nanoTime();
             switch (phase) {
-                case 0, 4 -> {
-                    boolean due = phase == 0 ? now - startAt > 10_000_000_000L
-                            : now - decidedAt > HOLD || n > 2 * decidedEntities || n * 2 < decidedEntities;
-                    if (!due || n < MIN_ENTITIES) return;
+                case 0 -> {
+                    if (crowdSince == 0) crowdSince = now;
+                    if (now - crowdSince < QUIET) return;
                     RenderCache.bypass = false;
                     phase = 2;   // settle into the cache first
                     frames = 0;
-                    nanos = entities = 0;
+                    S.clear();
                 }
                 case 1, 3 -> {
-                    nanos += ns;
-                    entities += n;
+                    S.add((double) ns / n);
                     if (++frames < WINDOW) return;
-                    double per = (double) nanos / Math.max(1, entities);
+                    double per = S.trimmed();
+                    S.clear();
                     if (phase == 1) {
                         perCache = per;
                         RenderCache.bypass = true;
                         phase = 2;
-                        frames = -1;   // (marks the settle before the bypass window)
-                        nanos = entities = 0;
+                        frames = -1;   // (marks the settle before the helper-thread window)
                         return;
                     }
-                    boolean workers = per < perCache * 0.9;
+                    boolean workers = per < perCache * 0.9;   // (a tie: the cache, 1.2.0's way)
                     RenderCache.bypass = workers;
                     last = String.format(java.util.Locale.ROOT, "%s (%.1f us an entity with the cache, %.1f without; %d entities a frame)",
                             workers ? "the workers, no cache" : "the cache", perCache / 1e3, per / 1e3, n);
                     System.out.println("[sleep/opt] render cache tune: " + last);
                     phase = 4;
-                    decidedAt = now;
-                    decidedEntities = n;
+                    Calibration.put("cache", workers ? "workers" : "cache", last);
                 }
                 case 2 -> {
-                    if (frames < 0) {   // after the cache window: settle with the bypass on, then measure it
+                    if (frames < 0) {   // after the cache window: settle with the helper threads, then measure them
                         if (--frames > -1 - SETTLE) return;
                         phase = 3;
                     } else {
@@ -582,10 +601,20 @@ public final class ParallelRender {
                         phase = 1;
                     }
                     frames = 0;
-                    nanos = entities = 0;
+                    S.clear();
                 }
                 default -> { }
             }
+        }
+
+        static void recalibrate() {
+            if (!ON) return;
+            phase = 0;
+            frames = 0;
+            crowdSince = 0;
+            calibChecked = true;   // (the file was just emptied)
+            S.clear();
+            last = "not measured";
         }
     }
 
@@ -601,18 +630,14 @@ public final class ParallelRender {
     static final class PartsTune {
         private static final boolean ON = !"false".equals(System.getProperty("lab.partbatch.partsTune")) && PartBatch.PARTS_IN_JOBS;
         private static final int WINDOW = 180, SETTLE = 20, ROUNDS = 2;
-        private static final long HOLD = 5L * 60 * 1_000_000_000L, QUIET = 15_000_000_000L;
-        /** 0 waiting, 1 settling, 2 measuring (with / without in turn, ROUNDS each), 3 decided */
-        private static int phase, frames, decidedEntities, window;
-        private static long last, sum, partsAt, decidedAt, crowdSince;
+        private static final long QUIET = 15_000_000_000L;
+        /** 0 waiting, 1 settling, 2 measuring (with / without in turn, ROUNDS each), 3 decided (for good: Calibration keeps it) */
+        private static int phase, frames, window;
+        private static long last, partsAt, crowdSince;
         private static final double[] WITH = new double[ROUNDS], WITHOUT = new double[ROUNDS];
+        private static final Samples S = new Samples(WINDOW);
+        private static boolean calibChecked;
         static String result = "not measured";
-
-        /**
-         * Windows in turn - with, without, with, without - so the scene settling meanwhile (chunks still meshing after
-         * the world opened) weighs on both sides; the first frames counted only 15 s after a crowd (100 entities a
-         * frame) was first seen: measured earlier the scene's loading decided it (desktop: "without", wrongly).
-         */
         private static long jobsAt;
         private static int dbg;
         private static final boolean DBG = Boolean.getBoolean("lab.partbatch.partsTuneDebug");
@@ -625,21 +650,39 @@ public final class ParallelRender {
             frame(System.nanoTime(), n);
         }
 
+        /**
+         * Windows in turn - with, without, with, without - so the scene settling meanwhile weighs on both sides; the first
+         * frames counted only 15 s after a crowd (100 entities a frame) was first seen; frames with a screen open not
+         * counted; each window's frames by their mean without the slowest tenth.
+         */
         static void frame(long now, int n) {
             long dt = last == 0 ? 0 : now - last;
             last = now;
-            if (DBG && dbg++ % 1000 == 0) System.out.println("[sleep/dbg] partsTune ON " + ON + " cache " + CacheTune.ON + "/" + CacheTune.phase + " n " + n + " phase " + phase + " window " + window + " frames " + frames + " crowdSince " + crowdSince + " parts " + PartBatch.jobParts);
-            if (!ON || CacheTune.ON && CacheTune.phase != 4) return;   // (after the cache's choice: the two do not measure each other)
-            if (n < CacheTune.MIN_ENTITIES) {
+            if (DBG && dbg++ % 1000 == 0) System.out.println("[sleep/dbg] partsTune ON " + ON + " cache " + CacheTune.ON + "/" + CacheTune.phase + " n " + n + " phase " + phase + " window " + window + " frames " + frames + " parts " + PartBatch.jobParts);
+            if (!ON || phase == 3) return;
+            if (!calibChecked) {
+                calibChecked = true;
+                String c = Calibration.get("parts");
+                if ("true".equals(c) || "false".equals(c)) {   // measured on this machine before: no measuring
+                    PartBatch.partsInJobs = "true".equals(c);
+                    phase = 3;
+                    result = ("true".equals(c) ? "in the jobs" : "the CPU way in the jobs") + " (calibrated earlier: " + Calibration.get("parts.why") + ")";
+                    System.out.println("[sleep/opt] model parts on the render workers: " + result);
+                    return;
+                }
+                // until measured: Intel's integrated graphics walk a multi-draw-indirect of many small commands slowly
+                String vendor = org.lwjgl.opengl.GL11C.glGetString(org.lwjgl.opengl.GL11C.GL_VENDOR);
+                if (vendor != null && vendor.toLowerCase(java.util.Locale.ROOT).contains("intel") && PartBatch.full()) PartBatch.partsInJobs = false;
+            }
+            if (CacheTune.ON && CacheTune.phase != 4) return;   // (after the cache's choice: the two do not measure each other)
+            if (n < CacheTune.MIN_ENTITIES || net.minecraft.client.Minecraft.getInstance().screen != null) {
                 if (phase == 0) crowdSince = 0;
                 return;
             }
             switch (phase) {
-                case 0, 3 -> {
-                    if (phase == 0) {
-                        if (crowdSince == 0) crowdSince = now;
-                        if (now - crowdSince < QUIET) return;
-                    } else if (!(now - decidedAt > HOLD || n > 2 * decidedEntities || n * 2 < decidedEntities)) return;
+                case 0 -> {
+                    if (crowdSince == 0) crowdSince = now;
+                    if (now - crowdSince < QUIET) return;
                     window = 0;
                     PartBatch.partsInJobs = true;
                     System.out.println("[sleep/opt] model parts on the render workers: measuring (" + n + " entities a frame)");
@@ -651,18 +694,17 @@ public final class ParallelRender {
                     if (++frames < SETTLE) return;
                     phase = 2;
                     frames = 0;
-                    sum = 0;
+                    S.clear();
                 }
                 case 2 -> {
-                    sum += dt;
+                    S.add(dt);
                     if (++frames < WINDOW) return;
-                    double per = (double) sum / frames;
+                    double per = S.trimmed();
                     if (window % 2 == 0) WITH[window / 2] = per; else WITHOUT[window / 2] = per;
                     window++;
-                    if (window == 1 && PartBatch.jobParts == partsAt) {   // no part went through a job: nothing to choose
+                    if (window == 1 && PartBatch.jobParts == partsAt) {   // no part went through a job: nothing to choose (not kept)
+                        PartBatch.partsInJobs = PARTS_DEFAULT();
                         phase = 3;
-                        decidedAt = now;
-                        decidedEntities = n;
                         return;
                     }
                     if (window < 2 * ROUNDS) {
@@ -684,12 +726,34 @@ public final class ParallelRender {
                             keep ? "in the jobs" : "the CPU way in the jobs", with / 1e6, without / 1e6, n);
                     System.out.println("[sleep/opt] model parts on the render workers: " + result);
                     phase = 3;
-                    decidedAt = now;
-                    decidedEntities = n;
+                    Calibration.put("parts", keep ? "true" : "false", result);
                 }
                 default -> { }
             }
         }
+
+        /** with nothing measured: the flag's value */
+        private static boolean PARTS_DEFAULT() {
+            return PartBatch.PARTS_IN_JOBS;
+        }
+
+        static void recalibrate() {
+            if (!ON) return;
+            phase = 0;
+            frames = 0;
+            window = 0;
+            crowdSince = 0;
+            calibChecked = true;   // (the file was just emptied)
+            S.clear();
+            PartBatch.partsInJobs = PartBatch.PARTS_IN_JOBS;
+            result = "not measured";
+        }
+    }
+
+    /** Calibration.reset: the entities' choices measured again */
+    static void recalibrate() {
+        CacheTune.recalibrate();
+        PartsTune.recalibrate();
     }
 
     /** -Dlab.prender.why=true: why entities stayed on the render thread (counts in the report) */
