@@ -207,6 +207,31 @@ public final class ChunkMultiDraw {
         return -1;
     }
 
+    /**
+     * Buffers an arena grew out of, deleted once the GPU is past the copy from them: deleting at once made Intel's driver
+     * wait for that copy (an N100's teleport tour: 376 ms in 29 grows, up to 89 ms in one upload). A fence after the
+     * copy, polled without waiting (reapRetired: each grow and each frame's first layer).
+     */
+    private static final java.util.ArrayDeque<long[]> RETIRED = new java.util.ArrayDeque<>();
+
+    static void retire(int vbo, int ibo) {
+        RETIRED.add(new long[] {vbo, ibo, org.lwjgl.opengl.GL32C.glFenceSync(org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)});
+        reapRetired();
+    }
+
+    static void reapRetired() {
+        long[] r;
+        while ((r = RETIRED.peek()) != null) {
+            int st = org.lwjgl.opengl.GL32C.glClientWaitSync(r[2], 0, 0);
+            if (st != org.lwjgl.opengl.GL32C.GL_ALREADY_SIGNALED && st != org.lwjgl.opengl.GL32C.GL_CONDITION_SATISFIED
+                    && st != org.lwjgl.opengl.GL32C.GL_WAIT_FAILED) break;
+            org.lwjgl.opengl.GL32C.glDeleteSync(r[2]);
+            if (r[0] != 0) GL15C.glDeleteBuffers((int) r[0]);
+            if (r[1] != 0) GL15C.glDeleteBuffers((int) r[1]);
+            RETIRED.poll();
+        }
+    }
+
     static final class Arena {
         final long key;
         final RenderType layer;
@@ -307,13 +332,14 @@ public final class ChunkMultiDraw {
 
         void grow(int needed) {
             int cap = Math.max(capacity * 2, capacity + needed + 4096);
+            int oldVbo = 0, oldIbo = 0;
             int nb = GL15C.glGenBuffers();
             GL15C.glBindBuffer(GL31C.GL_COPY_WRITE_BUFFER, nb);
             GL15C.glBufferData(GL31C.GL_COPY_WRITE_BUFFER, (long) cap * stride, GL15C.GL_STATIC_DRAW);
             if (vbo != 0) {
                 GL15C.glBindBuffer(GL31C.GL_COPY_READ_BUFFER, vbo);
                 GL31C.glCopyBufferSubData(GL31C.GL_COPY_READ_BUFFER, GL31C.GL_COPY_WRITE_BUFFER, 0, 0, (long) capacity * stride);
-                GL15C.glDeleteBuffers(vbo);
+                oldVbo = vbo;
             }
             if (indexed) {
                 int ni = GL15C.glGenBuffers();
@@ -322,7 +348,7 @@ public final class ChunkMultiDraw {
                 if (ibo != 0) {
                     GL15C.glBindBuffer(GL31C.GL_COPY_READ_BUFFER, ibo);
                     GL31C.glCopyBufferSubData(GL31C.GL_COPY_READ_BUFFER, GL31C.GL_COPY_WRITE_BUFFER, 0, 0, (long) capacity * 8);
-                    GL15C.glDeleteBuffers(ibo);
+                    oldIbo = ibo;
                 }
                 ibo = ni;
             }
@@ -330,6 +356,7 @@ public final class ChunkMultiDraw {
             vbo = nb;
             capacity = cap;
             vaoStale = true;
+            if (oldVbo != 0 || oldIbo != 0) retire(oldVbo, oldIbo);
             grows++;
         }
     }
@@ -699,6 +726,7 @@ public final class ChunkMultiDraw {
         int li = LAYERS.indexOf(layer);
         if (li < 0) return false;
 
+        if (!RETIRED.isEmpty()) reapRetired();
         if (!PENDING_COMPILED.isEmpty()) drainCompiled();
         int[] ps = programState(shader.getId());
         if (ps == null) return false;
