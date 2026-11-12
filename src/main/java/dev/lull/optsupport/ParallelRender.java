@@ -794,6 +794,14 @@ public final class ParallelRender {
                 if (phase == 0) crowdSince = 0;
                 return;
             }
+            if (GpuAnim.measuring()) {   // (one measured choice at a time: this window starts over)
+                if (phase == 2) {
+                    frames = 0;
+                    S.clear();
+                    E.clear();
+                }
+                return;
+            }
             switch (phase) {
                 case 0 -> {
                     if (crowdSince == 0) crowdSince = now;
@@ -928,6 +936,13 @@ public final class ParallelRender {
                 if (vendor != null && vendor.toLowerCase(java.util.Locale.ROOT).contains("intel") && PartBatch.full()) PartBatch.partsInJobs = false;
             }
             if (CacheTune.ON && CacheTune.phase != 4) return;   // (after the cache's choice: the two do not measure each other)
+            if (GpuAnim.measuring()) {   // (nor the blend's)
+                if (phase == 2) {
+                    frames = 0;
+                    S.clear();
+                }
+                return;
+            }
             if (n < CacheTune.MIN_ENTITIES || net.minecraft.client.Minecraft.getInstance().screen != null) {
                 if (phase == 0) crowdSince = 0;
                 return;
