@@ -671,7 +671,10 @@ public final class ChunkMultiDraw {
             net.minecraft.client.renderer.ShaderInstance shader) {
         int li = LAYERS.indexOf(layer);
         if (li < 0) return false;
-        if (pathTune && !allFaces && layer == RenderType.solid()) PathTune.frame();
+        if (!allFaces && layer == RenderType.solid()) {
+            if (pathTune && PathTune.phase != 3) PathTune.frame();
+            else if (hybrid) hybridTick();
+        }
 
         if (!PENDING_COMPILED.isEmpty()) drainCompiled();
         int[] ps = programState(shader.getId());
@@ -1222,6 +1225,31 @@ public final class ChunkMultiDraw {
     private static volatile boolean indirectNow;
     /** the shaders read the draw index either way (max of both): PathTune may switch the path between frames */
     private static boolean pathTune;
+    /**
+     * Direct chosen here: the indirect path while sections arrive (an upload in the last HYBRID_FRAMES frames), direct
+     * once they stop - Intel's driver blocked up to 94 ms in a direct multi-draw while sections arrived (an N100's
+     * teleport tour: render frames over 16 ms direct 43, indirect 10, vanilla 13), still views keep direct's 120 fps
+     * (indirect 83). -Dlab.chunkmd.hybrid=false: direct throughout.
+     */
+    private static final boolean HYBRID = !"false".equals(System.getProperty("lab.chunkmd.hybrid"));
+    private static final int HYBRID_FRAMES = Integer.getInteger("lab.chunkmd.hybridFrames", 60);
+    /** the shaders read both indices and direct is the choice: the path follows the arrivals (hybridTick) */
+    private static boolean hybrid;
+    private static long hybridUploads;
+    private static int hybridQuiet;
+    public static long hybridIndirectFrames, hybridDirectFrames;
+
+    /** once a frame (the camera's solid layer): indirect while sections arrive, direct after HYBRID_FRAMES quiet frames */
+    private static void hybridTick() {
+        if (uploads != hybridUploads) {
+            hybridUploads = uploads;
+            hybridQuiet = 0;
+        } else if (hybridQuiet < HYBRID_FRAMES) hybridQuiet++;
+        indirectNow = hybridQuiet < HYBRID_FRAMES;
+        if (indirectNow) hybridIndirectFrames++;
+        else hybridDirectFrames++;
+    }
+
     /** -Dlab.chunkmd.pathTune=false: the vendor rule, never measured */
     private static final boolean PATH_TUNE = !"false".equals(System.getProperty("lab.chunkmd.pathTune"));
     static String pathChoice = "not measured";
@@ -1239,7 +1267,7 @@ public final class ChunkMultiDraw {
 
     /** the shaders are patched for the indirect path (drawn now or maybe after a measurement) */
     private static boolean indirectPatched() {
-        return indirectOk() && (indirectNow || pathTune);
+        return indirectOk() && (indirectNow || pathTune || hybrid);
     }
 
     private static boolean indirectOk() {
@@ -1261,7 +1289,8 @@ public final class ChunkMultiDraw {
                 if ("indirect".equals(c) || "direct".equals(c)) {   // measured on this machine before: the single-path shaders
                     indirectNow = "indirect".equals(c);
                     pathChoice = c + " (calibrated earlier: " + Calibration.get("chunks.why") + ")";
-                    why = " - " + pathChoice;
+                    hybrid = !indirectNow && HYBRID && ssbo();   // (direct: the indirect path while sections arrive)
+                    why = " - " + pathChoice + (hybrid ? "; indirect while sections arrive" : "");
                 } else {
                     indirectNow = !intel;
                     pathTune = PATH_TUNE && ssbo();
@@ -1285,7 +1314,8 @@ public final class ChunkMultiDraw {
         private static final int WINDOW = 180, SETTLE = 30, ROUNDS = 2;
         private static final long QUIET = 20_000_000_000L, HITCH = 250_000_000L;
         private static final double GAIN = 0.97, FAR = 1.3;
-        private static int phase, frames, window;
+        private static int frames, window;
+        static int phase;
         private static long last, since;
         private static boolean start;
         private static final double[] START = new double[ROUNDS], OTHER = new double[ROUNDS];
@@ -1358,17 +1388,20 @@ public final class ChunkMultiDraw {
             double ind = start ? startNs : otherNs, dir = start ? otherNs : startNs;
             pathChoice = String.format(java.util.Locale.ROOT, "%s (a frame %.3f ms indirect, %.3f direct; %d round%s)",
                     indirectNow ? "indirect" : "direct", ind / 1e6, dir / 1e6, rounds, rounds == 1 ? "" : "s");
-            System.out.println("[sleep/opt] chunk multidraw: " + pathChoice);
+            hybrid = !indirectNow && HYBRID;
+            System.out.println("[sleep/opt] chunk multidraw: " + pathChoice + (hybrid ? "; indirect while sections arrive" : ""));
             phase = 3;
             Calibration.put("chunks", indirectNow ? "indirect" : "direct", pathChoice);
         }
 
         /** Calibration.reset: measured again (only where the shaders read both indices; else at the next start) */
         static void recalibrate() {
-            if (!pathTune) {
+            if (!pathTune && !hybrid) {
                 pathChoice = "measured at the next start";
                 return;
             }
+            pathTune = true;   // (the hybrid's shaders read both indices too)
+            hybrid = false;
             phase = 0;
             frames = 0;
             window = 0;
@@ -1439,7 +1472,7 @@ public final class ChunkMultiDraw {
      * else the draw ID (the non-indirect fallback, whose commands carry no base instance).
      */
     public static String drawIndex() {
-        if (indirectOk() && pathTune) return "max(gl_BaseInstanceARB, gl_DrawIDARB)";   // (direct: the base instance is 0)
+        if (indirectOk() && (pathTune || hybrid)) return "max(gl_BaseInstanceARB, gl_DrawIDARB)";   // (direct: the base instance is 0)
         return indirect() && ssbo() ? "gl_BaseInstanceARB" : "gl_DrawIDARB";
     }
     /** -Dlab.chunkmd.sortNear: the camera's sections ordered nearest first (a reused array; experiment) */
