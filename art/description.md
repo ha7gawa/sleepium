@@ -45,6 +45,8 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 | Intel N100, terrain view, fps | 88 | 118-120 | +34-36 % |
 | Intel N100, dropped items, fps | 49-56 | 182 | ×3.3-3.7 |
 | Intel N100, a horde of mobs, fps | 112-119 | 161-180 | +35-60 % |
+| 500 Immersive Engineering crushers piling ~2 000 moving items, fps (desktop) | 32 | 423 | ×13 |
+| 60 working IE crushers, fps (desktop) | 177 | 1 786 | ×10 |
 | 1.20.1, 1 440 mobs with Entity Model Features + Fresh Animations, fps | 11 | 43 | ×3.9 |
 | world generation, chunks per second (desktop) | 54 | 107 | ×2.0 |
 

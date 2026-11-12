@@ -18,6 +18,9 @@ Final numbers on the release build, against the same game without Sleepium's opt
 | N100, a horde of mobs | 112-119 | 137-142 | 161-180 |
 | desktop, the same entity scene | 69 | | 2 152 |
 | desktop, terrain view | 332 | | 3 739 |
+| desktop, 60 working Immersive Engineering crushers | 177 | | 1 786 |
+| desktop, 500 working crushers (with their particles) | 265 | | 2 103 |
+| desktop, 500 crushers piling ~2 000 moving items | 32 (p99 94 ms) | | 423 (p99 15 ms) |
 | 1.20.1, 1 440 mobs with Entity Model Features + Fresh Animations | 11 | 25 | 43 |
 | 1.20.1, 144 such mobs | 42 | 541 | 594 |
 | 1.20.1, Biohazard (474 mods, Embeddium + Oculus) | 427-430 | 466-472 | 461-482 |
