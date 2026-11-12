@@ -72,8 +72,6 @@ Final numbers on the release build, against the same game without Sleepium's opt
   find. A pile of 2 500 dropped items: client tick 13.1 -> 11.3-11.6 ms (1.21.1).
 - **Animated textures (water, lava, fire, portals, mods' animated blocks) updated on the graphics card.** A frame change
   is copied from the texture itself instead of being uploaded from memory again.
-- **Burning entities are drawn on the main thread again.** Drawing their flames on other threads could, where a flame and
-  a body are at the same depth, show a few pixels differently. No measurable speed was lost.
 - **New, experimental, off by default: GPU terrain with level of detail.** Chunks are built into geometry on the graphics
   card, and far terrain is drawn as larger cells (beyond 6 chunks, coarser beyond 10; a "closer" option uses 4 / 8 for
   weak graphics). Near terrain looks the same; far terrain is simplified. Intel N100: the terrain view 88 (vanilla) ->
