@@ -443,7 +443,7 @@ public final class GpuAnim {
             SHEETS.put(c, sheet);
         }
         int table = table(d);
-        if (!interpBound) interpBegin();
+        interpBegin();   // (per blend, put back after it: vanilla's uploads and the blit copies between blends must find their own state)
         if (!selfTested) {
             selfTested = true;
             if (!selfTest(c, sheet, table, fx0, fy0, fx1, fy1, d)) {
@@ -495,6 +495,7 @@ public final class GpuAnim {
             interpEnd();
             return false;
         }
+        interpEnd();
         gpuBlends++;
         long ns = System.nanoTime() - t0;
         interpUploadNs += ns;
@@ -639,8 +640,10 @@ public final class GpuAnim {
     private static final ByteBuffer SAVED_MASK = MemoryUtil.memAlloc(4);
 
     /**
-     * The atlas tick's first blend: the state saved raw (queries make the driver wait: once a tick, not once a frame -
-     * per frame they made a desktop atlas tick 0.23 -> 4.9 ms) and the blend's set; put back raw at the tick's end.
+     * A blend's state: the current one saved raw and the blend's set; put back raw right after the blend (interpEnd).
+     * Not once a tick: 11-12 on the phone (LTW) a CPU-blended frame uploaded between two GPU blends, with the blend's
+     * framebuffer and viewport still bound, wiped the block atlas black (the translator draws uploads itself). The
+     * queries cost a desktop driver (atlas tick 0.23 -> 4.9 ms) - there the measured choice keeps the CPU way.
      */
     private static void interpBegin() {
         savedProgram = GL11C.glGetInteger(org.lwjgl.opengl.GL20C.GL_CURRENT_PROGRAM);
