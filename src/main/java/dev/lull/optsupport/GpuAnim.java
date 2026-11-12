@@ -397,7 +397,7 @@ public final class GpuAnim {
      */
     public static boolean interpolate(SpriteContents c, int x, int y, int fx0, int fy0, int fx1, int fy1, double d) {
         if (!INTERP || atlas == 0 || interpBroken || c.byMipLevel.length == 0 || c.byMipLevel[0].format() != NativeImage.Format.RGBA) return false;
-        if (tunePhase == 2 || tunePhase == 3 || tunePhase == 5) return false;   // settling / measuring the CPU way, or decided for it
+        if (tunePhase == 0 || tunePhase == 1 || tunePhase == 5) return false;   // settling / measuring the CPU way, or decided for it
         if (!interpReady()) return false;
         long t0 = System.nanoTime();
         Integer sheet = SHEETS.get(c);
@@ -468,28 +468,29 @@ public final class GpuAnim {
     // which way is faster here: measured (-Dlab.gpuAnim.interp=gpu / cpu: fixed)
     private static final String INTERP_WAY = System.getProperty("lab.gpuAnim.interp", "tune");
     /**
-     * 0 GPU warm-up (sheets, tables, first draws), 1 GPU window, 2 settling on the CPU (not counted: the GPU's queued
-     * draws into the atlas drain), 3 CPU window, 4 decided: GPU, 5 decided: CPU
+     * 0 settling on the CPU, 1 CPU window, 2 GPU warm-up (sheets, tables, the self-test), 3 GPU window, 4 decided: GPU,
+     * 5 decided: CPU
      */
     private static int tunePhase = "cpu".equals(INTERP_WAY) ? 5 : "gpu".equals(INTERP_WAY) ? 4 : 0;
-    private static final int WARM = 40, WINDOW = 200, SETTLE = 20;
+    private static final int WARM = 40, WINDOW = 200, SETTLE = 20, EARLY = 30;
     private static long tuneNs, tuneTicks;
-    private static double gpuPer;
+    private static double cpuPer;
     public static String interpChoice = "not decided";
 
     /**
      * The choice by whole atlas ticks (tickDone: the blends, the copies, the uploads and their waits together), not by
      * the blend call's own time: 11-12 on the N100 (Intel) the blends measured 653 against 791 us a frame and the GPU
      * was kept, but its atlas ticks were 3.0 ms against the CPU way's 1.7 - the uploads after GPU draws into the atlas
-     * waited for them, which the blend's own time does not show. The phone (LTW): ~0.7 against ~2.7 ms. The GPU is kept
-     * for a 10 % win; ticks without interpolated frames are not counted.
+     * waited for them. The CPU way first (vanilla's cost), then the GPU's, stopped after 30 ticks when already 1.5x the
+     * CPU's (an Intel atlas tick took ~10 ms with the GPU blends: a whole window was ~10 s of heavier ticks after joining
+     * a world). The phone (LTW): ~2.0 against ~6.4 ms. The GPU is kept for a 10 % win; ticks without interpolated
+     * frames are not counted.
      */
     private static void tuneTick(long ns, boolean hadInterp) {
-        if (tunePhase >= 4) return;
-        if (!hadInterp) return;
+        if (tunePhase >= 4 || !hadInterp) return;
         switch (tunePhase) {
             case 0 -> {
-                if (++tuneTicks >= WARM) {
+                if (++tuneTicks >= SETTLE) {
                     tunePhase = 1;
                     tuneTicks = tuneNs = 0;
                 }
@@ -497,24 +498,27 @@ public final class GpuAnim {
             case 1 -> {
                 tuneNs += ns;
                 if (++tuneTicks >= WINDOW) {
-                    gpuPer = (double) tuneNs / tuneTicks;
+                    cpuPer = (double) tuneNs / tuneTicks;
                     tunePhase = 2;
                     tuneTicks = tuneNs = 0;
                 }
             }
             case 2 -> {
-                if (++tuneTicks >= SETTLE) {
+                if (++tuneTicks >= WARM) {
                     tunePhase = 3;
                     tuneTicks = tuneNs = 0;
                 }
             }
             default -> {   // 3
                 tuneNs += ns;
-                if (++tuneTicks >= WINDOW) {
-                    double cpuPer = (double) tuneNs / tuneTicks;
-                    boolean gpu = gpuPer < cpuPer * 0.9;
+                ++tuneTicks;
+                double gpuPer = (double) tuneNs / tuneTicks;
+                boolean early = tuneTicks >= EARLY && gpuPer > cpuPer * 1.5;
+                if (tuneTicks >= WINDOW || early) {
+                    boolean gpu = !early && gpuPer < cpuPer * 0.9;
                     tunePhase = gpu ? 4 : 5;
-                    interpChoice = String.format(java.util.Locale.ROOT, "%s (an atlas tick %.3f ms with the GPU blends, %.3f with the CPU's)", gpu ? "GPU" : "CPU", gpuPer / 1e6, cpuPer / 1e6);
+                    interpChoice = String.format(java.util.Locale.ROOT, "%s (an atlas tick %.3f ms with the GPU blends%s, %.3f with the CPU's)", gpu ? "GPU" : "CPU",
+                            gpuPer / 1e6, early ? " after " + tuneTicks + " ticks" : "", cpuPer / 1e6);
                     LOG.info("[sleep/opt] gpu anim: interpolated frames blended on the {}", interpChoice);
                 }
             }
