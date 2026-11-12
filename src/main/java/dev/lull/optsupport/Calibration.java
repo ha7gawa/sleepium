@@ -104,6 +104,15 @@ public final class Calibration {
         }
     }
 
+    /** the settings' overview: what this machine uses now, short */
+    public static String summary() {
+        String i = GpuAnim.interpChoice.startsWith("GPU") ? "GPU" : GpuAnim.interpChoice.startsWith("CPU") ? "CPU" : "?";
+        String c = ParallelRender.CacheTune.last.startsWith("the workers") || ParallelRender.CacheTune.last.startsWith("workers") ? "threads"
+                : ParallelRender.CacheTune.last.startsWith("the cache") || ParallelRender.CacheTune.last.startsWith("cache") ? "cache" : "?";
+        String pt = ParallelRender.PartsTune.result.startsWith("in the jobs") ? "GPU" : ParallelRender.PartsTune.result.startsWith("the CPU") ? "CPU" : "?";
+        return "blend " + i + " · entities " + c + " · parts " + pt;
+    }
+
     /** forget everything measured (the settings' Recalibrate): the choices are measured again */
     public static synchronized void reset() {
         props = new Properties();

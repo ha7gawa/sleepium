@@ -230,6 +230,14 @@ public final class SleepScreen extends Screen {
             hud.setMessage(on(SleepStats.hud));
             return null;
         }, Component.translatable("sleepium.ui.hud.tip"), hud));
+        Button recal = Button.builder(Component.translatable("sleepium.ui.calibration.again"), x -> {
+            dev.lull.optsupport.Calibration.reset();
+            flash = Component.translatable("sleepium.ui.calibration.done").withStyle(ChatFormatting.GREEN);
+            flashUntil = System.currentTimeMillis() + 3500;
+        }).size(110, 20).build();
+        list.add(new Row(() -> Component.translatable("sleepium.ui.calibration"),
+                () -> Component.literal(dev.lull.optsupport.Calibration.summary()).withStyle(ChatFormatting.GRAY),
+                Component.translatable("sleepium.ui.calibration.tip"), recal));
         Button copy = Button.builder(Component.translatable("sleepium.ui.report"), x -> {
             minecraft.keyboardHandler.setClipboard(report());
             flash = Component.translatable("sleepium.ui.report.done").withStyle(ChatFormatting.GREEN);
