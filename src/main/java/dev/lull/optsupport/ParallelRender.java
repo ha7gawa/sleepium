@@ -776,6 +776,109 @@ public final class ParallelRender {
         }
     }
 
+    /**
+     * Model parts captured in worker jobs (PartBatch.partsInJobs) kept only where whole frames are faster with them
+     * (-Dlab.partbatch.partsTune=false: always, as the flag says). A desktop gains (1.21.1, cache off: 558 -> 759 fps);
+     * an Intel N100's graphics lose (the horde 161 -> 140 fps: every part one command of a multi-draw-indirect, which
+     * its driver walks slowly - the chunks' indirect draws in 1.2.0 the same). The frame interval (start to start: the
+     * graphics card's time included) is measured over a window with the parts in jobs and one without, after the
+     * render cache's choice (CacheTune) is made; the parts stay for any win. Again after 5 minutes, or once the
+     * entities per frame halve or double; a window in which no part went through a job decides nothing (kept on).
+     */
+    static final class PartsTune {
+        private static final boolean ON = !"false".equals(System.getProperty("lab.partbatch.partsTune")) && PartBatch.PARTS_IN_JOBS;
+        private static final int WINDOW = 180, SETTLE = 20, ROUNDS = 2;
+        private static final long HOLD = 5L * 60 * 1_000_000_000L, QUIET = 15_000_000_000L;
+        /** 0 waiting, 1 settling, 2 measuring (with / without in turn, ROUNDS each), 3 decided */
+        private static int phase, frames, decidedEntities, window;
+        private static long last, sum, partsAt, decidedAt, crowdSince;
+        private static final double[] WITH = new double[ROUNDS], WITHOUT = new double[ROUNDS];
+        static String result = "not measured";
+
+        /**
+         * Windows in turn - with, without, with, without - so the scene settling meanwhile (chunks still meshing after
+         * the world opened) weighs on both sides; the first frames counted only 15 s after a crowd (100 entities a
+         * frame) was first seen: measured earlier the scene's loading decided it (desktop: "without", wrongly).
+         */
+        private static long jobsAt;
+        private static int dbg;
+        private static final boolean DBG = Boolean.getBoolean("lab.partbatch.partsTuneDebug");
+
+        /** PartBatch.endFrame: once a frame (the queue may drain several times in one), the entities queued since the last */
+        static void endFrame() {
+            long j = jobs;
+            int n = (int) Math.min(Integer.MAX_VALUE, j - jobsAt);
+            jobsAt = j;
+            frame(System.nanoTime(), n);
+        }
+
+        static void frame(long now, int n) {
+            long dt = last == 0 ? 0 : now - last;
+            last = now;
+            if (DBG && dbg++ % 1000 == 0) System.out.println("[sleep/dbg] partsTune ON " + ON + " cache " + CacheTune.ON + "/" + CacheTune.phase + " n " + n + " phase " + phase + " window " + window + " frames " + frames + " crowdSince " + crowdSince + " parts " + PartBatch.jobParts);
+            if (!ON || CacheTune.ON && CacheTune.phase != 4) return;   // (after the cache's choice: the two do not measure each other)
+            if (n < CacheTune.MIN_ENTITIES) {
+                if (phase == 0) crowdSince = 0;
+                return;
+            }
+            switch (phase) {
+                case 0, 3 -> {
+                    if (phase == 0) {
+                        if (crowdSince == 0) crowdSince = now;
+                        if (now - crowdSince < QUIET) return;
+                    } else if (!(now - decidedAt > HOLD || n > 2 * decidedEntities || n * 2 < decidedEntities)) return;
+                    window = 0;
+                    PartBatch.partsInJobs = true;
+                    System.out.println("[sleep/opt] model parts on the render workers: measuring (" + n + " entities a frame)");
+                    phase = 1;
+                    frames = 0;
+                    partsAt = PartBatch.jobParts;
+                }
+                case 1 -> {
+                    if (++frames < SETTLE) return;
+                    phase = 2;
+                    frames = 0;
+                    sum = 0;
+                }
+                case 2 -> {
+                    sum += dt;
+                    if (++frames < WINDOW) return;
+                    double per = (double) sum / frames;
+                    if (window % 2 == 0) WITH[window / 2] = per; else WITHOUT[window / 2] = per;
+                    window++;
+                    if (window == 1 && PartBatch.jobParts == partsAt) {   // no part went through a job: nothing to choose
+                        phase = 3;
+                        decidedAt = now;
+                        decidedEntities = n;
+                        return;
+                    }
+                    if (window < 2 * ROUNDS) {
+                        PartBatch.partsInJobs = window % 2 == 0;
+                        phase = 1;
+                        frames = 0;
+                        return;
+                    }
+                    double with = 0, without = 0;
+                    for (int r = 0; r < ROUNDS; r++) {
+                        with += WITH[r];
+                        without += WITHOUT[r];
+                    }
+                    with /= ROUNDS;
+                    without /= ROUNDS;
+                    boolean keep = with <= without;
+                    PartBatch.partsInJobs = keep;
+                    result = String.format(java.util.Locale.ROOT, "%s (a frame %.3f ms with them, %.3f without; %d entities a frame)",
+                            keep ? "in the jobs" : "the CPU way in the jobs", with / 1e6, without / 1e6, n);
+                    System.out.println("[sleep/opt] model parts on the render workers: " + result);
+                    phase = 3;
+                    decidedAt = now;
+                    decidedEntities = n;
+                }
+                default -> { }
+            }
+        }
+    }
+
     /** -Dlab.prender.why=true: why entities stayed on the render thread (counts in the report) */
     private static final boolean WHY = Boolean.getBoolean("lab.prender.why");
     static final long[] WHY_N = new long[8];
