@@ -57,6 +57,13 @@ bit for bit on both Minecraft versions.
 - **Fixed:** the render cache's records could be read by the helper threads while being changed (a rare race); a shader
   that failed to compile and was retried lost its imports; JOML's direct matrix writes are not used (they fail on
   Android's Java).
+- **Known, for 1.2.2:** the measuring above happens in the running game - a few seconds of the slower way when a world
+  opens or a large crowd appears, which can look like a short stutter (most visible on a phone: about 5 s). 1.2.2 will
+  remember the results per machine and measure what it can in the main menu, so it happens once, out of sight.
+- **Android renderers:** tested with MojoLauncher's LTW (OpenGL 3.3 over OpenGL ES). Zink / Turnip and Freedreno (full
+  OpenGL 4.6 on Adreno) are not tested yet; GL4ES (OpenGL 2.1) starts but is slow even without Sleepium. The aim of
+  this release is to run everywhere first - Sleepium checks what each driver can do and falls back to the game's own
+  way where it cannot.
 - For testing: thread placement on Linux / Android (`lab.prender.pin`, `lab.prender.cpuStats`), off by default (it
   made no difference on the phone); each measured choice has a switch to fix it (`lab.rcache.tune`,
   `lab.partbatch.partsTune`, `lab.gpuAnim.interp=gpu|cpu`).

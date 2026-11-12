@@ -59,6 +59,10 @@ there is.
 - **F3 no longer halves the frame rate** (1.21.1: 986 -> ~1 300 fps with F3 open).
 - Desktops and laptops: as fast as 1.2.0 (Intel N100: terrain 118, entities 132, items 183, a horde 183 fps), the same
   picture bit for bit.
+- **Known, for 1.2.2:** the measuring happens in the running game - a few seconds of the slower way when a world opens or
+  a large crowd appears (a phone: about 5 s). 1.2.2 will remember the results per machine and measure in the main menu.
+- **Renderers:** tested with MojoLauncher's LTW; Zink / Turnip and Freedreno not tested yet. First of all Sleepium now
+  runs everywhere: it checks what each driver can do and falls back to the game's own way where it cannot.
 
 ## New in 1.2.0
 
