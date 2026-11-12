@@ -576,7 +576,7 @@ public final class ShaderPipeline {
             GL11.glViewport(0, 0, targets.width, targets.height);
         }
         // through GlStateManager: a deferred pass runs inside the level render, and a raw glDisable(DEPTH_TEST) left
-        // its cache saying "enabled" - the water after it was drawn without a depth test (11-02, the user: water and
+        // its cache saying "enabled" - the water after it was drawn without a depth test (11-02: water and
         // caves through the terrain)
         RenderSystem.disableBlend();
         RenderSystem.disableDepthTest();

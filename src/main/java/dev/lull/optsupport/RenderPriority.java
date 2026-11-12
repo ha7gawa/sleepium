@@ -11,7 +11,7 @@ import dev.lab.runtime.OsThreads;
  * the thread hardly on a CPU (the voxel session's thread audit, 11-09). Above normal: an N100 flight 85 -> 95 fps,
  * stutters 7.92 -> 1.33 %, p99 49.6 -> 21.4 ms. Windows: SetThreadPriority; macOS: the user-interactive QoS class;
  * Linux: raising needs privileges (usually refused) - there our pools step back instead (OsThreads: nice +5).
- * Raised on Windows only, where it was measured (the user, 11-11); -Dlab.render.priorityAnyOs=true raises it elsewhere too.
+ * Raised on Windows only, where it was measured (11-11); -Dlab.render.priorityAnyOs=true raises it elsewhere too.
  */
 public final class RenderPriority {
     private RenderPriority() {}

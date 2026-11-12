@@ -23,7 +23,7 @@ import org.lwjgl.opengl.GL20C;
  * (full albedo whatever the light). The mask's B (LabPBR's porosity, unused by our models) is ours: a polish - B 1..127
  * its strength, B 128..255 the same less 128 on a texel that may glow besides (Coatings.GLOW: a blade under a buff).
  * A polish is a sharp highlight and the sky's bright horizon (and the ground's glint) sliding over the metal as it
- * turns (10-04, the user: "a stronger shine, light running over the metal" - no colours the forge could not give).
+ * turns (10-04: "a stronger shine, light running over the metal" - no colours the forge could not give).
  * A model without a mask draws exactly as before (the branch is off), and so does one whose B is 0 or 128.
  * {@code -Dsleep.materials=false} turns it off.
  */
@@ -158,7 +158,7 @@ public final class Materials {
                         }
                         if (c_snow > 0.0) {   // snow: on the faces that look up, more of them the more it lies
                             // only on what faces well up (tilted over ~25 degrees from the upright), in 2 x 2 patches: the per-texel noise
-                            // had speckled the half-tilted cloth, coming and going as a cloak swayed (10-05, the user: it lay crooked)
+                            // had speckled the half-tilted cloth, coming and going as a cloak swayed (10-05: it lay crooked)
                             float m = step(1.0 - c_snow, clamp((c_N.y - 0.42) * 2.6, 0.0, 1.0) + (c_r2 - 0.5) * 0.18) * step(0.45 - c_snow * 0.4, probeCoatH);   // the upper body (the feet too only when it lies deep)
                             color.rgb = mix(color.rgb, vec3(0.90, 0.92, 0.95) * c_light, 0.92 * m);
                         }

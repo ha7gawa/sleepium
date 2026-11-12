@@ -2357,7 +2357,7 @@ public final class VoxelStream {
      * -Dlab.voxel.stream.lodCone=K (with .lod): the level from an effective distance - the chunk distance times
      * 1 + K * (1 - cos a) / 2, a the horizontal angle between the look and the section - so sections toward the screen's
      * edges and behind go coarse sooner; the nearest 2 chunks keep full detail. A turn of more than CONE_TURN re-decides
-     * the levels (the user, 11-10: a soft reveal of detail beats hitches; the full picture follows in a moment).
+     * the levels (11-10: a soft reveal of detail beats hitches; the full picture follows in a moment).
      */
     static final float LOD_CONE = Float.parseFloat(System.getProperty("lab.voxel.stream.lodCone", Boolean.getBoolean("lab.voxel.stream.cone") ? "2" : "0"));
     private static final double CONE_TURN = Math.cos(Math.toRadians(15));
