@@ -117,11 +117,11 @@ public final class GpuAnim {
     /** around TextureAtlas.cycleAnimationFrames: the whole animation tick of an atlas, the copies part of it */
     public static void tickDone(long ns) {
         tickNs += ns;
-        if (++ticks % 2400 == 0)
-            LOG.info("[sleep/opt] gpu anim: {} atlas ticks ({} empty ones skipped), {} ms each; {} frame copies ({} per tick, {} us each, {} ms per tick), {} interpolated frames per tick (vanilla's path; their upload {} ms per tick, through the ring {} ms per tick, {} ring waits), {} sheets{}",
+        if (++ticks % 2400 == 0 || ticks == 200)   // (once early too: a short measured run sees it)
+            LOG.info("[sleep/opt] gpu anim: {} atlas ticks ({} empty ones skipped), {} ms each; {} frame copies ({} per tick, {} us each, {} ms per tick), {} interpolated frames per tick (vanilla's path; their upload {} ms per tick, through the ring {} ms per tick, {} ring waits), {} sheets, {} blended on the GPU{}",
                     ticks, emptyAtlasTicks, String.format(java.util.Locale.ROOT, "%.3f", tickNs / 1e6 / ticks), copies, String.format(java.util.Locale.ROOT, "%.1f", (double) copies / ticks),
                     String.format(java.util.Locale.ROOT, "%.1f", copyNs / 1e3 / Math.max(1, copies)), String.format(java.util.Locale.ROOT, "%.3f", copyNs / 1e6 / ticks),
-                    String.format(java.util.Locale.ROOT, "%.1f", (double) (SpriteMix.fast + SpriteMix.slow) / ticks), String.format(java.util.Locale.ROOT, "%.3f", interpUploadNs / 1e6 / ticks), String.format(java.util.Locale.ROOT, "%.3f", pboNs / 1e6 / ticks), ringWaits, sheetsMade,
+                    String.format(java.util.Locale.ROOT, "%.1f", (double) (SpriteMix.fast + SpriteMix.slow) / ticks), String.format(java.util.Locale.ROOT, "%.3f", interpUploadNs / 1e6 / ticks), String.format(java.util.Locale.ROOT, "%.3f", pboNs / 1e6 / ticks), ringWaits, sheetsMade, gpuBlends,
                     VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "");
     }
 
@@ -158,6 +158,7 @@ public final class GpuAnim {
     /** an atlas's animation tick ends: a fence after the segment's uploads */
     public static void tickEnd() {
         blitEnd();
+        interpEnd();
         if (pbo != 0 && segUsed > 0) {
             FENCES[seg] = org.lwjgl.opengl.GL32C.glFenceSync(org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
             GL11C.glFlush();
@@ -280,6 +281,389 @@ public final class GpuAnim {
         org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, savedDraw);
         if (savedScissor) GL11C.glEnable(GL11C.GL_SCISSOR_TEST);
         blitBound = false;
+    }
+
+    // ------------------------------------------------------------------ interpolated frames blended on the GPU
+
+    /**
+     * -Dlab.gpuAnim.noInterp=true: interpolated frames blended on the CPU and uploaded (SpriteMix), as before. On: the
+     * blend is drawn into the atlas from the sprite's sheet - per mip level a quad whose fragments read both frames'
+     * texels and take red, green and blue from a 256 x 256 table of vanilla's (int) (d * a + (1 - d) * b) for this d
+     * (computed on the CPU, the same doubles: the same ints), alpha from the first frame. No upload a tick: on Android's
+     * LTW the uploads of interpolated frames were 2.7 ms an atlas tick (most vanilla blocks with "interpolate": stems,
+     * prismarine, sculk, campfires, furnaces, command blocks - ticked whether seen or not).
+     */
+    private static final boolean INTERP = !Boolean.getBoolean("lab.gpuAnim.noInterp");
+    private static int interpProgram = -1, interpVao, interpFbo;
+    private static int uSheet, uTable, uSrc0, uSrc1, uDst;
+    private static boolean interpBroken, interpChecked;
+    private static final Map<Long, Integer> TABLES = new java.util.HashMap<>();
+    private static final int SHEET_UNIT = 15, TABLE_UNIT = 14;   // (above vanilla's tracked units: its cache untouched)
+    public static long gpuBlends;
+
+    private static final String INTERP_VSH = "#version 330\nvoid main() {\n"
+            + "    gl_Position = vec4(float((gl_VertexID & 1) * 2 - 1), float((gl_VertexID >> 1) * 2 - 1), 0.0, 1.0);\n}\n";
+    private static final String INTERP_FSH = "#version 330\n"
+            + "uniform sampler2D Sheet;\nuniform sampler2D Table;\nuniform ivec3 Src0;\nuniform ivec2 Src1;\nuniform ivec2 Dst;\n"
+            + "out vec4 fragColor;\n"
+            + "void main() {\n"
+            + "    ivec2 p = ivec2(gl_FragCoord.xy) - Dst;\n"
+            + "    vec4 a = texelFetch(Sheet, Src0.xy + p, Src0.z);\n"
+            + "    vec4 b = texelFetch(Sheet, Src1 + p, Src0.z);\n"
+            + "    ivec4 ai = ivec4(a * 255.0 + 0.5), bi = ivec4(b * 255.0 + 0.5);\n"
+            + "    fragColor = vec4(texelFetch(Table, ivec2(bi.r, ai.r), 0).r, texelFetch(Table, ivec2(bi.g, ai.g), 0).r,\n"
+            + "                     texelFetch(Table, ivec2(bi.b, ai.b), 0).r, a.a);\n"
+            + "}\n";
+
+    private static int compile(int type, String src) {
+        int s = org.lwjgl.opengl.GL20C.glCreateShader(type);
+        org.lwjgl.opengl.GL20C.glShaderSource(s, src);
+        org.lwjgl.opengl.GL20C.glCompileShader(s);
+        if (org.lwjgl.opengl.GL20C.glGetShaderi(s, org.lwjgl.opengl.GL20C.GL_COMPILE_STATUS) == 0) {
+            LOG.info("[sleep/opt] gpu anim: the blend shader did not compile ({}): interpolated frames blended on the CPU",
+                    org.lwjgl.opengl.GL20C.glGetShaderInfoLog(s).trim().replace('\n', ' '));
+            org.lwjgl.opengl.GL20C.glDeleteShader(s);
+            return 0;
+        }
+        return s;
+    }
+
+    private static boolean interpReady() {
+        if (interpProgram >= 0) return interpProgram > 0;
+        interpProgram = 0;
+        int vs = compile(org.lwjgl.opengl.GL20C.GL_VERTEX_SHADER, INTERP_VSH), fs = vs == 0 ? 0 : compile(org.lwjgl.opengl.GL20C.GL_FRAGMENT_SHADER, INTERP_FSH);
+        if (fs == 0) return false;
+        int p = org.lwjgl.opengl.GL20C.glCreateProgram();
+        org.lwjgl.opengl.GL20C.glAttachShader(p, vs);
+        org.lwjgl.opengl.GL20C.glAttachShader(p, fs);
+        org.lwjgl.opengl.GL20C.glLinkProgram(p);
+        org.lwjgl.opengl.GL20C.glDeleteShader(vs);
+        org.lwjgl.opengl.GL20C.glDeleteShader(fs);
+        if (org.lwjgl.opengl.GL20C.glGetProgrami(p, org.lwjgl.opengl.GL20C.GL_LINK_STATUS) == 0) {
+            LOG.info("[sleep/opt] gpu anim: the blend program did not link: interpolated frames blended on the CPU");
+            org.lwjgl.opengl.GL20C.glDeleteProgram(p);
+            return false;
+        }
+        uSheet = org.lwjgl.opengl.GL20C.glGetUniformLocation(p, "Sheet");
+        uTable = org.lwjgl.opengl.GL20C.glGetUniformLocation(p, "Table");
+        uSrc0 = org.lwjgl.opengl.GL20C.glGetUniformLocation(p, "Src0");
+        uSrc1 = org.lwjgl.opengl.GL20C.glGetUniformLocation(p, "Src1");
+        uDst = org.lwjgl.opengl.GL20C.glGetUniformLocation(p, "Dst");
+        interpVao = org.lwjgl.opengl.GL30C.glGenVertexArrays();
+        interpFbo = org.lwjgl.opengl.GL30C.glGenFramebuffers();
+        interpProgram = p;
+        LOG.info("[sleep/opt] gpu anim: interpolated frames blended on the GPU (vanilla's rounding through a table)");
+        return true;
+    }
+
+    /** vanilla's mix for this d, every (a, b): an R8 texture, row a, column b (kept: a sprite's d values repeat) */
+    private static int table(double d) {
+        long key = Double.doubleToRawLongBits(d);
+        Integer t = TABLES.get(key);
+        if (t != null) return t;
+        if (TABLES.size() >= 256) {   // (far more than vanilla's sprites use: frame times are short)
+            for (int id : TABLES.values()) TextureUtil.releaseTextureId(id);
+            TABLES.clear();
+        }
+        ByteBuffer b = MemoryUtil.memAlloc(256 * 256);
+        for (int a = 0; a < 256; a++)
+            for (int c = 0; c < 256; c++) b.put(a << 8 | c, (byte) SpriteMix.mix(d, a, c));
+        int id = TextureUtil.generateTextureId();
+        int prevUnit = GL11C.glGetInteger(org.lwjgl.opengl.GL13C.GL_ACTIVE_TEXTURE);   // raw, put back raw (vanilla tracks 12 units)
+        org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + TABLE_UNIT);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, id);
+        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MIN_FILTER, GL11C.GL_NEAREST);
+        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MAG_FILTER, GL11C.GL_NEAREST);
+        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, org.lwjgl.opengl.GL12C.GL_TEXTURE_MAX_LEVEL, 0);
+        GlStateManager._pixelStore(GL11C.GL_UNPACK_ROW_LENGTH, 0);
+        GlStateManager._pixelStore(GL11C.GL_UNPACK_SKIP_PIXELS, 0);
+        GlStateManager._pixelStore(GL11C.GL_UNPACK_SKIP_ROWS, 0);
+        GlStateManager._pixelStore(GL11C.GL_UNPACK_ALIGNMENT, 1);
+        GL11C.glTexImage2D(GL11C.GL_TEXTURE_2D, 0, org.lwjgl.opengl.GL30C.GL_R8, 256, 256, 0, GL11C.GL_RED, GL11C.GL_UNSIGNED_BYTE, b);
+        GlStateManager._pixelStore(GL11C.GL_UNPACK_ALIGNMENT, 4);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, 0);
+        org.lwjgl.opengl.GL13C.glActiveTexture(prevUnit);
+        MemoryUtil.memFree(b);
+        TABLES.put(key, id);
+        return id;
+    }
+
+    /**
+     * In place of the CPU blend and upload of an interpolated frame (SpriteInterpolateMixin): frame (fx0, fy0) and
+     * (fx1, fy1) of the sprite's sheet, pixel positions at level 0, blended with d into the atlas at (x, y), every mip
+     * level as upload would (NeoForge's bound). false: nothing drawn - the CPU way.
+     */
+    public static boolean interpolate(SpriteContents c, int x, int y, int fx0, int fy0, int fx1, int fy1, double d) {
+        if (!INTERP || atlas == 0 || interpBroken || c.byMipLevel.length == 0 || c.byMipLevel[0].format() != NativeImage.Format.RGBA) return false;
+        if (tunePhase == 2 || tunePhase == 4) return false;   // measuring the CPU way, or decided for it
+        if (!interpReady()) return false;
+        long t0 = System.nanoTime();
+        Integer sheet = SHEETS.get(c);
+        if (sheet == null) {
+            sheet = sheet(c.byMipLevel);
+            SHEETS.put(c, sheet);
+        }
+        int table = table(d);
+        interpBegin();   // (per blend, put back after it: vanilla's uploads and the blit copies between blends must find their own state)
+        if (!selfTested) {
+            selfTested = true;
+            if (!selfTest(c, sheet, table, fx0, fy0, fx1, fy1, d)) {
+                interpBroken = true;
+                interpEnd();
+                return false;
+            }
+        }
+        org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + SHEET_UNIT);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, sheet);
+        org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + TABLE_UNIT);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, table);
+        org.lwjgl.opengl.GL13C.glActiveTexture(savedUnit);   // (vanilla's uploads in this tick bind through the active unit)
+        org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, interpFbo);   // (a blit meanwhile binds its own)
+        boolean ok = true;
+        int w = c.width(), h = c.height();
+        for (int k = 0; k < c.byMipLevel.length; k++) {
+            int lw = w >> k, lh = h >> k;
+            if (lw <= 0 || lh <= 0) break;   // NeoForge's bound, as in upload
+            org.lwjgl.opengl.GL30C.glFramebufferTexture2D(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, org.lwjgl.opengl.GL30C.GL_COLOR_ATTACHMENT0, GL11C.GL_TEXTURE_2D, atlas, k);
+            if (!interpChecked) {
+                int st = org.lwjgl.opengl.GL30C.glCheckFramebufferStatus(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER);
+                if (st != org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER_COMPLETE) {
+                    LOG.info("[sleep/opt] gpu anim: the atlas cannot be drawn into here (status {}): interpolated frames blended on the CPU", st);
+                    interpBroken = true;
+                    ok = false;
+                    break;
+                }
+            }
+            GL11C.glViewport(x >> k, y >> k, lw, lh);
+            GL11C.glEnable(GL11C.GL_SCISSOR_TEST);   // (the rectangle twice: a translator that bends the viewport cannot spill)
+            GL11C.glScissor(x >> k, y >> k, lw, lh);
+            org.lwjgl.opengl.GL20C.glUniform3i(uSrc0, fx0 >> k, fy0 >> k, k);
+            org.lwjgl.opengl.GL20C.glUniform2i(uSrc1, fx1 >> k, fy1 >> k);
+            org.lwjgl.opengl.GL20C.glUniform2i(uDst, x >> k, y >> k);
+            GL11C.glDrawArrays(GL11C.GL_TRIANGLE_STRIP, 0, 4);
+        }
+        GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
+        if (ok && !interpChecked) {
+            interpChecked = true;
+            int err = GL11C.glGetError();
+            if (err != GL11C.GL_NO_ERROR) {
+                LOG.info("[sleep/opt] gpu anim: the first GPU blend failed (GL error {}): interpolated frames blended on the CPU", err);
+                interpBroken = true;
+                ok = false;
+            }
+        }
+        if (!ok) {
+            interpEnd();
+            return false;
+        }
+        interpEnd();
+        gpuBlends++;
+        long ns = System.nanoTime() - t0;
+        interpUploadNs += ns;
+        tuneGpu(ns);
+        return true;
+    }
+
+    // which way is faster here: measured (-Dlab.gpuAnim.interp=gpu / cpu: fixed)
+    private static final String INTERP_WAY = System.getProperty("lab.gpuAnim.interp", "tune");
+    /** 0 GPU warm-up (sheets, tables, first draws), 1 GPU window, 2 CPU window, 3 decided: GPU, 4 decided: CPU */
+    private static int tunePhase = "cpu".equals(INTERP_WAY) ? 4 : "gpu".equals(INTERP_WAY) ? 3 : 0;
+    private static final int WARM = 400, WINDOW = 600;
+    private static long tuneNs, tuneFrames;
+    private static double gpuPer;
+    public static String interpChoice = "not decided";
+
+    /**
+     * A GPU blend's time on the render thread (the driver's work included). Desktop NVIDIA: the CPU way (SpriteMix and
+     * an upload) is ~6 us a frame, the GPU blend ~50-150 (a framebuffer attachment per mip level); Android's LTW: the
+     * uploads were 2.7 ms an atlas tick. The faster one is kept, the GPU with a 10 % margin.
+     */
+    private static void tuneGpu(long ns) {
+        if (tunePhase == 0) {
+            if (++tuneFrames >= WARM) {
+                tunePhase = 1;
+                tuneFrames = tuneNs = 0;
+            }
+        } else if (tunePhase == 1) {
+            tuneNs += ns;
+            if (++tuneFrames >= WINDOW) {
+                gpuPer = (double) tuneNs / tuneFrames;
+                tunePhase = 2;
+                tuneFrames = tuneNs = 0;
+            }
+        }
+    }
+
+    /** SpriteInterpolateMixin: an interpolated frame's CPU blend and upload took ns (only while measuring) */
+    public static void tuneCpu(long ns) {
+        if (tunePhase != 2) return;
+        tuneNs += ns;
+        if (++tuneFrames >= WINDOW) {
+            double cpuPer = (double) tuneNs / tuneFrames;
+            boolean gpu = gpuPer < cpuPer * 0.9;
+            tunePhase = gpu ? 3 : 4;
+            interpChoice = String.format(java.util.Locale.ROOT, "%s (%.1f us a frame on the GPU, %.1f on the CPU)", gpu ? "GPU" : "CPU", gpuPer / 1e3, cpuPer / 1e3);
+            LOG.info("[sleep/opt] gpu anim: interpolated frames blended on the {}", interpChoice);
+        }
+    }
+
+    /** whether the CPU way is being measured now (the mixin times it then) */
+    public static boolean tuningCpu() {
+        return tunePhase == 2;
+    }
+
+    public static final boolean VERIFY_BLEND = VERIFY;
+
+    private static boolean selfTested;
+
+    /**
+     * Before the first blend touches the atlas: the same draw (level 0) into a scratch texture three times the sprite's
+     * size, filled with a marker, the blend aimed at its middle; read back whole (glReadPixels: GLES has it) and
+     * compared - inside against the CPU blend (SpriteMix.mix), outside the marker kept. 11-12: on the phone (LTW) the
+     * first version wiped the whole block atlas (the quad covered the attachment, not the sprite) - this finds such a
+     * driver before the atlas is drawn into, and logs where the draw landed. The program and state are the blend's
+     * (interpBegin ran).
+     */
+    private static boolean selfTest(SpriteContents c, int sheet, int table, int fx0, int fy0, int fx1, int fy1, double d) {
+        int w = c.width(), h = c.height(), tw = w * 3, th = h * 3;
+        NativeImage src = c.byMipLevel[0];
+        int scratch = TextureUtil.generateTextureId();
+        org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + SHEET_UNIT);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, scratch);
+        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MIN_FILTER, GL11C.GL_NEAREST);
+        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MAG_FILTER, GL11C.GL_NEAREST);
+        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, org.lwjgl.opengl.GL12C.GL_TEXTURE_MAX_LEVEL, 0);
+        GL11C.glTexImage2D(GL11C.GL_TEXTURE_2D, 0, GL11C.GL_RGBA8, tw, th, 0, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, (ByteBuffer) null);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, sheet);
+        org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + TABLE_UNIT);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, table);
+        org.lwjgl.opengl.GL13C.glActiveTexture(savedUnit);
+        int prevRead = GL11C.glGetInteger(org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER_BINDING);
+        org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER, interpFbo);
+        org.lwjgl.opengl.GL30C.glFramebufferTexture2D(org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER, org.lwjgl.opengl.GL30C.GL_COLOR_ATTACHMENT0, GL11C.GL_TEXTURE_2D, scratch, 0);
+        int status = org.lwjgl.opengl.GL30C.glCheckFramebufferStatus(org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER);
+        String verdict;
+        boolean ok = false;
+        if (status != org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER_COMPLETE) {
+            verdict = "scratch framebuffer incomplete (" + status + ")";
+        } else {
+            final int MARK = 0x7F3F1F0F;   // (bytes 0F 1F 3F 7F: R G B A)
+            GL11C.glViewport(0, 0, tw, th);
+            GL11C.glClearColor((MARK & 255) / 255f, (MARK >> 8 & 255) / 255f, (MARK >> 16 & 255) / 255f, (MARK >>> 24) / 255f);
+            GL11C.glClear(GL11C.GL_COLOR_BUFFER_BIT);
+            GL11C.glClearColor(0f, 0f, 0f, 0f);
+            GL11C.glViewport(w, h, w, h);
+            int[] vp = new int[4];
+            GL11C.glGetIntegerv(GL11C.GL_VIEWPORT, vp);
+            GL11C.glEnable(GL11C.GL_SCISSOR_TEST);
+            GL11C.glScissor(w, h, w, h);
+            org.lwjgl.opengl.GL20C.glUniform3i(uSrc0, fx0, fy0, 0);
+            org.lwjgl.opengl.GL20C.glUniform2i(uSrc1, fx1, fy1);
+            org.lwjgl.opengl.GL20C.glUniform2i(uDst, w, h);
+            GL11C.glDrawArrays(GL11C.GL_TRIANGLE_STRIP, 0, 4);
+            GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
+            ByteBuffer px = MemoryUtil.memAlloc(tw * th * 4);
+            GL11C.glPixelStorei(GL11C.GL_PACK_ALIGNMENT, 4);
+            GL11C.glReadPixels(0, 0, tw, th, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, px);
+            int inBad = 0, outChanged = 0, minX = tw, minY = th, maxX = -1, maxY = -1, firstBad = 0, firstWant = 0;
+            for (int yy = 0; yy < th; yy++)
+                for (int xx = 0; xx < tw; xx++) {
+                    int got = px.getInt((yy * tw + xx) * 4);
+                    boolean inside = xx >= w && xx < 2 * w && yy >= h && yy < 2 * h;
+                    if (got != MARK) {
+                        minX = Math.min(minX, xx); minY = Math.min(minY, yy); maxX = Math.max(maxX, xx); maxY = Math.max(maxY, yy);
+                    }
+                    if (inside) {
+                        int px0 = xx - w, py0 = yy - h;
+                        int a = src.getPixelRGBA(fx0 + px0, fy0 + py0), b = src.getPixelRGBA(fx1 + px0, fy1 + py0);
+                        int want = a & 0xFF000000 | SpriteMix.mix(d, a >> 16 & 255, b >> 16 & 255) << 16 | SpriteMix.mix(d, a >> 8 & 255, b >> 8 & 255) << 8 | SpriteMix.mix(d, a & 255, b & 255);
+                        if (got != want && inBad++ == 0) { firstBad = got; firstWant = want; }
+                    } else if (got != MARK) outChanged++;
+                }
+            MemoryUtil.memFree(px);
+            ok = inBad == 0 && outChanged == 0;
+            verdict = String.format(java.util.Locale.ROOT, "%s: sprite %dx%d, viewport asked (%d,%d %dx%d) reads back (%d,%d %dx%d), written box %s, inside wrong %d of %d%s, outside changed %d",
+                    ok ? "passed" : "FAILED", w, h, w, h, w, h, vp[0], vp[1], vp[2], vp[3],
+                    maxX < 0 ? "none" : "(" + minX + "," + minY + ")-(" + maxX + "," + maxY + ")", inBad, w * h,
+                    inBad > 0 ? String.format(" (first %08x, want %08x)", firstBad, firstWant) : "", outChanged);
+        }
+        org.lwjgl.opengl.GL30C.glFramebufferTexture2D(org.lwjgl.opengl.GL30C.GL_FRAMEBUFFER, org.lwjgl.opengl.GL30C.GL_COLOR_ATTACHMENT0, GL11C.GL_TEXTURE_2D, 0, 0);
+        org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_READ_FRAMEBUFFER, prevRead);
+        org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, interpFbo);
+        TextureUtil.releaseTextureId(scratch);
+        LOG.info("[sleep/opt] gpu anim: blend self-test {}{}", verdict, ok ? "" : " - the atlas is not drawn into (interpolated frames on the CPU)");
+        return ok;
+    }
+
+    private static boolean interpBound, savedBlend, savedDepth, savedCull, savedScissorI;
+    private static int savedProgram, savedVao, savedFboI, savedUnit;
+    private static final int[] SAVED_VP = new int[4];
+    private static final ByteBuffer SAVED_MASK = MemoryUtil.memAlloc(4);
+
+    /**
+     * A blend's state: the current one saved raw and the blend's set; put back raw right after the blend (interpEnd).
+     * Not once a tick: 11-12 on the phone (LTW) a CPU-blended frame uploaded between two GPU blends, with the blend's
+     * framebuffer and viewport still bound, wiped the block atlas black (the translator draws uploads itself). The
+     * queries cost a desktop driver (atlas tick 0.23 -> 4.9 ms) - there the measured choice keeps the CPU way.
+     */
+    private static void interpBegin() {
+        savedProgram = GL11C.glGetInteger(org.lwjgl.opengl.GL20C.GL_CURRENT_PROGRAM);
+        savedVao = GL11C.glGetInteger(org.lwjgl.opengl.GL30C.GL_VERTEX_ARRAY_BINDING);
+        savedFboI = GL11C.glGetInteger(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER_BINDING);
+        savedUnit = GL11C.glGetInteger(org.lwjgl.opengl.GL13C.GL_ACTIVE_TEXTURE);
+        GL11C.glGetIntegerv(GL11C.GL_VIEWPORT, SAVED_VP);
+        savedBlend = GL11C.glIsEnabled(GL11C.GL_BLEND);
+        savedDepth = GL11C.glIsEnabled(GL11C.GL_DEPTH_TEST);
+        savedCull = GL11C.glIsEnabled(GL11C.GL_CULL_FACE);
+        savedScissorI = GL11C.glIsEnabled(GL11C.GL_SCISSOR_TEST);
+        GL11C.glGetBooleanv(GL11C.GL_COLOR_WRITEMASK, SAVED_MASK);
+        if (savedBlend) GL11C.glDisable(GL11C.GL_BLEND);
+        if (savedDepth) GL11C.glDisable(GL11C.GL_DEPTH_TEST);
+        if (savedCull) GL11C.glDisable(GL11C.GL_CULL_FACE);
+        if (savedScissorI) GL11C.glDisable(GL11C.GL_SCISSOR_TEST);
+        GL11C.glColorMask(true, true, true, true);
+        org.lwjgl.opengl.GL20C.glUseProgram(interpProgram);
+        org.lwjgl.opengl.GL30C.glBindVertexArray(interpVao);
+        org.lwjgl.opengl.GL20C.glUniform1i(uSheet, SHEET_UNIT);
+        org.lwjgl.opengl.GL20C.glUniform1i(uTable, TABLE_UNIT);
+        interpBound = true;
+    }
+
+    /** the atlas tick's end (tickEnd): the state as it was */
+    static void interpEnd() {
+        if (!interpBound) return;
+        interpBound = false;
+        org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, interpFbo);
+        org.lwjgl.opengl.GL30C.glFramebufferTexture2D(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, org.lwjgl.opengl.GL30C.GL_COLOR_ATTACHMENT0, GL11C.GL_TEXTURE_2D, 0, 0);
+        org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + SHEET_UNIT);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, 0);
+        org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + TABLE_UNIT);
+        GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, 0);
+        org.lwjgl.opengl.GL13C.glActiveTexture(savedUnit);
+        org.lwjgl.opengl.GL30C.glBindFramebuffer(org.lwjgl.opengl.GL30C.GL_DRAW_FRAMEBUFFER, savedFboI);
+        org.lwjgl.opengl.GL30C.glBindVertexArray(savedVao);
+        org.lwjgl.opengl.GL20C.glUseProgram(savedProgram);
+        GL11C.glViewport(SAVED_VP[0], SAVED_VP[1], SAVED_VP[2], SAVED_VP[3]);
+        GL11C.glColorMask(SAVED_MASK.get(0) != 0, SAVED_MASK.get(1) != 0, SAVED_MASK.get(2) != 0, SAVED_MASK.get(3) != 0);
+        if (savedBlend) GL11C.glEnable(GL11C.GL_BLEND);
+        if (savedDepth) GL11C.glEnable(GL11C.GL_DEPTH_TEST);
+        if (savedCull) GL11C.glEnable(GL11C.GL_CULL_FACE);
+        if (savedScissorI) GL11C.glEnable(GL11C.GL_SCISSOR_TEST);
+        com.mojang.blaze3d.vertex.BufferUploader.invalidate();   // (another vertex array was bound meanwhile)
+    }
+
+    /** -Dlab.gpuAnim.verify: the atlas region (level 0) against the CPU blend (SpriteMix into a scratch frame) */
+    public static void verifyBlend(NativeImage expected, int x, int y, int w, int h) {
+        if (!VERIFY || !readBack) return;
+        ByteBuffer b = MemoryUtil.memAlloc(w * h * 4);
+        GL45C.glGetTextureSubImage(atlas, 0, x, y, 0, w, h, 1, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, b);
+        int diff = 0;
+        for (int j = 0; j < h; j++)
+            for (int i = 0; i < w; i++)
+                if (b.getInt((j * w + i) * 4) != expected.getPixelRGBA(i, j)) diff++;
+        MemoryUtil.memFree(b);
+        verified++;
+        if (diff > 0 && mismatches++ < 5) LOG.warn("[sleep/opt] gpu anim: a GPU-blended frame differs from the CPU blend at {},{} ({}x{}): {} pixels", x, y, w, h, diff);
     }
 
     /** the sprite closed (a resource reload): its sheet goes */
