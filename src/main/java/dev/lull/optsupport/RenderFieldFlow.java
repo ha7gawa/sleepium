@@ -46,12 +46,19 @@ public final class RenderFieldFlow {
     private RenderFieldFlow() {}
 
     /** a mod's result */
-    public record Verdict(String mod, boolean trusted, Set<String> dToW, Set<String> wGlobal, Set<String> wUnknown, Set<String> gl,
+    public record Verdict(String mod, boolean trusted, Set<String> dToW, Set<String> dGame, Set<String> wGlobal, Set<String> wUnknown, Set<String> gl,
                           Set<String> notFollowed) {
+        /** only fields from the dispatcher read in the models: the field log can check them at the merge */
+        boolean onlyDToW() {
+            return !trusted && !dToW.isEmpty() && dGame.isEmpty() && wGlobal.isEmpty() && wUnknown.isEmpty() && gl.isEmpty() && notFollowed.isEmpty();
+        }
+
         String why() {
             if (trusted) return "trusted (no field from the dispatcher read in the models, no global writes there)";
+            if (LOGGED.contains(mod)) return "trusted with its reads checked at the merge " + cut(dToW);
             List<String> r = new ArrayList<>();
             if (!dToW.isEmpty()) r.add("dispatcher -> models " + cut(dToW));
+            if (!dGame.isEmpty()) r.add("the game's fields written around the draw " + cut(dGame));
             if (!wGlobal.isEmpty()) r.add("global writes in the models " + cut(wGlobal));
             if (!wUnknown.isEmpty()) r.add("writes to objects not followed " + cut(wUnknown));
             if (!gl.isEmpty()) r.add("GL state " + cut(gl));
@@ -61,13 +68,19 @@ public final class RenderFieldFlow {
     }
 
     private static Map<String, Verdict> byConfig;
+    /** mods trusted with their dispatcher -> model reads logged and checked at the merge (FieldLog) */
+    static final Set<String> LOGGED = new java.util.HashSet<>();
+    /** per mod: its worker-side walk (the read sites, the fields' descriptors) */
+    private static final Map<String, Walk> W_WALK = new HashMap<>();
+    /** the mod classes made targets of the flow carrier */
+    static final Set<String> CARRIED = new TreeSet<>();
     private static final Map<String, Verdict> BY_MOD = new LinkedHashMap<>();
 
     /** autoInner: may this config's mixins in the dispatcher and in the worker's code be trusted (with the flag on) */
     public static boolean trusted(String config) {
         if (!Boolean.getBoolean("lab.prender.fieldFlow")) return false;
         Verdict v = of(config);
-        return v != null && v.trusted;
+        return v != null && (v.trusted || LOGGED.contains(v.mod));
     }
 
     public static synchronized Verdict of(String config) {
@@ -103,6 +116,107 @@ public final class RenderFieldFlow {
         if (target.equals("net/minecraft/client/renderer/LevelRenderer")) return all || method.equals("renderEntity") ? "D" : null;
         if (target.startsWith("net/minecraft/client/model/") || target.startsWith("net/minecraft/client/renderer/entity/")
                 || target.equals("net/minecraft/client/renderer/RenderType")) return "W";
+        return null;
+    }
+
+    private static boolean earlyDone;
+
+    /**
+     * FlowMixinPlugin.acceptTargets (every config prepared, no game class transformed yet): the analysis; with
+     * -Dlab.prender.fieldFlow=true the dispatcher -> model fields of the mods that need nothing else are logged
+     * (FieldLog), and the mod classes reading them become targets of the flow carrier, so that LateEventSites sees
+     * them. Mixin decides per class at its load: hasMixinsFor(name) on its configs' mappings - the carrier's
+     * MixinInfo is added there for each such class (Mixin 0.8.5 checks a target against the mixin's declared ones
+     * only while preparing; the carrier is empty).
+     */
+    public static synchronized void early() {
+        if (earlyDone) return;
+        earlyDone = true;
+        if (byConfig == null) analyse();
+        if (!Boolean.getBoolean("lab.prender.fieldFlow")) return;
+        if (!LateEventSites.register()) {
+            System.out.println("[sleep/opt] render field flow: Mixin's extensions out of reach, no reads logged");
+            return;
+        }
+        Object mc = null;
+        java.lang.reflect.Method mixinsFor = null;
+        Object carrier = null;
+        try {
+            mc = processorConfig("sleepium-flow.mixins.json");
+            if (mc != null) {
+                mixinsFor = mc.getClass().getMethod("getMixinsFor", String.class);
+                mixinsFor.setAccessible(true);
+                List<?> l = (List<?>) mixinsFor.invoke(mc, "dev.lull.optsupport.FlowCarrierTarget");
+                if (!l.isEmpty()) carrier = l.get(0);
+            }
+        } catch (Throwable t) {
+            System.out.println("[sleep/opt] render field flow: the flow carrier not reachable (" + t + "), no reads logged");
+            return;
+        }
+        if (carrier == null) {
+            String keys = "?";
+            try {
+                java.lang.reflect.Field f = mc == null ? null : mc.getClass().getDeclaredField("mixinMapping");
+                if (f != null) {
+                    f.setAccessible(true);
+                    keys = String.valueOf(((Map<?, ?>) f.get(mc)).keySet());
+                }
+            } catch (Throwable t) {
+                keys = t.toString();
+            }
+            System.out.println("[sleep/opt] render field flow: the flow carrier not prepared, no reads logged (config " + (mc != null) + ", its targets " + keys + ")");
+            return;
+        }
+        for (Verdict v : BY_MOD.values()) {
+            if (!v.onlyDToW()) continue;
+            Walk w = W_WALK.get(v.mod);
+            boolean ok = true;
+            for (String k : v.dToW) {
+                String d = w.desc.get(k);
+                String bare = d == null ? null : d.startsWith("S") ? d.substring(1) : d;
+                // a container's identity says nothing of its content: such a flow stays refused
+                if (bare == null || bare.startsWith("Ljava/util/") || bare.startsWith("[")) ok = false;
+            }
+            if (!ok) continue;
+            Set<String> sites = new TreeSet<>();
+            for (String k : v.dToW) sites.addAll(w.readSites.getOrDefault(k, Set.of()));
+            try {
+                for (String k : v.dToW) {
+                    String d = w.desc.get(k);
+                    boolean st = d.startsWith("S");
+                    FieldLog.register(k.substring(0, k.lastIndexOf('.')), k.substring(k.lastIndexOf('.') + 1), st ? d.substring(1) : d, st);
+                }
+                for (String c : sites) {
+                    if (outside(c)) continue;
+                    ClassNode cn = Classes.read(null, c);
+                    if (cn == null || !MixinTouch.targets(cn).isEmpty()) continue;   // a mixin's code lands in its targets, which pass anyway
+                    @SuppressWarnings("unchecked") List<Object> l = (List<Object>) mixinsFor.invoke(mc, c.replace('/', '.'));
+                    if (!l.contains(carrier)) l.add(carrier);
+                    CARRIED.add(c);
+                }
+                LOGGED.add(v.mod);
+                System.out.println("[sleep/opt] render field flow: " + v.mod + ": reads checked at the merge " + cut(v.dToW) + ", classes carried " + cut(sites));
+            } catch (Throwable t) {
+                System.out.println("[sleep/opt] render field flow: " + v.mod + " not set up (" + t + ")");
+            }
+        }
+    }
+
+    /**
+     * A config as Mixin's processor holds it (Mixins.getConfigs lists only the configs not yet taken by the processor;
+     * while the configs are prepared ours is in its pending list): MixinTransformer.processor -> pendingConfigs / configs
+     */
+    private static Object processorConfig(String name) throws ReflectiveOperationException {
+        Object t = org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment().getActiveTransformer();
+        java.lang.reflect.Field pf = t.getClass().getDeclaredField("processor");
+        pf.setAccessible(true);
+        Object proc = pf.get(t);
+        for (String list : new String[] {"pendingConfigs", "configs"}) {
+            java.lang.reflect.Field lf = proc.getClass().getDeclaredField(list);
+            lf.setAccessible(true);
+            for (Object c : (List<?>) lf.get(proc))
+                if (c instanceof org.spongepowered.asm.mixin.extensibility.IMixinConfig mc && mc.getName().equals(name)) return c;
+        }
         return null;
     }
 
@@ -145,8 +259,12 @@ public final class RenderFieldFlow {
             dToW.retainAll(w.reads);
             Set<String> nf = new TreeSet<>(w.notFollowed);
             nf.addAll(d.notFollowed);
-            boolean ok = dToW.isEmpty() && w.global.isEmpty() && w.unknown.isEmpty() && w.gl.isEmpty() && nf.isEmpty();
-            Verdict v = new Verdict(e.getKey(), ok, dToW, w.global, w.unknown, w.gl, nf);
+            // the game's own fields written around the draw: the vanilla renderer may read them, code this walk never sees
+            Set<String> dGame = new TreeSet<>();
+            for (String k : d.writes) if (outside(k.substring(0, k.lastIndexOf('.')))) dGame.add(k);
+            boolean ok = dToW.isEmpty() && dGame.isEmpty() && w.global.isEmpty() && w.unknown.isEmpty() && w.gl.isEmpty() && nf.isEmpty();
+            Verdict v = new Verdict(e.getKey(), ok, dToW, dGame, w.global, w.unknown, w.gl, nf);
+            W_WALK.put(e.getKey(), w);
             BY_MOD.put(e.getKey(), v);
             for (String c : configsOf.getOrDefault(e.getKey(), List.of())) byConfig.put(c, v);
             System.out.println("[sleep/opt] render field flow: " + e.getKey() + " (" + hs.size() + " injections: "
@@ -208,6 +326,9 @@ public final class RenderFieldFlow {
         final Set<String> reads = new TreeSet<>(), writes = new TreeSet<>(), global = new TreeSet<>(), unknown = new TreeSet<>(),
                 gl = new TreeSet<>(), notFollowed = new TreeSet<>();
         final Set<String> seen = new HashSet<>();
+        /** field -> descriptor ("S" prefix: static); field -> the classes reading it (the walked methods' owners) */
+        final Map<String, String> desc = new HashMap<>();
+        final Map<String, Set<String>> readSites = new HashMap<>();
         int methods;
 
         void walk(ModFile home, String owner, MethodNode m, int depth) {
@@ -223,8 +344,10 @@ public final class RenderFieldFlow {
                     if (f.owner.startsWith("java/")) continue;
                     String key = f.owner + "." + f.name;
                     int op = f.getOpcode();
+                    desc.putIfAbsent(key, (op == Opcodes.GETSTATIC || op == Opcodes.PUTSTATIC ? "S" : "") + f.desc);
                     if (op == Opcodes.GETSTATIC || op == Opcodes.GETFIELD) {
                         reads.add(key);
+                        readSites.computeIfAbsent(key, k -> new TreeSet<>()).add(owner);
                         continue;
                     }
                     if (clinit && f.owner.equals(owner) || ctor && op == Opcodes.PUTFIELD && f.owner.equals(owner)) continue;   // initialising
@@ -336,7 +459,7 @@ public final class RenderFieldFlow {
                 return cn;
             }
             if (MISSING.contains(internal) || outside(internal)) return null;
-            ModFile f = has(home, internal) ? home : null;
+            ModFile f = home != null && has(home, internal) ? home : null;
             if (f == null) {
                 if (all == null) {
                     all = new ArrayList<>();
@@ -443,7 +566,7 @@ public final class RenderFieldFlow {
         static Set<String> implementors(ModFile home, String owner) {
             Set<String> out = new TreeSet<>();
             Set<ModFile> files = new HashSet<>(FILE_OF.values());
-            files.add(home);
+            if (home != null) files.add(home);
             for (ModFile f : files) {
                 Map<String, Set<String>> subs = SUBS.computeIfAbsent(f, Classes::index);
                 List<String> q = new ArrayList<>(List.of(owner));

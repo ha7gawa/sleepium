@@ -208,6 +208,8 @@ public final class ParallelRender {
         /** records of model parts drawn from VRAM (GeckoLib bones), queued at the merge */
         final PartBatch.JobParts parts = new PartBatch.JobParts();
         final java.util.IdentityHashMap<Object, Object> locals = new java.util.IdentityHashMap<>();
+        /** what the worker read of the fields mods set around the draw (RenderFieldFlow), checked at the inner merge */
+        final FieldLog.Log fieldLog = new FieldLog.Log();
 
         /** worker or render thread: whoever claims the job first renders it */
         final java.util.concurrent.atomic.AtomicBoolean claimed = new java.util.concurrent.atomic.AtomicBoolean();
@@ -224,6 +226,7 @@ public final class ParallelRender {
             CURRENT.set(this);
             try {
                 if (s != null && s.locals != null) ModLocals.enter(s.locals);   // (inside: a failure here is the job's, not the worker's)
+                FieldLog.begin(fieldLog);
                 ok = s != null && render(s, this);
             } catch (Refusal r) {
                 ok = false;
@@ -241,6 +244,7 @@ public final class ParallelRender {
                 if (type != null) learnFailure(type, t);
             } finally {
                 CURRENT.remove();
+                FieldLog.end();
                 if (s != null && s.locals != null) ModLocals.exit();
                 if (!ok) {   // the render thread renders it again, side effects included
                     calls.clear();
@@ -658,6 +662,16 @@ public final class ParallelRender {
             j.calls.clear();
             j.parts.clear();
             return false;
+        }
+        if (FieldLog.any()) {   // a mod's fields set around the draw: what the worker read must be what is there now
+            FieldLog.verified++;
+            if (!j.fieldLog.verify()) {
+                FieldLog.fallbacks++;
+                mergeFallbacks++;
+                j.calls.clear();
+                j.parts.clear();
+                return false;
+            }
         }
         if (sampled(j)) {   // rendered here once more, inside the dispatcher where other mods' state is set: the same bytes?
             VERIFY_REC.reset();
@@ -1267,6 +1281,7 @@ public final class ParallelRender {
 
     public static String report() {
         if (EmfAdapter.ON) System.out.println("[sleep/opt] " + EmfAdapter.report());
+        if (FieldLog.any()) System.out.println("[sleep/opt] " + FieldLog.report() + "; carried " + RenderFieldFlow.CARRIED);
         if (WHY) {
             StringBuilder w = new StringBuilder("parallel render, why on the render thread:");
             for (int i = 0; i < WHY_N.length; i++) if (WHY_N[i] > 0) w.append(' ').append(WHY_NAMES[i]).append(' ').append(WHY_N[i]).append(';');

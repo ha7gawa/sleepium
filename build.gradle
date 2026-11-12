@@ -20,7 +20,7 @@ tasks.named('jar', Jar).configure {
     archiveVersion = "${mod_version}+mc${minecraft_version}-forge"
     // Forge reads the mixin configs from the manifest (1.21.1: [[mixins]] in neoforge.mods.toml); veil comes back with its
     // port (port-pending.txt)
-    manifest.attributes('MixinConfigs': "${mod_id}.mixins.json,${mod_id}-opt.mixins.json,sleepium-foreign-test.mixins.json,sleepium-encrypt-test.mixins.json,sleepium-latency-test.mixins.json,sleepium-offthread-test.mixins.json,sleepium-poseleak-test.mixins.json,sleepium-stimulate-test.mixins.json,sleepium-ticksplit-test.mixins.json,sleepium-geo.mixins.json,sleepium-shaders.mixins.json,sleepium-catnip.mixins.json,sleepium-flywheel.mixins.json,sleepium-emf.mixins.json")
+    manifest.attributes('MixinConfigs': "${mod_id}.mixins.json,${mod_id}-opt.mixins.json,sleepium-foreign-test.mixins.json,sleepium-encrypt-test.mixins.json,sleepium-latency-test.mixins.json,sleepium-offthread-test.mixins.json,sleepium-poseleak-test.mixins.json,sleepium-stimulate-test.mixins.json,sleepium-ticksplit-test.mixins.json,sleepium-geo.mixins.json,sleepium-shaders.mixins.json,sleepium-catnip.mixins.json,sleepium-flywheel.mixins.json,sleepium-emf.mixins.json,sleepium-flow.mixins.json")
 }
 
 // the test scenes (data/sleep/functions: lag_*, client_*): loaded by the dev runs and the tools, not in the jar
@@ -98,6 +98,7 @@ mixin {
     config "sleepium-catnip.mixins.json"
     config "sleepium-flywheel.mixins.json"
     config "sleepium-emf.mixins.json"
+    config "sleepium-flow.mixins.json"
 }
 
 dependencies {
