@@ -103,6 +103,60 @@ public final class RecordingBuilder implements VertexConsumer {
         return dst;
     }
 
+    /** -Dlab.prender.bulkStack=true: putBulkData as NeoForge's default (through LWJGL's MemoryStack) */
+    private static final boolean BULK_STACK = Boolean.getBoolean("lab.prender.bulkStack");
+
+    /**
+     * NeoForge 1.21.1's VertexConsumer.putBulkData (vanilla's body with the quad's own alpha, applyBakedLighting and
+     * applyBakedNormals) without LWJGL's MemoryStack: its ByteBuffer is only a native-order view of the quad's eight
+     * ints a vertex, so getFloat(0) is Float.intBitsToFloat(v[0]) and get(12) is v[3] & 255 - the same values, the same
+     * arithmetic in the same order. The stack is found through a ThreadLocal on every quad: on the render workers it was
+     * the largest part of their samples (1.20.1, client_entities: the zombies' swords).
+     */
+    @Override
+    public void putBulkData(com.mojang.blaze3d.vertex.PoseStack.Pose pose, net.minecraft.client.renderer.block.model.BakedQuad quad, float[] brightness,
+                            float red, float green, float blue, float alpha, int[] lightmap, int packedOverlay, boolean readAlpha) {
+        if (BULK_STACK) {
+            VertexConsumer.super.putBulkData(pose, quad, brightness, red, green, blue, alpha, lightmap, packedOverlay, readAlpha);
+            return;
+        }
+        int[] v = quad.getVertices();
+        net.minecraft.core.Vec3i dir = quad.getDirection().getNormal();
+        org.joml.Matrix4f m = pose.pose();
+        org.joml.Vector3f normal = pose.transformNormal((float) dir.getX(), (float) dir.getY(), (float) dir.getZ(), new org.joml.Vector3f());
+        int count = v.length / 8;
+        int k = (int) (alpha * 255.0F);
+        for (int l = 0; l < count; l++) {
+            int o = l * 8;
+            float x = Float.intBitsToFloat(v[o]), y = Float.intBitsToFloat(v[o + 1]), z = Float.intBitsToFloat(v[o + 2]);
+            int c = v[o + 3];
+            float r, g, b;
+            if (readAlpha) {
+                float cr = (float) (c & 255), cg = (float) (c >> 8 & 255), cb = (float) (c >> 16 & 255);
+                r = cr * brightness[l] * red;
+                g = cg * brightness[l] * green;
+                b = cb * brightness[l] * blue;
+            } else {
+                r = brightness[l] * red * 255.0F;
+                g = brightness[l] * green * 255.0F;
+                b = brightness[l] * blue * 255.0F;
+            }
+            int vertexAlpha = readAlpha ? (int) ((alpha * (float) (c >>> 24 & 255) / 255.0F) * 255) : k;
+            int color = net.minecraft.util.FastColor.ARGB32.color(vertexAlpha, (int) r, (int) g, (int) b);
+            int baked = v[o + 6];   // applyBakedLighting: the quad's own light, the larger per part
+            int light = Math.max(lightmap[l] & 0xFFFF, baked & 0xFFFF) | Math.max(lightmap[l] >> 16 & 0xFFFF, baked >>> 16 & 0xFFFF) << 16;
+            float u = Float.intBitsToFloat(v[o + 4]), vv = Float.intBitsToFloat(v[o + 5]);
+            org.joml.Vector3f p = m.transformPosition(x, y, z, new org.joml.Vector3f());
+            int nb = v[o + 7];   // applyBakedNormals: a baked normal replaces the face's
+            byte nx = (byte) nb, ny = (byte) (nb >> 8), nz = (byte) (nb >> 16);
+            if (nx != 0 || ny != 0 || nz != 0) {
+                normal.set(nx / 127f, ny / 127f, nz / 127f);
+                normal.mul(pose.normal());
+            }
+            this.addVertex(p.x(), p.y(), p.z(), color, u, vv, packedOverlay, light, normal.x(), normal.y(), normal.z());
+        }
+    }
+
     @Override
     public VertexConsumer addVertex(float x, float y, float z) {
         long need = (long) (n + 1) * vertexSize;
