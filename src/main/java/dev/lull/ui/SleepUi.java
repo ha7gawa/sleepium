@@ -32,11 +32,16 @@ public final class SleepUi {
         // the main menu measures what it can before a world opens (Calibration: then kept, no measuring in the game)
         gameBus.addListener(net.neoforged.neoforge.client.event.ClientTickEvent.Post.class, e -> dev.lull.optsupport.GpuAnim.menuTick());
         gameBus.addListener(net.neoforged.neoforge.client.event.ClientTickEvent.Post.class, e -> profileTick());
-        gameBus.addListener(net.neoforged.neoforge.client.event.RenderFrameEvent.Pre.class, e -> dev.lull.optsupport.ModProfile.frame());
+        gameBus.addListener(net.neoforged.neoforge.client.event.RenderFrameEvent.Pre.class, e -> {
+            dev.lull.optsupport.ModProfile.frame();
+            Hud.frameStart();
+        });
+        gameBus.addListener(net.neoforged.neoforge.client.event.ClientTickEvent.Pre.class, e -> Hud.tickStart());
+        gameBus.addListener(net.neoforged.neoforge.client.event.ClientTickEvent.Post.class, e -> Hud.tickEnd());
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.optsupport.ModProfile.serverTick());
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> SleepStats.serverTick(e.getServer()));
         gameBus.addListener(net.neoforged.neoforge.client.event.RenderGuiEvent.Post.class, e -> {
-            if (Minecraft.getInstance().screen == null) SleepStats.drawHud(e.getGuiGraphics());
+            if (Minecraft.getInstance().screen == null) Hud.draw(e.getGuiGraphics());
         });
         // a shaderpack being prepared: its progress in the corner, on menus and in the game alike
         gameBus.addListener(ScreenEvent.Render.Post.class, e -> preparing(e.getGuiGraphics()));

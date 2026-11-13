@@ -39,7 +39,7 @@ import net.minecraft.util.FormattedCharSequence;
  * plugin switches by another flag are shown as part of it.
  */
 public final class SleepScreen extends Screen {
-    private static final int OVERVIEW = 0, SHADERS = 100, FLAGS = 101, MODS = 102;
+    private static final int OVERVIEW = 0, SHADERS = 100, FLAGS = 101, MODS = 102, HUD = 103;
     /** the Mods page: the mod shown (null: the list) and the list's search */
     private static String modSel, modFilter = "";
     /** the Mods page's rules as this screen would leave them: sleep.mod.<id>.<rule> -> value */
@@ -173,6 +173,7 @@ public final class SleepScreen extends Screen {
         side.clear();
         sideEntry(OVERVIEW, Component.translatable("sleepium.ui.page.overview"));
         sideEntry(MODS, Component.translatable("sleepium.ui.side.mods"));
+        sideEntry(HUD, Component.translatable("sleepium.ui.side.hud"));
         int i = 1;
         for (String g : SleepOptions.GROUPS) sideEntry(i++, Component.translatable("sleepium.ui.side." + g));
         sideEntry(SHADERS, Component.translatable("sleepium.ui.side.shaders"));
@@ -194,6 +195,7 @@ public final class SleepScreen extends Screen {
         else if (page == SHADERS) fillShaders();
         else if (page == FLAGS) fillFlags(null);
         else if (page == MODS) fillMods();
+        else if (page == HUD) fillHud();
         else fillFlags(SleepOptions.GROUPS[page - 1]);
     }
 
@@ -364,6 +366,39 @@ public final class SleepScreen extends Screen {
                 toggle.setMessage(on(part ? effective(o.partOf().get(0)) : desired.get(o.key())));
                 return !part && restartNeeded(o.key()) ? Component.translatable("sleepium.ui.restart.short").withStyle(ChatFormatting.YELLOW) : null;
             }, tip, toggle));
+        }
+    }
+
+    // ------------------------------------------------------------------ the HUD page (notes/73)
+
+    private void fillHud() {
+        Hud.load();
+        Button on = Button.builder(Component.empty(), x -> SleepStats.hud = !SleepStats.hud).size(110, 20).build();
+        list.add(new Row(() -> Component.translatable("sleepium.ui.hud.on").withStyle(ChatFormatting.BOLD), () -> {
+            on.setMessage(on(SleepStats.hud));
+            return null;
+        }, Component.translatable("sleepium.ui.hud.on.tip"), on));
+        int[] rates = {100, 250, 500, 1000};
+        Button rate = Button.builder(Component.empty(), x -> {
+            int i = 0;
+            while (i < rates.length && rates[i] != Hud.refreshMs) i++;
+            Hud.refreshMs = rates[(i + 1) % rates.length];
+            Hud.save();
+        }).size(110, 20).build();
+        list.add(new Row(() -> Component.translatable("sleepium.ui.hud.rate"), () -> {
+            rate.setMessage(Component.literal(Hud.refreshMs + " ms"));
+            return null;
+        }, Component.translatable("sleepium.ui.hud.rate.tip"), rate));
+        for (String w : Hud.WIDGETS) {
+            Button b = Button.builder(Component.empty(), x -> {
+                int i = java.util.Arrays.asList(Hud.CORNERS).indexOf(Hud.corner(w));
+                Hud.corner(w, Hud.CORNERS[(i + 1) % Hud.CORNERS.length]);
+            }).size(110, 20).build();
+            list.add(new Row(() -> Component.translatable("sleepium.ui.hud.w." + w), () -> {
+                String c = Hud.corner(w);
+                b.setMessage(Component.translatable("sleepium.ui.hud.c." + c).withStyle(c.equals("off") ? ChatFormatting.GRAY : ChatFormatting.GREEN));
+                return null;
+            }, Component.translatable("sleepium.ui.hud.w." + w + ".tip"), b));
         }
     }
 
