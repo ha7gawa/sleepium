@@ -67,7 +67,8 @@ class Server:
             f.write('eula=true\n')
         with open(os.path.join(RUN, 'server.properties'), 'w') as f:
             f.writelines('%s=%s\n' % kv for kv in self.props.items())
-        args = [GRADLEW, 'runServer', '--console=plain', '-q', '-PrunJvmArgs=' + ' '.join(self.jvm_args)]
+        extra = os.environ.get('MC_JVM_EXTRA', '').split()   # (debug: e.g. -Xlog:exceptions=info:file=...)
+        args = [GRADLEW, 'runServer', '--console=plain', '-q', '-PrunJvmArgs=' + ' '.join(list(self.jvm_args) + extra)]
         if os.environ.get('MC_MODS'):
             args.append('-PtestMods=' + os.environ['MC_MODS'])
         self.p = subprocess.Popen(args, cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
