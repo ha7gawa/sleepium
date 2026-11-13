@@ -14,6 +14,7 @@
   "sleepium.ui.restart": "Restart the game to apply %s change(s)",
   "sleepium.ui.restart.short": "restart",
   "sleepium.ui.locked": "Set by a launch flag (-D%s): change it in the launcher's JVM arguments",
+  "sleepium.ui.duplicates": "Sleepium: several copies in the mods folder (%s). The game uses %s - delete the others.",
   "sleepium.ui.mods.never": "never:",
   "sleepium.ui.mods.why.unproven": "can't prove its tick idle",
   "sleepium.ui.mods.why.hidden": "hidden state",

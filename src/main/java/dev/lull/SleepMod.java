@@ -27,6 +27,7 @@ public final class SleepMod {
         TickTimer.INSTANCE.register(gameBus);
         EventCounter.INSTANCE.attach(gameBus);
         EventBench.registerListeners(gameBus);
+        dev.lull.optsupport.DuplicateJars.find();   // two Sleepium jars in mods: said in the log (and in the chat on the client)
         gameBus.addListener(SleepCommand::register);
         gameBus.addListener(EventPriority.NORMAL, false, TickEvent.ServerTickEvent.class, e -> {
             if (e.phase == TickEvent.Phase.START) NetBench.onTickStart();   // 1.21.1: ServerTickEvent.Pre

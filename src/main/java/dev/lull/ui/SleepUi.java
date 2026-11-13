@@ -86,6 +86,12 @@ public final class SleepUi {
 
     /** the Mods page's recording: when it ends, a line in the chat */
     static void profileTick() {
+        Minecraft mc0 = Minecraft.getInstance();
+        if (mc0.player != null && mc0.gui != null) {   // two Sleepium jars in mods: once, when a world is open
+            java.util.List<String> dup = dev.lull.optsupport.DuplicateJars.tellOnce();
+            if (dup != null) mc0.gui.getChat().addMessage(net.minecraft.network.chat.Component.translatable("sleepium.ui.duplicates", String.join(", ", dup),
+                    dev.lull.optsupport.DuplicateJars.used()).withStyle(net.minecraft.ChatFormatting.GOLD));
+        }
         if (!dev.lull.optsupport.ModProfile.poll()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.gui != null) mc.gui.getChat().addMessage(net.minecraft.network.chat.Component.translatable("sleepium.ui.mods.profile.done").withStyle(net.minecraft.ChatFormatting.AQUA));
