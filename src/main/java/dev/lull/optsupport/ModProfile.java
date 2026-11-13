@@ -102,6 +102,55 @@ public final class ModProfile {
 
     private static int sampleAt;
 
+    /** where the server's time went: dimension -> chunk -> type -> ns (block entity and entity ticks) */
+    private static final Map<Object, Map<Long, Map<Object, LongAdder>>> SPOTS = new ConcurrentHashMap<>();
+
+    /** a block entity's or entity's tick in this chunk (alongside add) */
+    public static void at(Object dimension, long chunk, Object type, long ns) {
+        SPOTS.computeIfAbsent(dimension, k -> new ConcurrentHashMap<>()).computeIfAbsent(chunk, k -> new ConcurrentHashMap<>())
+                .computeIfAbsent(type, k -> new LongAdder()).add(recordingNow ? ns : ns << 4);
+    }
+
+    /** a hot spot of the last recording: where, its ms per tick, what it is made of */
+    public record Spot(String dimension, int chunkX, int chunkZ, double ms, String what) {
+        /** "overworld x 192 z -64: 3.20 ms/tick - 40 furnace, 2 hopper" */
+        public String line() {
+            return String.format(java.util.Locale.ROOT, "%s x %d z %d: %.2f ms/tick - %s", dimension, chunkX * 16 + 8, chunkZ * 16 + 8, ms, what);
+        }
+    }
+
+    private static List<Spot> lastSpots = List.of();
+
+    /** the last recording's costliest chunks */
+    public static List<Spot> spots() {
+        return lastSpots;
+    }
+
+    private static List<Spot> computeSpots() {
+        long t = Math.max(1, ticks);
+        List<Spot> out = new ArrayList<>();
+        for (var d : SPOTS.entrySet()) {
+            String dim = d.getKey() instanceof net.minecraft.resources.ResourceKey<?> rk ? rk.location().getPath() : String.valueOf(d.getKey());
+            for (var c : d.getValue().entrySet()) {
+                double total = 0;
+                List<Map.Entry<Object, LongAdder>> parts = new ArrayList<>(c.getValue().entrySet());
+                for (var p : parts) total += p.getValue().sum();
+                parts.sort((a, b) -> Long.compare(b.getValue().sum(), a.getValue().sum()));
+                StringBuilder what = new StringBuilder();
+                for (int i = 0; i < Math.min(3, parts.size()); i++) {
+                    if (i > 0) what.append(", ");
+                    Object type = parts.get(i).getKey();
+                    String ns = dev.lull.api.Compat.namespace(type);
+                    what.append(typeName(type)).append(ns.isEmpty() || ns.equals("minecraft") ? "" : " (" + ns + ")")
+                            .append(String.format(java.util.Locale.ROOT, " %.2f", parts.get(i).getValue().sum() / 1e6 / t));
+                }
+                out.add(new Spot(dim, net.minecraft.world.level.ChunkPos.getX(c.getKey()), net.minecraft.world.level.ChunkPos.getZ(c.getKey()), total / 1e6 / t, what.toString()));
+            }
+        }
+        out.sort((a, b) -> Double.compare(b.ms(), a.ms()));
+        return out.size() > 10 ? new ArrayList<>(out.subList(0, 10)) : out;
+    }
+
     /**
      * Whether to time this call: always while recording (exact), one in 16 for the HUD's live list (weighted 16 in add:
      * the live list costs a sixteenth). A racy counter is fine: it only spreads the samples.
@@ -113,6 +162,7 @@ public final class ModProfile {
     /** a recording of this many seconds, from now */
     public static synchronized void start(int seconds) {
         for (Map<Object, LongAdder> m : BY_TYPE) m.clear();
+        SPOTS.clear();
         ticks = frames = 0;
         startNs = System.nanoTime();
         stopAt = startNs + seconds * 1_000_000_000L;
@@ -144,6 +194,7 @@ public final class ModProfile {
         if (recordingNow || !live) return null;
         List<Result> r = compute();
         for (Map<Object, LongAdder> m : BY_TYPE) m.clear();
+        SPOTS.clear();
         ticks = frames = 0;
         startNs = System.nanoTime();
         return r;
@@ -186,11 +237,14 @@ public final class ModProfile {
             recordingNow = false;
             wallNs = System.nanoTime() - startNs;
             last = compute();
+            lastSpots = computeSpots();
             lastSpan = String.format(java.util.Locale.ROOT, "%.0f s, %d server ticks, %d frames", wallNs / 1e9, ticks, frames);
             ready = true;
             System.out.println("[sleep/profile] done: " + lastSpan);
             for (Result r : last) if (r.total() > 0) System.out.println("[sleep/profile]   " + r.mod() + ": " + r.line());
             for (Map<Object, LongAdder> m : BY_TYPE) m.clear();   // (the HUD's window starts afresh)
+            SPOTS.clear();
+            for (Spot s : lastSpots) System.out.println("[sleep/profile]   hot spot " + s.line());
             ticks = frames = 0;
             startNs = System.nanoTime();
             ON = live;

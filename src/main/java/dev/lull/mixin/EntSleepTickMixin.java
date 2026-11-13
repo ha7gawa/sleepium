@@ -18,6 +18,8 @@ public abstract class EntSleepTickMixin {
         }
         long t0 = System.nanoTime();   // the Mods page's recording: this type's tick time
         EntitySleep.tick(e);
-        dev.lull.optsupport.ModProfile.add(1, e.getType(), System.nanoTime() - t0);
+        long dt = System.nanoTime() - t0;
+        dev.lull.optsupport.ModProfile.add(1, e.getType(), dt);
+        dev.lull.optsupport.ModProfile.at(e.level().dimension(), e.chunkPosition().toLong(), e.getType(), dt);
     }
 }

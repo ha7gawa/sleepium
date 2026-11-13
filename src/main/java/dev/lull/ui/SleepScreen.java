@@ -476,6 +476,14 @@ public final class SleepScreen extends Screen {
         }, Component.translatable("sleepium.ui.mods.profile.tip"), measure));
         list.add(new Row(null, null, Component.translatable("sleepium.ui.mods.header").withStyle(ChatFormatting.WHITE).append("\n")
                 .append(Component.translatable("sleepium.ui.mods.export.tip", SleepConfig.packFile().toString())), report, export));
+        if (dev.lull.optsupport.ModProfile.ready && !dev.lull.optsupport.ModProfile.spots().isEmpty() && modFilter.isEmpty()) {
+            list.add(new Row(() -> Component.translatable("sleepium.ui.mods.spots").withStyle(ChatFormatting.BOLD), null, Component.translatable("sleepium.ui.mods.spots.tip")));
+            for (var sp : dev.lull.optsupport.ModProfile.spots()) {
+                String line = sp.line();
+                list.add(new Row(() -> Component.literal(line).withStyle(sp.ms() > 5 ? ChatFormatting.RED : sp.ms() > 1 ? ChatFormatting.GOLD : ChatFormatting.WHITE), null, Component.literal(line)));
+            }
+            list.add(new Row(() -> Component.translatable("sleepium.ui.mods.list").withStyle(ChatFormatting.BOLD), null, null));
+        }
         String f = modFilter.toLowerCase(Locale.ROOT);
         List<String[]> mods = modList();
         java.util.Map<String, dev.lull.optsupport.ModReport.Mod> reps = new HashMap<>();

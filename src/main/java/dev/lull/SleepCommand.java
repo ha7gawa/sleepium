@@ -164,6 +164,11 @@ final class SleepCommand {
                                 if (n++ == 5 || r.total() < 0.005) break;
                                 sb.append("\n  ").append(r.mod()).append(": ").append(r.line());
                             }
+                            if (!dev.lull.optsupport.ModProfile.spots().isEmpty()) {
+                                sb.append("\nThe costliest chunks:");
+                                int k = 0;
+                                for (var sp : dev.lull.optsupport.ModProfile.spots()) if (k++ < 5) sb.append("\n  ").append(sp.line());
+                            }
                         } else sb.append("\nNo measurement yet: /sleepium profile 15");
                         say(ctx, sb.toString());
                     } catch (IOException e) {

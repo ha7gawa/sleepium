@@ -28,7 +28,11 @@ public abstract class BeTickMixin {
         boolean prof = dev.lull.optsupport.ModProfile.ON && dev.lull.optsupport.ModProfile.take();   // the Mods page's recording: this type's tick time
         long t0 = prof ? System.nanoTime() : 0L;
         ticker.tick(level, pos, state, be);
-        if (prof) dev.lull.optsupport.ModProfile.add(0, be.getType(), System.nanoTime() - t0);
+        if (prof) {
+            long dt = System.nanoTime() - t0;
+            dev.lull.optsupport.ModProfile.add(0, be.getType(), dt);
+            dev.lull.optsupport.ModProfile.at(level.dimension(), net.minecraft.world.level.ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4), be.getType(), dt);
+        }
         if (SleepEngine.ON) SleepEngine.after(be);
         if (BeTickStats.ON) BeTickStats.after();
     }
