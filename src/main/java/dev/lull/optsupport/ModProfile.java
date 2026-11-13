@@ -88,9 +88,14 @@ public final class ModProfile {
         return recordingNow ? (int) Math.max(0, (stopAt - System.nanoTime()) / 1_000_000_000L + 1) : 0;
     }
 
-    /** server tick end (ServerTickEvent.Post) */
-    public static void serverTick() {
+    /** server tick end (SleepCommand.onTickEnd: singleplayer and dedicated servers); true once when a recording just ended there */
+    public static boolean serverTick() {
         if (ON) ticks++;
+        if (recordingNow && System.nanoTime() >= stopAt) {
+            finish();
+            return true;
+        }
+        return false;
     }
 
     /** a frame (RenderFrameEvent.Pre) */
@@ -100,7 +105,17 @@ public final class ModProfile {
 
     /** client tick: the recording's end; true once when it just finished (the caller tells the player) */
     public static synchronized boolean poll() {
-        if (recordingNow && System.nanoTime() >= stopAt) {
+        if (recordingNow && System.nanoTime() >= stopAt) finish();
+        if (ready && !announced) {
+            announced = true;
+            return true;
+        }
+        return false;
+    }
+
+    private static synchronized void finish() {
+        if (!recordingNow) return;
+        {
             recordingNow = false;
             wallNs = System.nanoTime() - startNs;
             last = compute();
@@ -113,11 +128,6 @@ public final class ModProfile {
             startNs = System.nanoTime();
             ON = live;
         }
-        if (ready && !announced) {
-            announced = true;
-            return true;
-        }
-        return false;
     }
 
     /** one mod's cost: per kind (ms per tick for server kinds, ms per frame for client kinds) and its costliest types */

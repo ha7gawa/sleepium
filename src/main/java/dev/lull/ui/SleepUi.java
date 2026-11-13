@@ -38,7 +38,6 @@ public final class SleepUi {
         });
         gameBus.addListener(net.neoforged.neoforge.client.event.ClientTickEvent.Pre.class, e -> Hud.tickStart());
         gameBus.addListener(net.neoforged.neoforge.client.event.ClientTickEvent.Post.class, e -> Hud.tickEnd());
-        gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.optsupport.ModProfile.serverTick());
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> SleepStats.serverTick(e.getServer()));
         gameBus.addListener(net.neoforged.neoforge.client.event.RenderGuiEvent.Post.class, e -> {
             if (Minecraft.getInstance().screen == null) Hud.draw(e.getGuiGraphics());

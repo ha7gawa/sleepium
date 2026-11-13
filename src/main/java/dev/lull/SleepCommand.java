@@ -153,6 +153,27 @@ final class SleepCommand {
                     return 1;
                 }))
                 .then(Commands.literal("status").executes(SleepCommand::status))
+                .then(Commands.literal("report").executes(ctx -> {   // what Sleepium did to each mod (and the last measurement): config/sleepium-report.md
+                    try {
+                        Path f = dev.lull.optsupport.ModReport.write();
+                        StringBuilder sb = new StringBuilder("Sleepium report: " + f);
+                        if (dev.lull.optsupport.ModProfile.ready) {
+                            sb.append("\nWhat each mod cost (").append(dev.lull.optsupport.ModProfile.span()).append("):");
+                            int n = 0;
+                            for (var r : dev.lull.optsupport.ModProfile.results()) {
+                                if (n++ == 5 || r.total() < 0.005) break;
+                                sb.append("\n  ").append(r.mod()).append(": ").append(r.line());
+                            }
+                        } else sb.append("\nNo measurement yet: /sleepium profile 15");
+                        say(ctx, sb.toString());
+                    } catch (IOException e) {
+                        say(ctx, "Sleepium report: " + e);
+                    }
+                    return 1;
+                }))
+                .then(Commands.literal("profile")   // a recording of what each mod costs (the Mods page's Measure)
+                        .executes(ctx -> profile(ctx, 15))
+                        .then(Commands.argument("seconds", IntegerArgumentType.integer(1, 300)).executes(ctx -> profile(ctx, IntegerArgumentType.getInteger(ctx, "seconds")))))
                 .then(Commands.literal("sleep").executes(ctx -> {
                     String r = dev.lull.optsupport.sleep.SleepEngine.report() + dev.lull.optsupport.sleep.EntitySleep.report()
                             + dev.lull.optsupport.sleep.EntitySleep.census(ctx.getSource().getLevel());
@@ -522,8 +543,16 @@ final class SleepCommand {
         return 1;
     }
 
+    private static int profile(CommandContext<CommandSourceStack> ctx, int seconds) {
+        dev.lull.optsupport.ModProfile.start(seconds);
+        say(ctx, "Sleepium: measuring what each mod costs for " + seconds + " s - then /sleepium report");
+        return 1;
+    }
+
     /** From ServerTickEvent.Post (LOWEST). */
     static void onTickEnd(MinecraftServer server) {
+        if (dev.lull.optsupport.ModProfile.serverTick() && server.isDedicatedServer())
+            SleepMod.LOGGER.info("[sleep/profile] measured what each mod costs: /sleepium report");
         GenBench.onTickEnd(server);
         IdleBench.onTickEnd(server);
         NetBench.onTickEnd(server);
