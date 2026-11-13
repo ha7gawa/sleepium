@@ -53,6 +53,8 @@ public final class SleepUi {
         if (SWITCH != null) gameBus.addListener(net.neoforged.neoforge.client.event.RenderFrameEvent.Post.class, e -> switchTest());
     }
 
+    private static boolean bisectTold;
+
     /** the Mods page's recording: when it ends, a line in the chat */
     static void profileTick() {
         Minecraft mc0 = Minecraft.getInstance();
@@ -60,6 +62,12 @@ public final class SleepUi {
             java.util.List<String> dup = dev.lull.optsupport.DuplicateJars.tellOnce();
             if (dup != null) mc0.gui.getChat().addMessage(net.minecraft.network.chat.Component.translatable("sleepium.ui.duplicates", String.join(", ", dup),
                     dev.lull.optsupport.DuplicateJars.used()).withStyle(net.minecraft.ChatFormatting.GOLD));
+        }
+        if (mc0.player != null && mc0.gui != null && !bisectTold) {   // a search for a problem's setting runs: what to do now
+            bisectTold = true;
+            var st = dev.lull.optsupport.Bisect.read();
+            if (st != null && !dev.lull.optsupport.SleepConfig.bisectOffThisRun().isEmpty())
+                mc0.gui.getChat().addMessage(net.minecraft.network.chat.Component.translatable("sleepium.ui.bisect.chat", st.round(), st.off().size()).withStyle(net.minecraft.ChatFormatting.YELLOW));
         }
         if (!dev.lull.optsupport.ModProfile.poll()) return;
         Minecraft mc = Minecraft.getInstance();
@@ -213,6 +221,13 @@ public final class SleepUi {
         } else if (worldStep == 3 && t > 15 && Boolean.getBoolean("sleep.ui.shotProfile") && !dev.lull.optsupport.ModProfile.ready) {   // first a recording (8 s)
             if (!dev.lull.optsupport.ModProfile.recording()) dev.lull.optsupport.ModProfile.start(8);
             worldAt = now - (long) (15e9);   // (the next steps' clock starts after it)
+        } else if (worldStep == 3 && t > 16 && Integer.getInteger("sleep.ui.shotPage") != null) {   // -Dsleep.ui.shotPage=<n>: that page (6 Find the cause, 7 HUD)
+            mc.setScreen(new SleepScreen(null, Integer.getInteger("sleep.ui.shotPage")));
+            worldStep = 10;
+        } else if (worldStep == 10 && t > 19) {
+            shot(mc, "world-page-" + Integer.getInteger("sleep.ui.shotPage"));
+            mc.setScreen(null);
+            worldStep = 11;
         } else if (worldStep == 3 && t > 16 && System.getProperty("sleep.ui.shotMods") != null) {   // -Dsleep.ui.shotMods=<modid>: the Mods page and that mod's
             mc.setScreen(new SleepScreen(null, 4));
             worldStep = 4;

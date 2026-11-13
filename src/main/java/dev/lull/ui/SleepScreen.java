@@ -39,7 +39,11 @@ import net.minecraft.util.FormattedCharSequence;
  * plugin switches by another flag are shown as part of it.
  */
 public final class SleepScreen extends Screen {
-    private static final int OVERVIEW = 0, SHADERS = 100, FLAGS = 101, MODS = 102, HUD = 103;
+    private static final int OVERVIEW = 0, SHADERS = 100, FLAGS = 101, MODS = 102, HUD = 103, BISECT = 104;
+    /** the last answer's outcome on the Find the cause page (shown until the screen is left) */
+    private static Component bisectNote;
+    /** the setting a search found: kept off in the player's file at the next save */
+    private static final java.util.Set<String> BISECT_KEEP = new java.util.HashSet<>();
     /** the Mods page: the mod shown (null: the list) and the list's search */
     private static String modSel, modFilter = "";
     /** the Mods page's rules as this screen would leave them: sleep.mod.<id>.<rule> -> value */
@@ -75,6 +79,8 @@ public final class SleepScreen extends Screen {
             case 2 -> SHADERS;
             case 3 -> FLAGS;
             case 4, 5 -> MODS;
+            case 6 -> BISECT;
+            case 7 -> HUD;
             default -> OVERVIEW;
         };
         if (shot == 4) modSel = null;
@@ -174,6 +180,7 @@ public final class SleepScreen extends Screen {
         sideEntry(OVERVIEW, Component.translatable("sleepium.ui.page.overview"));
         sideEntry(MODS, Component.translatable("sleepium.ui.side.mods"));
         sideEntry(HUD, Component.translatable("sleepium.ui.side.hud"));
+        sideEntry(BISECT, Component.translatable("sleepium.ui.side.bisect"));
         int i = 1;
         for (String g : SleepOptions.GROUPS) sideEntry(i++, Component.translatable("sleepium.ui.side." + g));
         sideEntry(SHADERS, Component.translatable("sleepium.ui.side.shaders"));
@@ -196,6 +203,7 @@ public final class SleepScreen extends Screen {
         else if (page == FLAGS) fillFlags(null);
         else if (page == MODS) fillMods();
         else if (page == HUD) fillHud();
+        else if (page == BISECT) fillBisect();
         else fillFlags(SleepOptions.GROUPS[page - 1]);
     }
 
@@ -367,6 +375,65 @@ public final class SleepScreen extends Screen {
                 return !part && restartNeeded(o.key()) ? Component.translatable("sleepium.ui.restart.short").withStyle(ChatFormatting.YELLOW) : null;
             }, tip, toggle));
         }
+    }
+
+    // ------------------------------------------------------------------ the Find the cause page (notes/73)
+
+    private void fillBisect() {
+        list.add(new Row(() -> Component.translatable("sleepium.ui.bisect.title").withStyle(ChatFormatting.BOLD), null, Component.translatable("sleepium.ui.bisect.tip")));
+        if (bisectNote != null) {
+            Component note = bisectNote;
+            list.add(new Row(() -> note, null, note));
+        }
+        var st = dev.lull.optsupport.Bisect.read();
+        if (st == null) {
+            Button start = Button.builder(Component.translatable("sleepium.ui.bisect.start"), x -> {
+                List<String> on = new ArrayList<>();
+                for (SleepOptions.Option o : SleepOptions.all())
+                    if (o.partOf().isEmpty() && !SleepConfig.locked(o.key()) && Boolean.TRUE.equals(desired.get(o.key()))) on.add(o.key());
+                if (on.isEmpty()) return;
+                save();
+                var s = dev.lull.optsupport.Bisect.start(on);
+                bisectNote = Component.translatable("sleepium.ui.bisect.started", s.suspects().size(), s.off().size(), s.roundsLeft() + 1).withStyle(ChatFormatting.YELLOW);
+                rebuildWidgets();
+            }).size(150, 20).build();
+            list.add(new Row(() -> Component.translatable("sleepium.ui.bisect.idle"), null, Component.translatable("sleepium.ui.bisect.tip"), start));
+            return;
+        }
+        boolean applied = new java.util.HashSet<>(SleepConfig.bisectOffThisRun()).equals(new java.util.HashSet<>(st.off()));
+        String offNames = String.join(", ", st.off().stream().map(k -> k.substring(k.lastIndexOf('.') + 1).replaceAll("Mixin$", "")).toList());
+        list.add(new Row(() -> Component.translatable("sleepium.ui.bisect.round", st.round(), st.roundsLeft(), st.suspects().size(), st.off().size()), null,
+                Component.translatable("sleepium.ui.bisect.offnow", offNames)));
+        if (!applied) {
+            list.add(new Row(() -> Component.translatable("sleepium.ui.bisect.restart").withStyle(ChatFormatting.YELLOW), null, Component.translatable("sleepium.ui.bisect.restart")));
+        }
+        Button still = Button.builder(Component.translatable("sleepium.ui.bisect.still"), x -> bisectAnswer(true)).size(120, 20).build();
+        Button gone = Button.builder(Component.translatable("sleepium.ui.bisect.gone"), x -> bisectAnswer(false)).size(120, 20).build();
+        still.active = gone.active = applied;
+        list.add(new Row(() -> Component.translatable("sleepium.ui.bisect.ask").withStyle(ChatFormatting.BOLD), null, Component.translatable("sleepium.ui.bisect.ask.tip")));
+        list.add(new Row(null, null, Component.translatable("sleepium.ui.bisect.ask.tip"), still, gone));
+        Button stop = Button.builder(Component.translatable("sleepium.ui.bisect.stop"), x -> {
+            dev.lull.optsupport.Bisect.finish();
+            bisectNote = Component.translatable("sleepium.ui.bisect.stopped").withStyle(ChatFormatting.GRAY);
+            rebuildWidgets();
+        }).size(120, 20).build();
+        list.add(new Row(null, null, Component.translatable("sleepium.ui.bisect.stop.tip"), stop));
+    }
+
+    private void bisectAnswer(boolean stillHappens) {
+        var n = dev.lull.optsupport.Bisect.answer(stillHappens);
+        if (n == null) return;
+        if (n.off().isEmpty()) {   // finished
+            if (n.suspects().isEmpty()) bisectNote = Component.translatable("sleepium.ui.bisect.none").withStyle(ChatFormatting.AQUA);
+            else {
+                String key = n.suspects().get(0);
+                desired.put(key, false);   // it stays off (the player's file, on Done)
+                BISECT_KEEP.add(key);
+                String name = SleepOptions.all().stream().filter(o -> o.key().equals(key)).map(SleepOptions.Option::shortName).findFirst().orElse(key);
+                bisectNote = Component.translatable("sleepium.ui.bisect.found", name, key, key + "=false").withStyle(ChatFormatting.GREEN);
+            }
+        } else bisectNote = Component.translatable("sleepium.ui.bisect.next", n.off().size(), n.roundsLeft()).withStyle(ChatFormatting.YELLOW);
+        rebuildWidgets();
     }
 
     // ------------------------------------------------------------------ the HUD page (notes/73)
@@ -726,6 +793,11 @@ public final class SleepScreen extends Screen {
             if (!o.partOf().isEmpty()) continue;   // switched by its own flag's line
             boolean v = desired.get(o.key());
             if (SleepConfig.packLocked(o.key())) continue;
+            if (BISECT_KEEP.contains(o.key())) {   // the search's find: off for good
+                out.put(o.key(), "false");
+                continue;
+            }
+            if ("bisect".equals(SleepConfig.source(o.key())) && v == Boolean.parseBoolean(SleepConfig.startup(o.key()))) continue;   // off for this round only
             boolean base = Boolean.parseBoolean(SleepConfig.baseline(o.key(), Boolean.toString(o.byDefault())));   // the pack's or a mod's value, else the default
             if (v != base || v != Boolean.parseBoolean(SleepConfig.startup(o.key()))) out.put(o.key(), Boolean.toString(v));
             else out.remove(o.key());
