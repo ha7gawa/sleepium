@@ -275,6 +275,7 @@ public final class MixinTouch {
                 String modId = info.getMods().isEmpty() ? info.moduleName() : info.getMods().get(0).getModId();
                 for (String name : mixinConfigs(file)) {
                     CONFIG_MOD.put(name, modId);
+                    indexingConfig = name;
                     if (Boolean.getBoolean("sleep.mixinIndex.debug")) System.out.println("[sleep/opt] mixin index: " + info.moduleName() + " " + name + " -> " + file.findResource(name));
                     if (ours(name)) continue;
                     try {
@@ -440,6 +441,7 @@ public final class MixinTouch {
         new org.objectweb.asm.ClassReader(bytes).accept(cn, org.objectweb.asm.ClassReader.SKIP_CODE);
         List<String> ts = targets(cn);
         if (ts.isEmpty()) return;
+        if (indexingConfig != null) MIXIN_CONFIG.putIfAbsent(cn.name.replace('/', '.'), indexingConfig);
         Set<String> methods = new HashSet<>();
         List<String> reds, args, ows;
         REFMAP.set(refMapEntries(refmap, cn.name));
@@ -466,6 +468,7 @@ public final class MixinTouch {
     private static final Map<String, Set<String>> WHO_MIX = new java.util.HashMap<>();
     /** a mixin config's name -> the mod id of its file; a foreign mixin class (dots) -> its config's name */
     private static final Map<String, String> CONFIG_MOD = new java.util.HashMap<>(), MIXIN_CONFIG = new java.util.HashMap<>();
+    private static String indexingConfig;
 
     private static void noteWho(String target, String owner, String mixin, Set<String> methods, List<String> reds, List<String> args, List<String> ows) {
         String label = (owner == null || owner.isEmpty() ? "?" : owner) + " (" + mixin.substring(mixin.lastIndexOf('/') + 1) + ")";
@@ -493,7 +496,7 @@ public final class MixinTouch {
     static Set<String> culprits(String internalName, String name) {
         index();
         Set<String> out = new java.util.LinkedHashSet<>();
-        Set<String> a = WHO_MIX.get(internalName + "#" + name), b = WHO_MIX.get(internalName + "#*");
+        Set<String> a = WHO_MIX.get(internalName + "#" + official(name)), b = WHO_MIX.get(internalName + "#*");
         if (a != null) out.addAll(a);
         if (b != null) out.addAll(b);
         return out;
@@ -507,11 +510,76 @@ public final class MixinTouch {
         return out;
     }
 
+    /**
+     * Every mixin config Mixin knows: the registered ones not selected yet (Mixins.getConfigs) and the ones its processor
+     * selected and prepared already (an early mod's - ModernFix on Forge - is only there).
+     */
+    @SuppressWarnings("unchecked")
+    private static List<org.spongepowered.asm.mixin.extensibility.IMixinConfig> allConfigs() {
+        List<org.spongepowered.asm.mixin.extensibility.IMixinConfig> out = new java.util.ArrayList<>();
+        for (org.spongepowered.asm.mixin.transformer.Config c : org.spongepowered.asm.mixin.Mixins.getConfigs()) if (c.getConfig() != null) out.add(c.getConfig());
+        try {
+            Object transformer = org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment().getActiveTransformer();
+            Object processor = null;
+            for (Class<?> k = transformer.getClass(); k != null && processor == null; k = k.getSuperclass())
+                for (Field f : k.getDeclaredFields())
+                    if (f.getType().getSimpleName().equals("MixinProcessor")) {
+                        f.setAccessible(true);
+                        processor = f.get(transformer);
+                    }
+            if (processor != null)
+                for (String name : new String[] {"configs", "pendingConfigs"}) {
+                    Field f = processor.getClass().getDeclaredField(name);
+                    f.setAccessible(true);
+                    for (Object o : (List<Object>) f.get(processor))
+                        if (o instanceof org.spongepowered.asm.mixin.extensibility.IMixinConfig mc && !out.contains(mc)) out.add(mc);
+                }
+        } catch (Throwable t) {
+            if (Boolean.getBoolean("sleep.mixinIndex.debug")) System.out.println("[sleep/opt] the processor's configs: " + t);
+        }
+        return out;
+    }
+
+    /**
+     * A config Mixin has prepared already (a mod loaded early: ModernFix on Forge 1.20.1): its mixin is taken out of the
+     * config's target mapping, as long as none of its targets has been transformed yet (all still in the config's
+     * unhandled targets) - else false (the caller gives way).
+     */
+    @SuppressWarnings("unchecked")
+    private static boolean cancelPrepared(Object mc, String mixinClass, boolean dryRun) throws ReflectiveOperationException {
+        Field fMapping = mc.getClass().getDeclaredField("mixinMapping"), fUnhandled = mc.getClass().getDeclaredField("unhandledTargets"),
+                fMixins = mc.getClass().getDeclaredField("mixins");
+        fMapping.setAccessible(true);
+        fUnhandled.setAccessible(true);
+        fMixins.setAccessible(true);
+        Map<String, List<Object>> mapping = (Map<String, List<Object>>) fMapping.get(mc);
+        Set<String> unhandled = (Set<String>) fUnhandled.get(mc);
+        List<Object> mixins = (List<Object>) fMixins.get(mc);
+        List<Object> found = new java.util.ArrayList<>();
+        for (Object o : mixins) if (o instanceof IMixinInfo mi && mi.getClassName().equals(mixinClass)) found.add(o);
+        boolean debug = Boolean.getBoolean("sleep.mixinIndex.debug");
+        if (debug) System.out.println("[sleep/opt] cancel " + mixinClass + ": prepared config, found " + found.size() + " of " + mixins.size()
+                + " mixins, unhandled targets " + unhandled.size() + " e.g. " + unhandled.stream().limit(3).toList());
+        if (found.isEmpty()) return false;
+        for (Object o : found)
+            for (String t : ((IMixinInfo) o).getTargetClasses()) {
+                String dotted = t.replace('/', '.');
+                if (!unhandled.contains(dotted) && !unhandled.contains(t)) {   // already transformed: too late
+                    if (debug) System.out.println("[sleep/opt] cancel " + mixinClass + ": target " + t + " not among the unhandled targets");
+                    return false;
+                }
+            }
+        if (dryRun) return true;
+        for (List<Object> l : mapping.values()) l.removeAll(found);
+        mixins.removeAll(found);
+        return true;
+    }
+
     /** the foreign mixins on this call (their @Redirect / @ModifyArg(s)), else on the method */
     static Set<String> culpritsCall(String internalName, String method, String invoked) {
         index();
         Set<String> out = new java.util.LinkedHashSet<>();
-        Set<String> a = WHO_MIX.get(internalName + "#" + method + "|" + invoked), b = WHO_MIX.get(internalName + "#*|" + invoked);
+        Set<String> a = WHO_MIX.get(internalName + "#" + official(method) + "|" + official(invoked)), b = WHO_MIX.get(internalName + "#*|" + official(invoked));
         if (a != null) out.addAll(a);
         if (b != null) out.addAll(b);
         return out.isEmpty() ? culprits(internalName, method) : out;
@@ -524,15 +592,17 @@ public final class MixinTouch {
     static synchronized boolean cancel(String mixinClass, boolean dryRun) {
         index();
         String config = MIXIN_CONFIG.get(mixinClass);
-        if (config == null) return false;
+        if (config == null) {
+            if (Boolean.getBoolean("sleep.mixinIndex.debug")) System.out.println("[sleep/opt] cancel " + mixinClass + ": its config is not known");
+            return false;
+        }
         try {
-            for (org.spongepowered.asm.mixin.transformer.Config c : org.spongepowered.asm.mixin.Mixins.getConfigs()) {
-                org.spongepowered.asm.mixin.extensibility.IMixinConfig mc = c.getConfig();
+            for (org.spongepowered.asm.mixin.extensibility.IMixinConfig mc : allConfigs()) {
                 if (mc == null || !config.equals(mc.getName())) continue;
                 try {
                     Field prepared = mc.getClass().getDeclaredField("prepared");
                     prepared.setAccessible(true);
-                    if (prepared.getBoolean(mc)) return false;
+                    if (prepared.getBoolean(mc)) return cancelPrepared(mc, mixinClass, dryRun);
                 } catch (NoSuchFieldException e) {
                     // (a Mixin without the flag: try the lists)
                 }
@@ -558,6 +628,11 @@ public final class MixinTouch {
                     }
                 }
                 return removed;
+            }
+            if (Boolean.getBoolean("sleep.mixinIndex.debug")) {
+                List<String> names = new java.util.ArrayList<>();
+                for (var c : allConfigs()) names.add(c.getName());
+                System.out.println("[sleep/opt] cancel " + mixinClass + ": config " + config + " not among Mixin's " + names.size() + " configs: " + names);
             }
         } catch (Throwable t) {
             System.out.println("[sleep/opt] could not cancel " + mixinClass + ": " + t);
