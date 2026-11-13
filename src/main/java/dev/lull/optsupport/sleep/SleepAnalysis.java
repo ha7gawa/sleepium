@@ -170,6 +170,8 @@ final class SleepAnalysis {
     }
     private final java.util.ArrayDeque<String> STACK = new java.util.ArrayDeque<>();
     private static final String NULL_TRACE = System.getProperty("lab.sleep.nullTrace", "");
+    /** -Dlab.sleep.traceClass=SimpleName: every method the analysis follows for that block entity class (debug) */
+    private static final String TRACE_CLASS = System.getProperty("lab.sleep.traceClass");
     private static final String WHO_WRITES = System.getProperty("lab.sleep.whoWrites", "");
     private static final boolean NULL_WHY = Boolean.getBoolean("lab.sleep.nullWhy");
     private final java.util.Map<String, Integer> reasons = new java.util.LinkedHashMap<>();
@@ -639,10 +641,22 @@ final class SleepAnalysis {
             // section bookkeeping keyed by position: a no-op while the position does not change (the engine requires that)
             "net/minecraft/world/level/entity/EntityInLevelCallback");
 
+    /** this analysis met a call on the block entity through an interface outside its class chain and did not follow it */
+    private boolean skippedSelfDispatch;
+    /** block-entity classes whose tick the analysis did not follow into a call on the block entity: observed sleep only */
+    private static final Set<Class<?>> OBSERVED_ONLY = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Must this class sleep only as an observed sleeper (its tick not fully followed)? */
+    static boolean needsObservation(Class<?> beClass) {
+        return OBSERVED_ONLY.contains(beClass);
+    }
+
     static Plan analyze(Class<? extends BlockEntity> beClass, Class<?> blockClass) {
         SleepAnalysis a = new SleepAnalysis(beClass.getClassLoader());
         try {
-            return a.run(beClass, blockClass);
+            Plan p = a.run(beClass, blockClass);
+            if (a.skippedSelfDispatch && p.eligible()) OBSERVED_ONLY.add(beClass);
+            return p;
         } catch (Exception | LinkageError e) {
             return new Plan(false, "analysis failed: " + e, List.of(), List.of());
         }
@@ -903,8 +917,12 @@ final class SleepAnalysis {
      * Null when the call is not of this kind; a method that cannot be resolved refuses the class.
      */
     private String[] selfDispatch(MethodInsnNode mi, Frame<SourceValue>[] fr, int i, MethodNode m, Set<String> beChain, Class<?> beClass) {
-        if (SleepEngine.observedModSleep() || entityMode || mi.getOpcode() == Opcodes.INVOKESTATIC || beChain.contains(mi.owner)
+        if (entityMode || mi.getOpcode() == Opcodes.INVOKESTATIC || beChain.contains(mi.owner)
                 || !onThis(fr[i], Type.getArgumentTypes(mi.desc).length + 1, fr, m)) return null;
+        if (SleepEngine.observedModSleep()) {   // not followed: the class may sleep only observed (SleepEngine: OwnedHash, any change wakes)
+            skippedSelfDispatch = true;
+            return null;
+        }
         String decl = ownerOf(internal(beClass), mi.name, mi.desc);
         MethodNode target = decl == null ? null : method(decl, mi.name, mi.desc);
         if (target == null || (target.access & Opcodes.ACC_ABSTRACT) != 0) {
@@ -922,6 +940,8 @@ final class SleepAnalysis {
 
     private void follow(String owner, MethodNode m, int depth, Set<String> seen, Set<String> beChain, Class<?> beClass, int self) throws AnalyzerException {
         if (!ok() || !seen.add(owner + "." + m.name + m.desc + (entityMode ? "#" + self + "@" + ctxPath : ""))) return;
+        if (TRACE_CLASS != null && beCls != null && beCls.getSimpleName().equals(TRACE_CLASS))
+            System.out.println("[sleep/trace] " + TRACE_CLASS + " follows " + owner + "." + m.name + m.desc + " depth " + depth + " insns " + (m.instructions == null ? -1 : m.instructions.size()));
         int savedSelf = selfMask;
         selfMask = self;
         Set<String> savedChain = chainGuards, savedCur = curGuards;

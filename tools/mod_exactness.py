@@ -53,6 +53,10 @@ for f in sorted(os.listdir(a.mods)):
                 for ns, name in re.findall(r'"block\.([a-z0-9_]+)\.([a-z0-9_]+)"', z.read(n).decode('utf-8', 'replace')):
                     if (not want or ns in want) and (ns + ':' + name) not in ids:
                         ids.append(ns + ':' + name)
+            # a mod whose names come from another jar's lang (Thermal Expansion: no lang of its own): its blockstates
+            m = re.match(r'assets/([a-z0-9_]+)/blockstates/([a-z0-9_]+)\.json$', n)
+            if m and (not want or m.group(1) in want) and (m.group(1) + ':' + m.group(2)) not in ids:
+                ids.append(m.group(1) + ':' + m.group(2))
 
 
 # every loaded saved data written at each save (testmods SaveAllDataMixin): a mod's unwritable data shows at once; the
