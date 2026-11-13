@@ -192,6 +192,8 @@ public final class ParallelRender {
         /** records of model parts drawn from VRAM (GeckoLib bones), queued at the merge */
         final PartBatch.JobParts parts = new PartBatch.JobParts();
         final java.util.IdentityHashMap<Object, Object> locals = new java.util.IdentityHashMap<>();
+        /** what the worker read of the fields mods set around the draw (RenderFieldFlow), checked at the inner merge */
+        final FieldLog.Log fieldLog = new FieldLog.Log();
 
         /** worker or render thread: whoever claims the job first renders it */
         final java.util.concurrent.atomic.AtomicBoolean claimed = new java.util.concurrent.atomic.AtomicBoolean();
@@ -207,6 +209,7 @@ public final class ParallelRender {
             parts.clear();
             CURRENT.set(this);
             try {
+                FieldLog.begin(fieldLog);
                 ok = s != null && render(s, this);
             } catch (Refusal r) {
                 ok = false;
@@ -224,6 +227,7 @@ public final class ParallelRender {
                 if (type != null) learnFailure(type, t);
             } finally {
                 CURRENT.remove();
+                FieldLog.end();
                 if (!ok) {   // the render thread renders it again, side effects included
                     calls.clear();
                     parts.clear();
@@ -468,6 +472,7 @@ public final class ParallelRender {
         hookers.addAll(MixinTouch.touchers("net/minecraft/client/renderer/LevelRenderer", "renderEntity"));
         dispatchMods = hookers.toString();
         if (hookers.contains("?") || hookers.contains("index")) return "the mods in the dispatcher not known";
+        RenderFieldFlow.of("");   // the analysis and its log (notes/71), whatever is decided here
         // the code a worker job runs for an entity: model parts, models, renderers. A mod with mixins both in the dispatcher
         // and here keeps per-entity state between the two (Entity Model Features: the animated entity in globals its model
         // mixins read) - on a worker that is another entity's, a data race. (A local: INNER, above, is initialised first.)
@@ -481,7 +486,9 @@ public final class ParallelRender {
         for (String[] w : workerCode)
             for (String c : MixinTouch.touchers(w[0], w[1])) {
                 if (c.equals("?")) return "unknown mixins in " + w[0] + "." + w[1];
-                if (hookers.contains(c)) return c + " is in the dispatcher and in " + w[0].substring(w[0].lastIndexOf('/') + 1) + "." + w[1];
+                if (hookers.contains(c) && !RenderFieldFlow.trusted(c))
+                    return c + " is in the dispatcher and in " + w[0].substring(w[0].lastIndexOf('/') + 1) + "." + w[1]
+                            + (RenderFieldFlow.of(c) == null ? "" : " (field flow: " + RenderFieldFlow.of(c).why() + ")");
             }
         return null;
     }
@@ -948,6 +955,16 @@ public final class ParallelRender {
             j.parts.clear();
             return false;
         }
+        if (FieldLog.any()) {   // a mod's fields set around the draw: what the worker read must be what is there now
+            FieldLog.verified++;
+            if (!j.fieldLog.verify()) {
+                FieldLog.fallbacks++;
+                mergeFallbacks++;
+                j.calls.clear();
+                j.parts.clear();
+                return false;
+            }
+        }
         if (sampled(j)) {   // rendered here once more, inside the dispatcher where other mods' state is set: the same bytes?
             VERIFY_REC.reset();
             Minecraft.getInstance().getEntityRenderDispatcher().getRenderer(e).render(e, yaw, pt, pose, VERIFY_REC, light);
@@ -1160,6 +1177,7 @@ public final class ParallelRender {
     }
 
     public static String report() {
+        if (FieldLog.any()) System.out.println("[sleep/opt] " + FieldLog.report() + "; carried " + RenderFieldFlow.CARRIED);
         if (WHY) {
             StringBuilder w = new StringBuilder("parallel render, why on the render thread:");
             for (int i = 0; i < WHY_N.length; i++) if (WHY_N[i] > 0) w.append(' ').append(WHY_NAMES[i]).append(' ').append(WHY_N[i]).append(';');
