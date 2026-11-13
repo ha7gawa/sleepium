@@ -37,6 +37,8 @@ public final class SleepEngine {
     /** the probes feed the block-entity engine and/or the entity engine */
     public static final boolean HOOKS = ON || EntitySleep.ON;
     static final int STABLE = Integer.getInteger("lab.sleep.stable", 3);
+    /** an observed-only sleeper's idle ticks before it sleeps: longer than the periods mods act on by their own timers (CoFH 10 / 20 / 40) */
+    static final int OBSERVED_STABLE = Integer.getInteger("lab.sleep.observedStable", 64);
     static final int MARGIN = Integer.getInteger("lab.sleep.margin", 2);
     static final int MIN_SLEEP = Integer.getInteger("lab.sleep.min", 4);
     static final int MAX_BACKOFF = Integer.getInteger("lab.sleep.backoff", 64);
@@ -131,6 +133,9 @@ public final class SleepEngine {
         long prevTick = Long.MIN_VALUE, prevReadHash;
         /** observed-only classes: the hash of everything the block entity owns, last observed tick / at sleep entry */
         long prevOwned, ownedAtSleep;
+        /** asleep, observed-only: the block entities around it (read by its tick, or next to it) and their OwnedHash at sleep entry */
+        BlockEntity[] watchedBes;
+        long[] watchedOwned;
         int stable, failStreak;
         long observeFrom = Long.MIN_VALUE, noSleepUntil = Long.MIN_VALUE;
         // asleep
@@ -225,7 +230,7 @@ public final class SleepEngine {
         // only the block entity's own fields (the cache lines the skip reads anyway): primitives by value, references by
         // identity. Changes inside referenced containers arrive as events (container hooks, setChanged, block updates).
         if (s.info.snapper.same(be, s.prev, s.refs) && (!s.info.deep && s.neighbours == null || sameLists(s))
-                && (!s.info.observedOnly || OwnedHash.of(be) == s.ownedAtSleep)) {
+                && (!s.info.observedOnly || OwnedHash.of(be) == s.ownedAtSleep && watchedSame(s))) {
             verifiedSkips++;
             return true;
         }
@@ -360,10 +365,61 @@ public final class SleepEngine {
      * At sleep entry: the read neighbours whose class bypasses the probes - their writes reach no probe, so a change of
      * their item lists is found by value (a vanilla hopper under PneumaticCraft's chest)
      */
+    /** an observed-only sleeper watches at most this many block entities around it (more: it does not sleep for a while) */
+    private static final int MAX_WATCHED = Integer.getInteger("lab.sleep.observedWatchMax", 8);
+    public static long watchWakes, watchRefusals;
+
+    /**
+     * ObservedModSleep: the block entities an observed-only sleeper could send to or take from - those its last observed
+     * tick read and the six next to it - hashed at sleep entry (verifyAsleep compares them). A transmitter idle because
+     * its target is full wakes when the target drains.
+     */
+    private static void watchAround(Sleeper s, Level level) {
+        s.watchedBes = null;
+        s.watchedOwned = null;
+        BlockPos own = s.be.getBlockPos();
+        java.util.LinkedHashSet<BlockEntity> found = new java.util.LinkedHashSet<>();
+        LongArrayList rp = s.lastReadPos;
+        for (int i = 0; i < rp.size(); i++) {
+            long p = rp.getLong(i);
+            if (p == own.asLong()) continue;
+            BlockEntity n = beAt(level, p);
+            if (n != null) found.add(n);
+        }
+        for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+            BlockEntity n = beAt(level, own.relative(d).asLong());
+            if (n != null) found.add(n);
+        }
+        if (found.isEmpty()) return;
+        if (found.size() > MAX_WATCHED) {   // too many to hash on every skipped tick: awake for a minute
+            watchRefusals++;
+            s.noSleepUntil = level.getGameTime() + 1200;
+            request(s, "too many block entities around to watch");
+            return;
+        }
+        s.watchedBes = found.toArray(new BlockEntity[0]);
+        s.watchedOwned = new long[s.watchedBes.length];
+        for (int i = 0; i < s.watchedBes.length; i++) s.watchedOwned[i] = OwnedHash.of(s.watchedBes[i]);
+    }
+
+    /** the watched block entities as they were at sleep entry (none removed, none changed) */
+    private static boolean watchedSame(Sleeper s) {
+        BlockEntity[] w = s.watchedBes;
+        if (w == null) return true;
+        for (int i = 0; i < w.length; i++) {
+            if (w[i].isRemoved() || OwnedHash.of(w[i]) != s.watchedOwned[i]) {
+                watchWakes++;
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static void watchNeighbours(Sleeper s) {
         s.neighbours = null;
         Level level = s.be.getLevel();
         if (level == null) return;
+        if (s.info.observedOnly) watchAround(s, level);
         long own = s.be.getBlockPos().asLong();
         LongArrayList rp = s.lastReadPos;
         for (int i = 0; i < rp.size(); i++) {
@@ -507,7 +563,8 @@ public final class SleepEngine {
             if (unseen != null) p = new SleepAnalysis.Plan(false, bypass + "; owned state outside value verification: " + unseen, p.clocks(), p.conds());
             boolean deep = p.eligible() && ("all".equals(DEEP) || bypass != null);
             ClassInfo ci = new ClassInfo(p, deep, c);
-            ci.observedOnly = p.eligible() && bypass != null && observedModSleep() && (listsOf(c).length == 0 || unverifiedState(c) != null);
+            ci.observedOnly = p.eligible() && observedModSleep()
+                    && (bypass != null && (listsOf(c).length == 0 || unverifiedState(c) != null) || SleepAnalysis.needsObservation(c));
             System.out.println("[sleep/sleep] " + name + ": " + (p.eligible() ? "ELIGIBLE " : "no: ") + p.reason()
                     + (deep ? " [verified by value, " + ci.lists.length + " item list(s)" + (bypass != null ? ": " + bypass : "") + "]" : "")
                     + "  clocks=" + p.clocks().stream().map(f -> f == null ? "?" : f.getName()).toList()
@@ -579,7 +636,10 @@ public final class SleepEngine {
 
         boolean resleep = s.resleep;
         s.resleep = false;
-        if ((resleep && clockOnly && sameRates) || s.stable >= STABLE) {
+        // an observed-only sleeper: its tick was not followed - it may act on a mod's own timer (CoFH's dynamos start on a
+        // global counter every 10 ticks, nothing of theirs changing): idle for OBSERVED_STABLE ticks first, no quick resleep
+        int need = s.info.observedOnly ? OBSERVED_STABLE : STABLE;
+        if ((resleep && clockOnly && sameRates && !s.info.observedOnly) || s.stable >= need) {
             if (resleep && clockOnly && sameRates) resleeps++;
             trySleep(s, now);
         } else if (!clockOnly) {
