@@ -627,10 +627,22 @@ final class SleepAnalysis {
             // section bookkeeping keyed by position: a no-op while the position does not change (the engine requires that)
             "net/minecraft/world/level/entity/EntityInLevelCallback");
 
+    /** this analysis met a call on the block entity through an interface outside its class chain and did not follow it */
+    private boolean skippedSelfDispatch;
+    /** block-entity classes whose tick the analysis did not follow into a call on the block entity: observed sleep only */
+    private static final Set<Class<?>> OBSERVED_ONLY = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Must this class sleep only as an observed sleeper (its tick not fully followed)? */
+    static boolean needsObservation(Class<?> beClass) {
+        return OBSERVED_ONLY.contains(beClass);
+    }
+
     static Plan analyze(Class<? extends BlockEntity> beClass, Class<?> blockClass) {
         SleepAnalysis a = new SleepAnalysis(beClass.getClassLoader());
         try {
-            return a.run(beClass, blockClass);
+            Plan p = a.run(beClass, blockClass);
+            if (a.skippedSelfDispatch && p.eligible()) OBSERVED_ONLY.add(beClass);
+            return p;
         } catch (Exception | LinkageError e) {
             return new Plan(false, "analysis failed: " + e, List.of(), List.of());
         }
@@ -891,8 +903,12 @@ final class SleepAnalysis {
      * Null when the call is not of this kind; a method that cannot be resolved refuses the class.
      */
     private String[] selfDispatch(MethodInsnNode mi, Frame<SourceValue>[] fr, int i, MethodNode m, Set<String> beChain, Class<?> beClass) {
-        if (SleepEngine.observedModSleep() || entityMode || mi.getOpcode() == Opcodes.INVOKESTATIC || beChain.contains(mi.owner)
+        if (entityMode || mi.getOpcode() == Opcodes.INVOKESTATIC || beChain.contains(mi.owner)
                 || !onThis(fr[i], Type.getArgumentTypes(mi.desc).length + 1, fr, m)) return null;
+        if (SleepEngine.observedModSleep()) {   // not followed: the class may sleep only observed (SleepEngine: OwnedHash, any change wakes)
+            skippedSelfDispatch = true;
+            return null;
+        }
         String decl = ownerOf(internal(beClass), mi.name, mi.desc);
         MethodNode target = decl == null ? null : method(decl, mi.name, mi.desc);
         if (target == null || (target.access & Opcodes.ACC_ABSTRACT) != 0) {
