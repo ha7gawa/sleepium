@@ -111,7 +111,7 @@ public final class SleepScreen extends Screen {
     /** the dev probe (-Dsleep.ui.partofTest): Flags showing the first part whose parent is on the screen; that parent's name */
     String probeShowPart() {
         for (SleepOptions.Option o : SleepOptions.all()) {
-            if (o.partOf().isEmpty() || SleepConfig.launchFlag(o.key())) continue;
+            if (o.partOf().isEmpty() || SleepConfig.locked(o.key())) continue;
             String parent = o.partOf().get(0);
             if (SleepOptions.all().stream().noneMatch(p -> p.key().equals(parent))) continue;
             goTo(o.shortName());
@@ -215,8 +215,8 @@ public final class SleepScreen extends Screen {
             List<SleepOptions.Option> opts = own(e.getValue()).stream().filter(SleepOptions.Option::byDefault).toList();
             if (opts.isEmpty()) continue;
             Button toggle = Button.builder(Component.empty(), x -> {
-                boolean allOn = opts.stream().filter(o -> !SleepConfig.launchFlag(o.key())).allMatch(o -> desired.get(o.key()));
-                for (SleepOptions.Option o : opts) if (!SleepConfig.launchFlag(o.key())) desired.put(o.key(), !allOn);
+                boolean allOn = opts.stream().filter(o -> !SleepConfig.locked(o.key())).allMatch(o -> desired.get(o.key()));
+                for (SleepOptions.Option o : opts) if (!SleepConfig.locked(o.key())) desired.put(o.key(), !allOn);
             }).size(70, 20).build();
             String g = e.getKey();
             list.add(new Row(() -> Component.translatable("sleepium.ui.group." + g), () -> {
@@ -258,7 +258,7 @@ public final class SleepScreen extends Screen {
      */
     private void preset(String p) {
         for (SleepOptions.Option o : SleepOptions.all()) {
-            if (!o.partOf().isEmpty() || SleepConfig.launchFlag(o.key())) continue;
+            if (!o.partOf().isEmpty() || SleepConfig.locked(o.key())) continue;
             boolean v = switch (p) {
                 case "maximum" -> true;
                 case "compatible" -> o.byDefault() && !CLIENT_RENDER.contains(o.group());
@@ -273,7 +273,7 @@ public final class SleepScreen extends Screen {
         outer:
         for (String p : new String[] {"maximum", "recommended", "compatible", "off"}) {
             for (SleepOptions.Option o : SleepOptions.all()) {
-                if (!o.partOf().isEmpty() || SleepConfig.launchFlag(o.key())) continue;
+                if (!o.partOf().isEmpty() || SleepConfig.locked(o.key())) continue;
                 boolean v = switch (p) {
                     case "maximum" -> true;
                     case "compatible" -> o.byDefault() && !CLIENT_RENDER.contains(o.group());
@@ -306,7 +306,7 @@ public final class SleepScreen extends Screen {
         for (SleepOptions.Option o : SleepOptions.all()) {
             boolean now = Boolean.parseBoolean(System.getProperty(o.key()));
             if (o.partOf().isEmpty() && now != o.byDefault()) {
-                sb.append(' ').append(o.key()).append('=').append(now).append(SleepConfig.launchFlag(o.key()) ? " (launch)" : "");
+                sb.append(' ').append(o.key()).append('=').append(now).append(switch (SleepConfig.source(o.key())) { case "default", "player" -> ""; default -> " (" + SleepConfig.source(o.key()) + ")"; });
                 n++;
             }
         }
@@ -328,7 +328,7 @@ public final class SleepScreen extends Screen {
         for (SleepOptions.Option o : opts) {
             if (group == null && !f.isEmpty() && !o.key().toLowerCase(Locale.ROOT).contains(f) && !o.description().toLowerCase(Locale.ROOT).contains(f))
                 continue;
-            boolean locked = SleepConfig.launchFlag(o.key());
+            boolean locked = SleepConfig.locked(o.key());
             boolean part = !o.partOf().isEmpty();
             String parent = part ? o.partOf().get(0) : null;
             String parentName = part ? parent.substring(parent.lastIndexOf('.') + 1).replaceAll("Mixin$", "") : null;
@@ -344,7 +344,10 @@ public final class SleepScreen extends Screen {
                     .append(Component.literal(o.key()).withStyle(ChatFormatting.DARK_GRAY)).append("\n")
                     .append(o.description().isEmpty() ? Component.translatable("sleepium.ui.nodesc") : Component.literal(o.description()))
                     .append(" ").append(Component.translatable(o.byDefault() ? "sleepium.ui.default.on" : "sleepium.ui.default.off").withStyle(ChatFormatting.DARK_GRAY));
-            if (locked) tip.append(" ").append(Component.translatable("sleepium.ui.locked", o.key()).withStyle(ChatFormatting.GOLD));
+            if (locked) tip.append(" ").append(Component.translatable(SleepConfig.packLocked(o.key()) ? "sleepium.ui.lockedPack" : "sleepium.ui.locked", o.key()).withStyle(ChatFormatting.GOLD));
+            String src = SleepConfig.source(o.key());
+            if (src.equals("pack")) tip.append(" ").append(Component.translatable("sleepium.ui.source.pack").withStyle(ChatFormatting.AQUA));
+            else if (src.startsWith("mod:")) tip.append(" ").append(Component.translatable("sleepium.ui.source.mod", src.substring(4)).withStyle(ChatFormatting.AQUA));
             String parts = String.join(", ", o.partOf().stream().map(k -> k.substring(k.lastIndexOf('.') + 1).replaceAll("Mixin$", "")).toList());
             if (part) tip.append(" ").append((parentShown ? Component.translatable("sleepium.ui.partof.tip", parts)
                     : Component.translatable("sleepium.ui.partof.hidden", parts, parent)).withStyle(ChatFormatting.AQUA));
@@ -465,7 +468,9 @@ public final class SleepScreen extends Screen {
         for (SleepOptions.Option o : SleepOptions.all()) {
             if (!o.partOf().isEmpty()) continue;   // switched by its own flag's line
             boolean v = desired.get(o.key());
-            if (v != o.byDefault() || v != Boolean.parseBoolean(SleepConfig.startup(o.key()))) out.put(o.key(), Boolean.toString(v));
+            if (SleepConfig.packLocked(o.key())) continue;
+            boolean base = Boolean.parseBoolean(SleepConfig.baseline(o.key(), Boolean.toString(o.byDefault())));   // the pack's or a mod's value, else the default
+            if (v != base || v != Boolean.parseBoolean(SleepConfig.startup(o.key()))) out.put(o.key(), Boolean.toString(v));
             else out.remove(o.key());
         }
         if (pack != null) out.put("sleep.shaders", pack);

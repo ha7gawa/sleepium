@@ -543,6 +543,7 @@ public final class SleepEngine {
     private static Sleeper create(BlockEntity be) {
         Class<?> blockClass = be.getBlockState().getBlock().getClass();
         boolean excluded = dev.lull.api.Compat.sleepExcluded(be);
+        boolean watchedOnly = dev.lull.api.Compat.sleepObservedOnly(be);   // the pack or the mod asked: watched sleep only
         String name = be.getClass().getSimpleName();
         ClassInfo info = AsyncAnalysis.get(CLASSES, be.getClass(), c -> {
             @SuppressWarnings("unchecked") Class<? extends net.minecraft.world.level.block.entity.BlockEntity> bc = (Class<? extends net.minecraft.world.level.block.entity.BlockEntity>) c;
@@ -564,7 +565,8 @@ public final class SleepEngine {
             boolean deep = p.eligible() && ("all".equals(DEEP) || bypass != null);
             ClassInfo ci = new ClassInfo(p, deep, c);
             ci.observedOnly = p.eligible() && observedModSleep()
-                    && (bypass != null && (listsOf(c).length == 0 || unverifiedState(c) != null) || SleepAnalysis.needsObservation(c));
+                    && (bypass != null && (listsOf(c).length == 0 || unverifiedState(c) != null) || SleepAnalysis.needsObservation(c))
+                    || p.eligible() && watchedOnly;
             System.out.println("[sleep/sleep] " + name + ": " + (p.eligible() ? "ELIGIBLE " : "no: ") + p.reason()
                     + (deep ? " [verified by value, " + ci.lists.length + " item list(s)" + (bypass != null ? ": " + bypass : "") + "]" : "")
                     + "  clocks=" + p.clocks().stream().map(f -> f == null ? "?" : f.getName()).toList()
