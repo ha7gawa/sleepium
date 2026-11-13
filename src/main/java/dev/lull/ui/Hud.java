@@ -290,6 +290,7 @@ public final class Hud {
             out.add("  " + m.mod() + " " + m.brief());
         }
         modLines = out.isEmpty() ? List.of("  under 0.01 ms each") : out;
+        if (SELF) System.out.println("[sleep/hud] live list: " + modLines);
     }
 
     // ------------------------------------------------------------------ drawing
