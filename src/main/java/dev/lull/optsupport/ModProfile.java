@@ -77,8 +77,23 @@ public final class ModProfile {
         return module == null ? null : m.get(module);
     }
 
-    /** timing on: a recording runs or the HUD's live list is shown */
-    public static volatile boolean ON;
+    /**
+     * Timing on for this server tick / this frame: always while a recording runs (exact); for the HUD's live list every 4th
+     * 16th tick and frame only (switched at their boundaries - the other ticks and frames cost one volatile read; the
+     * results are per timed tick / frame, so the sample is unbiased without weights).
+     */
+    public static volatile boolean ON_SERVER, ON_CLIENT;
+    private static int serverPhase, framePhase;
+
+    /** a recording runs or the live list is shown */
+    public static boolean active() {
+        return recordingNow || live;
+    }
+
+    /** an event post: timed when this thread's side is timed now */
+    public static boolean timingHere() {
+        return Thread.currentThread() == serverThread ? ON_SERVER : ON_CLIENT;
+    }
     private static boolean recordingNow, live;
     /** the last recording's results (the Mods page), kept apart from the HUD's rolling window */
     private static List<Result> last = List.of();
@@ -97,13 +112,7 @@ public final class ModProfile {
     public static volatile boolean ready;
 
     public static void add(int kind, Object type, long ns) {
-        BY_TYPE[kind].computeIfAbsent(type, k -> new LongAdder()).add(recordingNow ? ns : ns << 4);
-    }
-
-    private static final java.util.concurrent.atomic.AtomicInteger[] SAMPLE = new java.util.concurrent.atomic.AtomicInteger[8];
-
-    static {
-        for (int i = 0; i < SAMPLE.length; i++) SAMPLE[i] = new java.util.concurrent.atomic.AtomicInteger();
+        BY_TYPE[kind].computeIfAbsent(type, k -> new LongAdder()).add(ns);
     }
 
     /** where the server's time went: dimension -> chunk -> type -> ns (block entity and entity ticks) */
@@ -112,7 +121,7 @@ public final class ModProfile {
     /** a block entity's or entity's tick in this chunk (alongside add) */
     public static void at(Object dimension, long chunk, Object type, long ns) {
         SPOTS.computeIfAbsent(dimension, k -> new ConcurrentHashMap<>()).computeIfAbsent(chunk, k -> new ConcurrentHashMap<>())
-                .computeIfAbsent(type, k -> new LongAdder()).add(recordingNow ? ns : ns << 4);
+                .computeIfAbsent(type, k -> new LongAdder()).add(ns);
     }
 
     /** a hot spot of the last recording: where, its ms per tick, what it is made of */
@@ -155,14 +164,6 @@ public final class ModProfile {
         return out.size() > 10 ? new ArrayList<>(out.subList(0, 10)) : out;
     }
 
-    /**
-     * Whether to time this call: always while recording (exact), one in 16 for the HUD's live list (weighted 16 in add:
-     * the live list costs a sixteenth). One counter per kind: exactly 1 in 16 of each kind's calls.
-     */
-    public static boolean take(int kind) {
-        return recordingNow || (SAMPLE[kind].getAndIncrement() & 15) == 0;
-    }
-
     /** a recording of this many seconds, from now */
     public static synchronized void start(int seconds) {
         for (Map<Object, LongAdder> m : BY_TYPE) m.clear();
@@ -173,7 +174,7 @@ public final class ModProfile {
         ready = false;
         announced = false;
         recordingNow = true;
-        ON = true;
+        ON_SERVER = ON_CLIENT = true;
         System.out.println("[sleep/profile] recording what each mod costs for " + seconds + " s");
     }
 
@@ -185,12 +186,12 @@ public final class ModProfile {
     public static synchronized void live(boolean on) {
         if (on == live) return;
         live = on;
-        if (on && !ON) {
+        if (on && !recordingNow) {
             for (Map<Object, LongAdder> m : BY_TYPE) m.clear();
             ticks = frames = 0;
             startNs = System.nanoTime();
         }
-        ON = recordingNow || live;
+        if (!recordingNow) ON_SERVER = ON_CLIENT = false;   // (the live sample starts at the next boundaries)
     }
 
     /** the HUD: the window since the last call (none while a recording runs: it owns the counters) */
@@ -212,17 +213,22 @@ public final class ModProfile {
     /** server tick end (SleepCommand.onTickEnd: singleplayer and dedicated servers); true once when a recording just ended there */
     public static boolean serverTick() {
         serverThread = Thread.currentThread();
-        if (ON) ticks++;
-        if (recordingNow && System.nanoTime() >= stopAt) {
-            finish();
-            return true;
+        if (ON_SERVER) ticks++;   // the tick that just ended was timed
+        if (recordingNow) {
+            if (System.nanoTime() >= stopAt) {
+                finish();
+                return true;
+            }
+            return false;
         }
+        ON_SERVER = live && (++serverPhase & 3) == 0;   // (a server tick timed whole is cheap: every 4th - 15 a window)
         return false;
     }
 
     /** a frame (RenderFrameEvent.Pre) */
     public static void frame() {
-        if (ON) frames++;
+        if (ON_CLIENT) frames++;   // the frame that just ended was timed
+        if (!recordingNow) ON_CLIENT = live && (++framePhase & 15) == 0;
     }
 
     /** client tick: the recording's end; true once when it just finished (the caller tells the player) */
@@ -251,7 +257,7 @@ public final class ModProfile {
             for (Spot s : lastSpots) System.out.println("[sleep/profile]   hot spot " + s.line());
             ticks = frames = 0;
             startNs = System.nanoTime();
-            ON = live;
+            ON_SERVER = ON_CLIENT = false;   // (the live sample, if shown, starts at the next boundaries)
         }
     }
 
