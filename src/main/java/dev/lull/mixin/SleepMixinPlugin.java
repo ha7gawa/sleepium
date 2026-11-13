@@ -41,7 +41,9 @@ public final class SleepMixinPlugin implements IMixinConfigPlugin {
         return !simple.startsWith("ReadProbe") || Boolean.getBoolean("sleep.beReads") || sleep;
     }
 
-    @Override public void onLoad(String mixinPackage) {}
+    @Override public void onLoad(String mixinPackage) {
+        dev.lull.optsupport.MixinYield.prepass(mixinPackage, this::sleep$decide);   // rules asking ours to win: before any config is prepared
+    }
     @Override public String getRefMapperConfig() { return null; }
     @Override public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {}
     @Override public List<String> getMixins() { return null; }

@@ -40,10 +40,117 @@ public final class MixinYield {
     private static String conflict(String targetClassName, String mixinClassName) {
         if (Boolean.getBoolean("lab.yield.off")) return null;   // (tests: the conflict itself, nothing of ours gives way)
         String why = DECIDED.computeIfAbsent(mixinClassName, k -> {
-            String r = yields0(targetClassName, mixinClassName);
+            String r = decide(targetClassName, mixinClassName);
             return r == null ? "" : r;
         });
         return why.isEmpty() ? null : why;
+    }
+
+    /** what a conflict check found: the "not applied" line and the foreign mixins behind it ("modid TAB mixin class") */
+    private record Verdict(String why, java.util.Set<String> culprits) {}
+
+    /** foreign mixins taken out by a rule so that ours applies: "OurMixin over modid (TheirMixin)" (the report) */
+    public static final java.util.List<String> CANCELLED = new java.util.concurrent.CopyOnWriteArrayList<>();
+    /** our mixins that gave way because a rule asked (no conflict of their own): the report */
+    public static final java.util.List<String> BY_RULE = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    private static String rule(String key) {
+        return System.getProperty(key, "").trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** any rule asking ours to win (sleep.yield.<OurMixin>=never, sleep.mod.<id>.giveWay=never) */
+    private static boolean anyNeverRule() {
+        for (String k : System.getProperties().stringPropertyNames())
+            if ((k.startsWith("sleep.yield.") || k.startsWith("sleep.mod.") && k.endsWith(".giveWay")) && "never".equals(rule(k))) return true;
+        return false;
+    }
+
+    /**
+     * Each of our config plugins, at its onLoad: with a rule asking ours to win, its enabled mixins are decided now. Mixin
+     * loads every config's plugin before it prepares any config, and a foreign mixin can only be taken out of a config not
+     * prepared yet; asked later (when our config is prepared) another mod's config may already be (11-13: the foreign
+     * test config was).
+     */
+    public static void prepass(String mixinPackage, java.util.function.BiPredicate<String, String> enabled) {
+        GameDefaults.ensure();   // (the settings' layers first: a pack's rule is in them)
+        if (!anyNeverRule()) return;
+        String pre = mixinPackage.endsWith(".") ? mixinPackage : mixinPackage + ".";
+        MixinTouch.ourMixins((cls, cn) -> {
+            if (!cls.startsWith(pre)) return;
+            java.util.List<String> ts = MixinTouch.targets(cn);
+            if (ts.isEmpty()) return;
+            String target = ts.get(0).replace('/', '.');
+            try {
+                if (enabled.test(target, cls)) conflict(target, cls);
+            } catch (Throwable t) {
+                System.out.println("[sleep/opt] rules' early pass: " + cls + ": " + t);
+            }
+        });
+    }
+
+    /** the mods a rule asks to give way to always (sleep.mod.<id>.giveWay=always) */
+    private static java.util.Set<String> alwaysMods() {
+        java.util.Set<String> out = new java.util.TreeSet<>();
+        for (String k : System.getProperties().stringPropertyNames())
+            if (k.startsWith("sleep.mod.") && k.endsWith(".giveWay") && "always".equals(rule(k))) out.add(k.substring(10, k.length() - 8));
+        return out;
+    }
+
+    /**
+     * The conflict check under the rules of the pack, the player and the mods (notes/73): per our mixin
+     * {@code sleep.yield.<OurMixin>} and per mod {@code sleep.mod.<modid>.giveWay} - conflicts (the default: give way on a
+     * real conflict only), always (also where that mod's mixins merely touch the same methods), never (on a real conflict
+     * ours applies and their conflicting mixins are taken out of their configs - only when all of them still can be).
+     */
+    private static String decide(String targetClassName, String mixinClassName) {
+        String simple = simple(mixinClassName);
+        String own = rule("sleep.yield." + simple);
+        Verdict v = yields0(targetClassName, mixinClassName);
+        if (v != null) {
+            java.util.Set<String> mods = new java.util.TreeSet<>();
+            for (String c : v.culprits()) mods.add(c.substring(0, c.indexOf('\t')));
+            boolean win = !v.culprits().isEmpty() && ("never".equals(own) || mods.stream().allMatch(m -> "never".equals(rule("sleep.mod." + m + ".giveWay"))));
+            if (!win) return v.why();
+            for (String c : v.culprits())
+                if (!MixinTouch.cancel(c.substring(c.indexOf('\t') + 1), true)) {
+                    System.out.println("[sleep/opt] " + simple + ": a rule asks it to apply over " + mods + ", but " + c.replace('\t', ' ')
+                            + " cannot be taken out any more (its config is prepared): it gives way instead");
+                    return v.why();
+                }
+            java.util.List<String> names = new java.util.ArrayList<>();
+            for (String c : v.culprits()) {
+                MixinTouch.cancel(c.substring(c.indexOf('\t') + 1), false);
+                String label = c.substring(0, c.indexOf('\t')) + " (" + simple(c.substring(c.indexOf('\t') + 1)) + ")";
+                names.add(label);
+                CANCELLED.add(simple + " over " + label);
+            }
+            System.out.println("[sleep/opt] RULE: " + simple + " applied over another mod - CANCELLED " + names + " ("
+                    + ("never".equals(own) ? "sleep.yield." + simple + "=never" : "sleep.mod.<id>.giveWay=never") + "); without the rule: " + v.why().replace("[sleep/opt] ", ""));
+            return null;
+        }
+        java.util.Set<String> always = alwaysMods();
+        if (!"always".equals(own) && always.isEmpty()) return null;
+        ClassNode cn;
+        try {
+            cn = org.spongepowered.asm.service.MixinService.getService().getBytecodeProvider().getClassNode(mixinClassName);
+        } catch (Throwable t) {
+            return null;
+        }
+        java.util.Set<String> methods = new java.util.HashSet<>();
+        MixinTouch.collect(cn, methods);
+        for (String t : MixinTouch.targets(cn))
+            for (String n : methods) {
+                if (n.startsWith("<")) continue;   // (every mixin class has a constructor: not a touch of the target)
+                for (String c : n.startsWith("*") ? MixinTouch.culpritsOnClass(t) : MixinTouch.culprits(t, n)) {
+                    String mod = c.substring(0, c.indexOf('\t'));
+                    if (!"always".equals(own) && !always.contains(mod)) continue;
+                    String why = "[sleep/opt] " + simple + " not applied: a rule asks it to give way to " + mod + " (" + simple(c.substring(c.indexOf('\t') + 1))
+                            + ") on " + t.replace('/', '.') + "#" + n + " (" + ("always".equals(own) ? "sleep.yield." + simple : "sleep.mod." + mod + ".giveWay") + "=always)";
+                    BY_RULE.add(simple + " to " + mod);
+                    return why;
+                }
+            }
+        return null;
     }
 
     /** our mixins that add an interface of ours to their target: interface (internal name) -> {mixin class, target class} */
@@ -183,7 +290,7 @@ public final class MixinYield {
     }
 
     /** why this mixin of ours conflicts with a foreign one (its "not applied" line), or null */
-    private static String yields0(String targetClassName, String mixinClassName) {
+    private static Verdict yields0(String targetClassName, String mixinClassName) {
         ClassNode cn;
         try {
             cn = org.spongepowered.asm.service.MixinService.getService().getBytecodeProvider().getClassNode(mixinClassName);
@@ -195,38 +302,44 @@ public final class MixinYield {
         for (String key : MixinTouch.redirectKeys(cn)) {   // a @Redirect of ours on a call another mod redirects too: one of them fails to load
             int bar = key.indexOf('|');
             if (MixinTouch.redirected(target, key.substring(0, bar), key.substring(bar + 1))) {
-                return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: the call to "
-                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar) + " is redirected by another mod's mixin" + byCall(target, key.substring(0, bar), key.substring(bar + 1));
+                return new Verdict("[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: the call to "
+                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar) + " is redirected by another mod's mixin" + byCall(target, key.substring(0, bar), key.substring(bar + 1)),
+                        MixinTouch.culpritsCall(target, key.substring(0, bar), key.substring(bar + 1)));
             }
             if (MixinTouch.argsModified(target, key.substring(0, bar), key.substring(bar + 1))) {   // their @ModifyArg(s) after our redirect
-                return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: another mod's mixin changes the arguments of the call to "
-                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar) + byCall(target, key.substring(0, bar), key.substring(bar + 1));
+                return new Verdict("[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: another mod's mixin changes the arguments of the call to "
+                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar) + byCall(target, key.substring(0, bar), key.substring(bar + 1)),
+                        MixinTouch.culpritsCall(target, key.substring(0, bar), key.substring(bar + 1)));
             }
         }
         for (String key : MixinTouch.argKeys(cn)) {   // a @ModifyArg(s) of ours on a call another mod redirects
             int bar = key.indexOf('|');
             if (MixinTouch.redirected(target, key.substring(0, bar), key.substring(bar + 1))) {
-                return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: the call to "
-                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar) + " is redirected by another mod's mixin" + byCall(target, key.substring(0, bar), key.substring(bar + 1));
+                return new Verdict("[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: the call to "
+                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar) + " is redirected by another mod's mixin" + byCall(target, key.substring(0, bar), key.substring(bar + 1)),
+                        MixinTouch.culpritsCall(target, key.substring(0, bar), key.substring(bar + 1)));
             }
         }
         for (MethodNode m : cn.methods)   // an injector of ours into a method another mod overwrites: Mixin refuses it at load
             for (String t : MixinTouch.injectorTargets(m))
                 if (MixinTouch.overwritten(target, t)) {
-                    return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: " + targetClassName + "#" + t
-                            + " is overwritten by another mod's mixin (our injector cannot go into it)" + by(target, t);
+                    return new Verdict("[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: " + targetClassName + "#" + t
+                            + " is overwritten by another mod's mixin (our injector cannot go into it)" + by(target, t),
+                            MixinTouch.culprits(target, t));
                 }
         for (MethodNode m : cn.methods) {   // a plain method we add (an override of an interface default: Level.noCollision) that another mod adds too: one is skipped
             if (overwrite(m) || annotated(m) || m.name.startsWith("<") || m.name.contains("$") || (m.access & (org.objectweb.asm.Opcodes.ACC_SYNTHETIC | org.objectweb.asm.Opcodes.ACC_BRIDGE)) != 0) continue;
             if (MixinTouch.touched(target, m.name)) {
-                return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: "
-                        + targetClassName + "#" + m.name + " is added by another mod's mixin too (one of the two would be skipped)" + by(target, m.name);
+                return new Verdict("[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: "
+                        + targetClassName + "#" + m.name + " is added by another mod's mixin too (one of the two would be skipped)" + by(target, m.name),
+                        MixinTouch.culprits(target, m.name));
             }            // an override of an interface default another mod's mixin changes there (VertexConsumer.putBulkData): ours would
             // run instead of their changed default
             String iface = changedDefault(target, m.name, m.desc);
             if (iface != null) {
-                return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: "
-                        + iface.replace('/', '.') + "#" + m.name + " is changed by another mod's mixin (our override in " + targetClassName + " would skip it)" + by(iface, m.name);
+                return new Verdict("[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: "
+                        + iface.replace('/', '.') + "#" + m.name + " is changed by another mod's mixin (our override in " + targetClassName + " would skip it)" + by(iface, m.name),
+                        MixinTouch.culprits(iface, m.name));
             }
         }
         for (MethodNode m : cn.methods) {
@@ -234,8 +347,9 @@ public final class MixinYield {
             if (Boolean.getBoolean("sleep.mixinIndex.debug"))
                 System.out.println("[sleep/opt] yield check: " + mixinClassName + " overwrites " + target + "#" + m.name + " touched=" + MixinTouch.touched(target, m.name, m.desc));
             if (MixinTouch.touched(target, m.name, m.desc)) {
-                return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: "
-                        + targetClassName + "#" + m.name + " is changed by another mod's mixin (our overwrite would break it)" + by(target, m.name);
+                return new Verdict("[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: "
+                        + targetClassName + "#" + m.name + " is changed by another mod's mixin (our overwrite would break it)" + by(target, m.name),
+                        MixinTouch.culprits(target, m.name));
             }
         }
         return null;

@@ -10,7 +10,7 @@ import java.util.Map;
  * sleepium = { sleep = "observed", entitySleep = "off", noRenderCache = ["mymod:clock"] }
  * </pre>
  * Rules about the whole mod: {@code sleep} (on / observed / off: its block entities), {@code entitySleep},
- * {@code renderCache}, {@code parallelRender} (on / off), {@code giveWay} (conflicts / always). Lists of its own type ids:
+ * {@code renderCache}, {@code parallelRender} (on / off), {@code giveWay} (conflicts / always / never). Lists of its own type ids:
  * {@code noSleep}, {@code noEntitySleep}, {@code noRenderCache}, {@code noParallelRender}. A mod speaks only for itself:
  * ids outside its namespace are ignored. The rules become the engine keys {@code sleep.mod.<modid>.<rule>} and the
  * lists join {@code sleep.compat.<list>} - the same keys a pack or a player sets, which win over a declaration.
@@ -28,7 +28,7 @@ public final class ModDeclarations {
         return switch (rule) {
             case "sleep" -> v.equals("on") || v.equals("observed") || v.equals("off") ? v : null;
             case "entitySleep", "renderCache", "parallelRender" -> v.equals("on") || v.equals("off") ? v : null;
-            case "giveWay" -> v.equals("conflicts") || v.equals("always") ? v : null;
+            case "giveWay" -> v.equals("conflicts") || v.equals("always") || v.equals("never") ? v : null;
             default -> null;
         };
     }

@@ -17,7 +17,9 @@ public final class VeilMixinPlugin implements IMixinConfigPlugin {
         return mods != null && mods.getModFileById("veil") != null;
     }
 
-    @Override public void onLoad(String mixinPackage) {}
+    @Override public void onLoad(String mixinPackage) {
+        dev.lull.optsupport.MixinYield.prepass(mixinPackage, this::sleep$decide);   // rules asking ours to win: before any config is prepared
+    }
     @Override public String getRefMapperConfig() { return null; }
 
     @Override
