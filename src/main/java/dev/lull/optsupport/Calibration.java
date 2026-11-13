@@ -19,7 +19,15 @@ import java.util.Properties;
 public final class Calibration {
     private Calibration() {}
 
-    private static final String VERSION = "1.2.1";
+    /** this jar's version from the mod list (a constant here stayed at 1.2.1 in 1.2.2) */
+    private static String version() {
+        try {
+            return net.neoforged.fml.ModList.get().getModContainerById("sleepium")
+                    .map(c -> c.getModInfo().getVersion().toString()).orElse("?");
+        } catch (Throwable t) {
+            return "?";
+        }
+    }
     private static Properties props;
     private static String key;
     private static Path file;
@@ -30,7 +38,7 @@ public final class Calibration {
         String v = org.lwjgl.opengl.GL11C.glGetString(org.lwjgl.opengl.GL11C.GL_VERSION);
         String vendor = org.lwjgl.opengl.GL11C.glGetString(org.lwjgl.opengl.GL11C.GL_VENDOR);
         return vendor + " | " + r + " | " + v + " | " + System.getProperty("os.name") + " " + System.getProperty("os.arch")
-                + " | " + Runtime.getRuntime().availableProcessors() + " cores | Sleepium " + VERSION + " | mods " + mods();
+                + " | " + Runtime.getRuntime().availableProcessors() + " cores | Sleepium " + version() + " | mods " + mods();
     }
 
     /**
