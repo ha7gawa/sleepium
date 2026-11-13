@@ -171,6 +171,17 @@ public final class MixinYield {
         }
     }
 
+    /** " - by sodium (LevelRendererMixin), ..." for a "not applied" line (empty when the index cannot tell) */
+    private static String by(String internalTarget, String method) {
+        String w = MixinTouch.who(internalTarget, method);
+        return w.isEmpty() ? "" : " - by " + w;
+    }
+
+    private static String byCall(String internalTarget, String method, String invoked) {
+        String w = MixinTouch.whoCall(internalTarget, method, invoked);
+        return w.isEmpty() ? "" : " - by " + w;
+    }
+
     /** why this mixin of ours conflicts with a foreign one (its "not applied" line), or null */
     private static String yields0(String targetClassName, String mixinClassName) {
         ClassNode cn;
@@ -185,37 +196,37 @@ public final class MixinYield {
             int bar = key.indexOf('|');
             if (MixinTouch.redirected(target, key.substring(0, bar), key.substring(bar + 1))) {
                 return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: the call to "
-                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar) + " is redirected by another mod's mixin";
+                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar) + " is redirected by another mod's mixin" + byCall(target, key.substring(0, bar), key.substring(bar + 1));
             }
             if (MixinTouch.argsModified(target, key.substring(0, bar), key.substring(bar + 1))) {   // their @ModifyArg(s) after our redirect
                 return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: another mod's mixin changes the arguments of the call to "
-                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar);
+                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar) + byCall(target, key.substring(0, bar), key.substring(bar + 1));
             }
         }
         for (String key : MixinTouch.argKeys(cn)) {   // a @ModifyArg(s) of ours on a call another mod redirects
             int bar = key.indexOf('|');
             if (MixinTouch.redirected(target, key.substring(0, bar), key.substring(bar + 1))) {
                 return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: the call to "
-                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar) + " is redirected by another mod's mixin";
+                        + key.substring(bar + 1) + " in " + targetClassName + "#" + key.substring(0, bar) + " is redirected by another mod's mixin" + byCall(target, key.substring(0, bar), key.substring(bar + 1));
             }
         }
         for (MethodNode m : cn.methods)   // an injector of ours into a method another mod overwrites: Mixin refuses it at load
             for (String t : MixinTouch.injectorTargets(m))
                 if (MixinTouch.overwritten(target, t)) {
                     return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: " + targetClassName + "#" + t
-                            + " is overwritten by another mod's mixin (our injector cannot go into it)";
+                            + " is overwritten by another mod's mixin (our injector cannot go into it)" + by(target, t);
                 }
         for (MethodNode m : cn.methods) {   // a plain method we add (an override of an interface default: Level.noCollision) that another mod adds too: one is skipped
             if (overwrite(m) || annotated(m) || m.name.startsWith("<") || m.name.contains("$") || (m.access & (org.objectweb.asm.Opcodes.ACC_SYNTHETIC | org.objectweb.asm.Opcodes.ACC_BRIDGE)) != 0) continue;
             if (MixinTouch.touched(target, m.name)) {
                 return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: "
-                        + targetClassName + "#" + m.name + " is added by another mod's mixin too (one of the two would be skipped)";
+                        + targetClassName + "#" + m.name + " is added by another mod's mixin too (one of the two would be skipped)" + by(target, m.name);
             }            // an override of an interface default another mod's mixin changes there (VertexConsumer.putBulkData): ours would
             // run instead of their changed default
             String iface = changedDefault(target, m.name, m.desc);
             if (iface != null) {
                 return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: "
-                        + iface.replace('/', '.') + "#" + m.name + " is changed by another mod's mixin (our override in " + targetClassName + " would skip it)";
+                        + iface.replace('/', '.') + "#" + m.name + " is changed by another mod's mixin (our override in " + targetClassName + " would skip it)" + by(iface, m.name);
             }
         }
         for (MethodNode m : cn.methods) {
@@ -224,7 +235,7 @@ public final class MixinYield {
                 System.out.println("[sleep/opt] yield check: " + mixinClassName + " overwrites " + target + "#" + m.name + " touched=" + MixinTouch.touched(target, m.name, m.desc));
             if (MixinTouch.touched(target, m.name, m.desc)) {
                 return "[sleep/opt] " + mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1) + " not applied: "
-                        + targetClassName + "#" + m.name + " is changed by another mod's mixin (our overwrite would break it)";
+                        + targetClassName + "#" + m.name + " is changed by another mod's mixin (our overwrite would break it)" + by(target, m.name);
             }
         }
         return null;

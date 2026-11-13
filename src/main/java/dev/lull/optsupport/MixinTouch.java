@@ -248,6 +248,7 @@ public final class MixinTouch {
                             if (!reds.isEmpty()) REDIRECTS.computeIfAbsent(target, k -> new HashSet<>()).addAll(reds);
                             if (!args.isEmpty()) ARGMODS.computeIfAbsent(target, k -> new HashSet<>()).addAll(args);
                             if (!ows.isEmpty()) OVERWRITES.computeIfAbsent(target, k -> new HashSet<>()).addAll(ows);
+                            noteWho(target, mc.getName(), cn.name, methods, reds, args, ows);
                         }
                     }
                 }
@@ -286,7 +287,7 @@ public final class MixinTouch {
                             for (var e : o.getAsJsonArray(key)) {
                                 if (!e.isJsonPrimitive()) continue;   // Mixin skips a null entry (Sleep Tight's list ends in one)
                                 java.nio.file.Path bytes = file.findResource((pkg + "." + e.getAsString()).replace('.', '/') + ".class");
-                                if (bytes != null && java.nio.file.Files.exists(bytes)) indexClass(java.nio.file.Files.readAllBytes(bytes), m, refmap);
+                                if (bytes != null && java.nio.file.Files.exists(bytes)) indexClass(java.nio.file.Files.readAllBytes(bytes), m, refmap, info.moduleName());
                             }
                         }
                         // a config plugin may add mixins of its package the lists do not name (its getMixins: Embeddium's
@@ -296,7 +297,7 @@ public final class MixinTouch {
                             if (root != null && java.nio.file.Files.isDirectory(root))
                                 try (var walk = java.nio.file.Files.walk(root)) {
                                     for (java.nio.file.Path c : (Iterable<java.nio.file.Path>) walk::iterator)
-                                        if (c.toString().endsWith(".class")) indexClass(java.nio.file.Files.readAllBytes(c), m, refmap);
+                                        if (c.toString().endsWith(".class")) indexClass(java.nio.file.Files.readAllBytes(c), m, refmap, info.moduleName());
                                 }
                         }
                     } catch (Throwable t) {   // one mod's config the index cannot read: the other mods' still counted
@@ -379,7 +380,7 @@ public final class MixinTouch {
     }
 
     /** One foreign mixin class's touches, by its target classes (a class without @Mixin adds nothing). */
-    private static void indexClass(byte[] bytes, Map<String, Set<String>> m, com.google.gson.JsonObject refmap) {
+    private static void indexClass(byte[] bytes, Map<String, Set<String>> m, com.google.gson.JsonObject refmap, String owner) {
         ClassNode cn = new ClassNode();
         new org.objectweb.asm.ClassReader(bytes).accept(cn, org.objectweb.asm.ClassReader.SKIP_CODE);
         List<String> ts = targets(cn);
@@ -400,7 +401,57 @@ public final class MixinTouch {
             if (!reds.isEmpty()) REDIRECTS.computeIfAbsent(target, k -> new HashSet<>()).addAll(reds);
             if (!args.isEmpty()) ARGMODS.computeIfAbsent(target, k -> new HashSet<>()).addAll(args);
             if (!ows.isEmpty()) OVERWRITES.computeIfAbsent(target, k -> new HashSet<>()).addAll(ows);
+            noteWho(target, owner, cn.name, methods, reds, args, ows);
         }
+    }
+
+    /** who touches a method: "target#method" (official names; "target#*" a wildcard) -> "mod (Mixin)" */
+    private static final Map<String, Set<String>> WHO = new java.util.HashMap<>();
+
+    private static void noteWho(String target, String owner, String mixin, Set<String> methods, List<String> reds, List<String> args, List<String> ows) {
+        String label = (owner == null || owner.isEmpty() ? "?" : owner) + " (" + mixin.substring(mixin.lastIndexOf('/') + 1) + ")";
+        java.util.function.Consumer<String> add = n -> WHO.computeIfAbsent(target + "#" + (n.startsWith("*") ? "*" : n), k -> new java.util.LinkedHashSet<>()).add(label);
+        methods.forEach(add);
+        ows.forEach(add);
+        for (String k : reds) {
+            add.accept(k.substring(0, k.indexOf('|')));
+            WHO.computeIfAbsent(target + "#" + k, x -> new java.util.LinkedHashSet<>()).add(label);   // the call itself: "method|invoked"
+        }
+        for (String k : args) {
+            add.accept(k.substring(0, k.indexOf('|')));
+            WHO.computeIfAbsent(target + "#" + k, x -> new java.util.LinkedHashSet<>()).add(label);
+        }
+    }
+
+    /** the mods whose @Redirect / @ModifyArg(s) target this call in this method ("*" methods included) */
+    public static String whoCall(String internalName, String method, String invoked) {
+        index();
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        Set<String> a = WHO.get(internalName + "#" + method + "|" + invoked), b = WHO.get(internalName + "#*|" + invoked);
+        if (a != null) out.addAll(a);
+        if (b != null) out.addAll(b);
+        return out.isEmpty() ? who(internalName, method) : String.join(", ", out);
+    }
+
+    /** the mods whose mixins touch this method (or the whole class by a wildcard): "sodium (LevelRendererMixin), ..." */
+    public static String who(String internalName, String name) {
+        index();
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        Set<String> a = WHO.get(internalName + "#" + official(name)), b = WHO.get(internalName + "#*");
+        if (a != null) out.addAll(a);
+        if (b != null) out.addAll(b);
+        if (out.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        int n = 0;
+        for (String s : out) {
+            if (n++ == 4) {
+                sb.append(", +").append(out.size() - 4);
+                break;
+            }
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(s);
+        }
+        return sb.toString();
     }
 
     /** The target classes (internal names) of a mixin class: @Mixin's value and targets. */
