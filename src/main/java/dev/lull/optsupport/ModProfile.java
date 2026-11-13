@@ -100,7 +100,11 @@ public final class ModProfile {
         BY_TYPE[kind].computeIfAbsent(type, k -> new LongAdder()).add(recordingNow ? ns : ns << 4);
     }
 
-    private static int sampleAt;
+    private static final java.util.concurrent.atomic.AtomicInteger[] SAMPLE = new java.util.concurrent.atomic.AtomicInteger[8];
+
+    static {
+        for (int i = 0; i < SAMPLE.length; i++) SAMPLE[i] = new java.util.concurrent.atomic.AtomicInteger();
+    }
 
     /** where the server's time went: dimension -> chunk -> type -> ns (block entity and entity ticks) */
     private static final Map<Object, Map<Long, Map<Object, LongAdder>>> SPOTS = new ConcurrentHashMap<>();
@@ -153,10 +157,10 @@ public final class ModProfile {
 
     /**
      * Whether to time this call: always while recording (exact), one in 16 for the HUD's live list (weighted 16 in add:
-     * the live list costs a sixteenth). A racy counter is fine: it only spreads the samples.
+     * the live list costs a sixteenth). One counter per kind: exactly 1 in 16 of each kind's calls.
      */
-    public static boolean take() {
-        return recordingNow || (++sampleAt & 15) == 0;
+    public static boolean take(int kind) {
+        return recordingNow || (SAMPLE[kind].getAndIncrement() & 15) == 0;
     }
 
     /** a recording of this many seconds, from now */

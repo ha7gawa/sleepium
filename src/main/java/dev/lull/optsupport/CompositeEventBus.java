@@ -219,7 +219,7 @@ public final class CompositeEventBus extends EventBus {
         if (n == 0) {
             return event;
         }
-        if (ModProfile.ON && ModProfile.take()) {   // the Mods page's recording (the HUD: 1 post in 16): each listener timed, the plain loop (what the composite does)
+        if (ModProfile.ON && ModProfile.take(dev.lull.optsupport.ModProfile.SERVER_EVENT)) {   // the Mods page's recording (the HUD: 1 post in 16): each listener timed, the plain loop (what the composite does)
             int i = 0;
             try {
                 for (; i < n; i++) {
