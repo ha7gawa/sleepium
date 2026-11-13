@@ -236,7 +236,8 @@ public final class MixinTouch {
                             if (!reds.isEmpty()) REDIRECTS.computeIfAbsent(target, k -> new HashSet<>()).addAll(reds);
                             if (!args.isEmpty()) ARGMODS.computeIfAbsent(target, k -> new HashSet<>()).addAll(args);
                             if (!ows.isEmpty()) OVERWRITES.computeIfAbsent(target, k -> new HashSet<>()).addAll(ows);
-                            noteWho(target, mc.getName(), cn.name, methods, reds, args, ows);
+                            noteWho(target, CONFIG_MOD.getOrDefault(mc.getName(), mc.getName()), cn.name, methods, reds, args, ows);
+                            MIXIN_CONFIG.putIfAbsent(cls, mc.getName());
                         }
                     }
                 }
@@ -261,8 +262,10 @@ public final class MixinTouch {
             if (mods == null) return;
             for (var info : mods.getModFiles()) {
                 var file = info.getFile();
+                String modId = info.getMods().isEmpty() ? info.moduleName() : info.getMods().get(0).getModId();
                 for (var cfg : file.getMixinConfigs()) {
                     String name = cfg.config();
+                    CONFIG_MOD.put(name, modId);
                     if (Boolean.getBoolean("sleep.mixinIndex.debug")) System.out.println("[sleep/opt] mixin index: " + info.moduleName() + " " + name + " -> " + file.findResource(name));
                     if (ours(name)) continue;
                     try {
@@ -277,7 +280,10 @@ public final class MixinTouch {
                             for (var e : o.getAsJsonArray(key)) {
                                 if (!e.isJsonPrimitive()) continue;   // Mixin skips a null entry (Sleep Tight's list ends in one)
                                 java.nio.file.Path bytes = file.findResource((pkg + "." + e.getAsString()).replace('.', '/') + ".class");
-                                if (bytes != null && java.nio.file.Files.exists(bytes)) indexClass(java.nio.file.Files.readAllBytes(bytes), m, info.moduleName());
+                                if (bytes != null && java.nio.file.Files.exists(bytes)) {
+                                    indexClass(java.nio.file.Files.readAllBytes(bytes), m, modId);
+                                    MIXIN_CONFIG.putIfAbsent(pkg + "." + e.getAsString(), name);
+                                }
                             }
                         }
                         // a config plugin may add mixins of its package the lists do not name (its getMixins: Embeddium's
@@ -287,7 +293,7 @@ public final class MixinTouch {
                             if (root != null && java.nio.file.Files.isDirectory(root))
                                 try (var walk = java.nio.file.Files.walk(root)) {
                                     for (java.nio.file.Path c : (Iterable<java.nio.file.Path>) walk::iterator)
-                                        if (c.toString().endsWith(".class")) indexClass(java.nio.file.Files.readAllBytes(c), m, info.moduleName());
+                                        if (c.toString().endsWith(".class")) indexClass(java.nio.file.Files.readAllBytes(c), m, modId);
                                 }
                         }
                     } catch (Throwable t) {   // one mod's config the index cannot read: the other mods' still counted
@@ -401,20 +407,107 @@ public final class MixinTouch {
 
     /** who touches a method: "target#method" (official names; "target#*" a wildcard) -> "mod (Mixin)" */
     private static final Map<String, Set<String>> WHO = new java.util.HashMap<>();
+    /** the same keys -> "modid TAB mixin class (dots)": the rules' view (which mod, which mixin to cancel) */
+    private static final Map<String, Set<String>> WHO_MIX = new java.util.HashMap<>();
+    /** a mixin config's name -> the mod id of its file; a foreign mixin class (dots) -> its config's name */
+    private static final Map<String, String> CONFIG_MOD = new java.util.HashMap<>(), MIXIN_CONFIG = new java.util.HashMap<>();
 
     private static void noteWho(String target, String owner, String mixin, Set<String> methods, List<String> reds, List<String> args, List<String> ows) {
         String label = (owner == null || owner.isEmpty() ? "?" : owner) + " (" + mixin.substring(mixin.lastIndexOf('/') + 1) + ")";
-        java.util.function.Consumer<String> add = n -> WHO.computeIfAbsent(target + "#" + (n.startsWith("*") ? "*" : n), k -> new java.util.LinkedHashSet<>()).add(label);
+        String culprit = (owner == null || owner.isEmpty() ? "?" : owner) + "\t" + mixin.replace('/', '.');
+        java.util.function.Consumer<String> add = n -> {
+            String key = target + "#" + (n.startsWith("*") ? "*" : n);
+            WHO.computeIfAbsent(key, k -> new java.util.LinkedHashSet<>()).add(label);
+            WHO_MIX.computeIfAbsent(key, k -> new java.util.LinkedHashSet<>()).add(culprit);
+        };
         methods.forEach(add);
         ows.forEach(add);
         for (String k : reds) {
             add.accept(k.substring(0, k.indexOf('|')));
             WHO.computeIfAbsent(target + "#" + k, x -> new java.util.LinkedHashSet<>()).add(label);   // the call itself: "method|invoked"
+            WHO_MIX.computeIfAbsent(target + "#" + k, x -> new java.util.LinkedHashSet<>()).add(culprit);
         }
         for (String k : args) {
             add.accept(k.substring(0, k.indexOf('|')));
             WHO.computeIfAbsent(target + "#" + k, x -> new java.util.LinkedHashSet<>()).add(label);
+            WHO_MIX.computeIfAbsent(target + "#" + k, x -> new java.util.LinkedHashSet<>()).add(culprit);
         }
+    }
+
+    /** the foreign mixins on this method (or the class by a wildcard): "modid TAB mixin class" each */
+    static Set<String> culprits(String internalName, String name) {
+        index();
+        Set<String> out = new java.util.LinkedHashSet<>();
+        Set<String> a = WHO_MIX.get(internalName + "#" + name), b = WHO_MIX.get(internalName + "#*");
+        if (a != null) out.addAll(a);
+        if (b != null) out.addAll(b);
+        return out;
+    }
+
+    /** every foreign mixin on any method of this class */
+    static Set<String> culpritsOnClass(String internalName) {
+        index();
+        Set<String> out = new java.util.LinkedHashSet<>();
+        for (var e : WHO_MIX.entrySet()) if (e.getKey().startsWith(internalName + "#")) out.addAll(e.getValue());
+        return out;
+    }
+
+    /** the foreign mixins on this call (their @Redirect / @ModifyArg(s)), else on the method */
+    static Set<String> culpritsCall(String internalName, String method, String invoked) {
+        index();
+        Set<String> out = new java.util.LinkedHashSet<>();
+        Set<String> a = WHO_MIX.get(internalName + "#" + method + "|" + invoked), b = WHO_MIX.get(internalName + "#*|" + invoked);
+        if (a != null) out.addAll(a);
+        if (b != null) out.addAll(b);
+        return out.isEmpty() ? culprits(internalName, method) : out;
+    }
+
+    /**
+     * Takes a foreign mixin out of its config before Mixin prepares that config (a pack's rule: our change wins there).
+     * Ours are prepared first; a config already prepared cannot lose a mixin any more: false then (the caller gives way).
+     */
+    static synchronized boolean cancel(String mixinClass, boolean dryRun) {
+        index();
+        String config = MIXIN_CONFIG.get(mixinClass);
+        if (config == null) return false;
+        try {
+            for (org.spongepowered.asm.mixin.transformer.Config c : org.spongepowered.asm.mixin.Mixins.getConfigs()) {
+                org.spongepowered.asm.mixin.extensibility.IMixinConfig mc = c.getConfig();
+                if (mc == null || !config.equals(mc.getName())) continue;
+                try {
+                    Field prepared = mc.getClass().getDeclaredField("prepared");
+                    prepared.setAccessible(true);
+                    if (prepared.getBoolean(mc)) return false;
+                } catch (NoSuchFieldException e) {
+                    // (a Mixin without the flag: try the lists)
+                }
+                String pkg = mc.getMixinPackage();
+                if (pkg == null) return false;
+                if (!pkg.isEmpty() && !pkg.endsWith(".")) pkg += ".";
+                if (!mixinClass.startsWith(pkg)) return false;
+                String rel = mixinClass.substring(pkg.length());
+                if (dryRun) return true;
+                boolean removed = false;
+                for (String field : new String[] {"mixinClasses", "mixinClassesClient", "mixinClassesServer"}) {
+                    Field f = mc.getClass().getDeclaredField(field);
+                    f.setAccessible(true);
+                    Object list = f.get(mc);
+                    if (list instanceof List<?> names) {
+                        try {
+                            removed |= names.remove(rel);
+                        } catch (UnsupportedOperationException e) {   // an unmodifiable list: a copy without it
+                            List<Object> copy = new java.util.ArrayList<>(names);
+                            removed |= copy.remove(rel);
+                            f.set(mc, copy);
+                        }
+                    }
+                }
+                return removed;
+            }
+        } catch (Throwable t) {
+            System.out.println("[sleep/opt] could not cancel " + mixinClass + ": " + t);
+        }
+        return false;
     }
 
     /** the mods whose @Redirect / @ModifyArg(s) target this call in this method ("*" methods included) */
@@ -504,7 +597,7 @@ public final class MixinTouch {
         collect(cn, out);
     }
 
-    private static void collect(ClassNode cn, Set<String> out) {
+    static void collect(ClassNode cn, Set<String> out) {
         for (MethodNode m : cn.methods) {
             if (m.name.equals("<clinit>")) continue;
             boolean injector = false, passive = false;

@@ -16,7 +16,9 @@ public final class ShaderMixinPlugin implements IMixinConfigPlugin {
         return mods != null && (mods.getModFileById("iris") != null || mods.getModFileById("oculus") != null || mods.getModFileById("optifine") != null);
     }
 
-    @Override public void onLoad(String mixinPackage) {}
+    @Override public void onLoad(String mixinPackage) {
+        dev.lull.optsupport.MixinYield.prepass(mixinPackage, (t, m) -> !otherShaderMod());   // rules asking ours to win: before any config is prepared
+    }
     @Override public String getRefMapperConfig() { return null; }
 
     @Override

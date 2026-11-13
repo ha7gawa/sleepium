@@ -265,6 +265,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             System.setProperty("lab.opt.ParallelWorldgenMixin", "true");
             System.out.println("[sleep/opt] lab.opt.WorldgenReactor needs ParallelWorldgenMixin (its FEATURES claims): turned on");
         }
+        dev.lull.optsupport.MixinYield.prepass(mixinPackage, this::sleep$decide);   // rules asking ours to win: before any config is prepared
     }
     @Override public String getRefMapperConfig() { return null; }
     @Override public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) {}
