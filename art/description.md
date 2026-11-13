@@ -38,6 +38,30 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.2.2: mod machines sleep safely, no sound stalls
+
+A fix first: since 1.2.0 a Thermal dynamo given fuel could stay off under Sleepium. Machines of mods whose code Sleepium
+cannot follow to the end now sleep only while watched: all of their own state is compared on every skipped tick, they
+fall asleep after 64 idle ticks, and they watch the blocks around them they send to or take from. Checked with the
+Thermal series, Draconic Evolution, Flux Networks, Mekanism, Immersive Engineering, Industrial Foregoing, Functional
+Storage, Applied Energistics 2, PneumaticCraft, Create and Sophisticated Storage: the world comes out the same with and
+without Sleepium.
+
+| | before | 1.2.2 |
+|---|---:|---:|
+| Thermal dynamos fed fuel | stay off | run as without Sleepium |
+| a 229-mod pack with Sound Physics Remastered, a burning zombie horde (desktop) | 11 fps | 41 fps |
+| the same pack with its own shaders, at spawn | 268 fps without Sleepium | 310 fps |
+| Intel N100, joining a world: the longest frame from Sleepium's chunk buffers | up to 89 ms | 1.2 ms |
+| a phone (MojoLauncher LTW), 355 armoured mobs: the slowest frames (p99) | 76 ms | 45-50 ms |
+
+- **Sounds no longer stall the game:** a sound starts without waiting for the sound thread (it used to hold every frame
+  up next to Sound Physics Remastered and a crowd of mobs).
+- **Measured once per machine:** Sleepium's measured choices are kept in `config/sleepium-calibration.properties` -
+  no more seconds of the slower way each time a world opens. Options -> Sleepium -> Recalibrate measures again.
+- **Mod packs:** the log names the mod and mixin Sleepium gave way to.
+- Dedicated servers no longer print a "ClientLevel for invalid dist" error at start.
+
 ## New in 1.2.1: Android
 
 Sleepium now runs on phones and tablets through MojoLauncher (and on any driver without OpenGL 4.3 - 1.2.0 crashed

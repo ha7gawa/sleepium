@@ -4,6 +4,52 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.2.2 - 2026-11-13
+
+A fix first. Since 1.2.0 machines of some mods could stop: a Thermal dynamo given fuel stayed off. Sleepium lets a mod's
+machine sleep while it watches it idle when its code cannot be proven (the "machines of mods" setting, on by default);
+for machines whose tick runs through the mod's own interface that watching was skipped, and they slept unwatched.
+Found from a player's question about energy mods. Also: no waiting on the sound thread, measured choices kept per
+machine instead of measured in the running game, and the log names the mod Sleepium gave way to.
+
+| | before | 1.2.2 |
+|---|---:|---:|
+| Thermal dynamos fed fuel (mod exactness, 2 400 ticks) | stay off | run as without Sleepium |
+| a 229-mod pack with Sound Physics Remastered, a burning zombie horde (desktop) | 11 fps | 41 fps |
+| the same pack, its own shaders (Complementary), at spawn | 268 fps without Sleepium | 310 fps |
+| Intel N100, joining a world: the longest frame from Sleepium's chunk buffers | up to 89 ms | 1.2 ms |
+| a phone (MojoLauncher LTW), 355 armoured mobs: the slowest frames (p99) | 76 ms | 45-50 ms |
+
+- **Mod machines sleep safely.** A machine whose tick Sleepium does not follow to the end now sleeps only watched: all
+  of its own state is compared on every skipped tick, it falls asleep only after 64 idle ticks (mods act on their own
+  timers - Thermal's dynamos check every 10 ticks whether to start), and it also watches the blocks around it it sends
+  to or takes from (a transmitter idle because its target is full wakes when the target drains). Checked with the
+  Thermal series, Draconic Evolution and Flux Networks (Draconic's energy blocks and Flux Networks' devices never slept:
+  untouched), and with Mekanism, Immersive Engineering, Industrial Foregoing, Functional Storage, Applied Energistics 2,
+  PneumaticCraft, Create and Sophisticated Storage: the world comes out the same with and without Sleepium.
+- **Sounds no longer stall the game.** Starting a sound made the game wait for the sound thread to hand it a channel;
+  with a mod that does heavy work there (Sound Physics Remastered traces rays for every sound) a crowd of mobs held each
+  frame up. Now the sound starts without waiting, in the same order on the sound thread; when that thread is far behind,
+  a new sound is dropped the way the game drops one when no channel is free. Where the sound thread keeps up nothing
+  changes (Intel N100, a vanilla horde: the same fps).
+- **Measured once per machine.** The choices Sleepium measures (entities through the render cache or the helper threads,
+  model parts on the helper threads, animated textures blended on the graphics card or the processor, chunks drawn by
+  indirect or direct multi-draw) are kept in `config/sleepium-calibration.properties` for this machine and graphics
+  driver: no more seconds of the slower way when a world opens. The blend is measured in the main menu. Options ->
+  Sleepium -> Recalibrate measures again. The entity choice now compares whole frames, one choice at a time.
+- **Chunks: indirect or direct multi-draw, by what is faster here.** Measured in the game on the first world (desktop
+  graphics: indirect; Intel integrated: direct), kept per machine. The same picture either way.
+- **Intel: no stalls from Sleepium's chunk buffers.** A region's buffer that grew was deleted while the graphics card
+  was still copying from it, and Intel's driver waited: up to 89 ms in one frame while joining; now 1.2 ms.
+- **Animated textures blended on the graphics card** no longer rebuild their tables over and over (more than 256
+  distinct blend steps cleared them all): a ring of 384 kept; the client tick 20-25 % shorter on an Intel N100.
+- **Mod packs: the log says who Sleepium gave way to.** Each "not applied" line names the other mod and its mixin, for
+  example `ParallelEntitiesMixin not applied: ... - by figura (LevelRendererMixin)`.
+- **Dedicated servers:** no more "Attempted to load class ... ClientLevel for invalid dist" error at start (harmless,
+  but it looked like a crash).
+- New setting, off: entities next to mods that hook their drawing (Shoulder Surfing, Entity Model Features...) can
+  go to the helper threads when Sleepium finds at start that the mod passes nothing to the models they read.
+
 ## 1.2.1 - 2026-11-13
 
 Android and older graphics. 1.2.0 crashed at start on any graphics driver without OpenGL 4.3 - phones and tablets
