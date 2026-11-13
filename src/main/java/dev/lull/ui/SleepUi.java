@@ -42,11 +42,14 @@ public final class SleepUi {
             if (e.phase == TickEvent.Phase.START) {
                 SleepStats.frame();
                 dev.lull.optsupport.ModProfile.frame();
+                Hud.frameStart();
             }
         });
         // the main menu measures what it can before a world opens (Calibration: then kept, no measuring in the game)
         gameBus.addListener(EventPriority.NORMAL, false, TickEvent.ClientTickEvent.class, e -> {
+            if (e.phase == TickEvent.Phase.START) Hud.tickStart();
             if (e.phase == TickEvent.Phase.END) {
+                Hud.tickEnd();
                 dev.lull.optsupport.GpuAnim.menuTick();
                 profileTick();
             }
@@ -58,7 +61,7 @@ public final class SleepUi {
             }
         });
         gameBus.addListener(EventPriority.NORMAL, false, RenderGuiEvent.Post.class, e -> {
-            if (Minecraft.getInstance().screen == null) SleepStats.drawHud(e.getGuiGraphics());
+            if (Minecraft.getInstance().screen == null) Hud.draw(e.getGuiGraphics());
         });
         // a shaderpack being prepared: its progress in the corner, on menus and in the game alike
         gameBus.addListener(EventPriority.NORMAL, false, ScreenEvent.Render.Post.class, e -> preparing(e.getGuiGraphics()));

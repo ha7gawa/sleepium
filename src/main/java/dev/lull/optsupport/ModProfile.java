@@ -21,7 +21,12 @@ public final class ModProfile {
     /** server-side kinds are per server tick, client-side ones per frame */
     private static final boolean[] SERVER_SIDE = {true, true, false, false};
 
+    /** timing on: a recording runs or the HUD's live list is shown */
     public static volatile boolean ON;
+    private static boolean recordingNow, live;
+    /** the last recording's results (the Mods page), kept apart from the HUD's rolling window */
+    private static List<Result> last = List.of();
+    private static String lastSpan = "";
     @SuppressWarnings("unchecked")
     private static final Map<Object, LongAdder>[] BY_TYPE = new Map[KINDS];
 
@@ -47,17 +52,40 @@ public final class ModProfile {
         stopAt = startNs + seconds * 1_000_000_000L;
         ready = false;
         announced = false;
+        recordingNow = true;
         ON = true;
         System.out.println("[sleep/profile] recording what each mod costs for " + seconds + " s");
     }
 
     public static boolean recording() {
-        return ON;
+        return recordingNow;
+    }
+
+    /** the HUD's live list on / off: timing stays on while it is shown */
+    public static synchronized void live(boolean on) {
+        if (on == live) return;
+        live = on;
+        if (on && !ON) {
+            for (Map<Object, LongAdder> m : BY_TYPE) m.clear();
+            ticks = frames = 0;
+            startNs = System.nanoTime();
+        }
+        ON = recordingNow || live;
+    }
+
+    /** the HUD: the window since the last call (none while a recording runs: it owns the counters) */
+    public static synchronized List<Result> roll() {
+        if (recordingNow || !live) return null;
+        List<Result> r = compute();
+        for (Map<Object, LongAdder> m : BY_TYPE) m.clear();
+        ticks = frames = 0;
+        startNs = System.nanoTime();
+        return r;
     }
 
     /** seconds left of the recording */
     public static int left() {
-        return ON ? (int) Math.max(0, (stopAt - System.nanoTime()) / 1_000_000_000L + 1) : 0;
+        return recordingNow ? (int) Math.max(0, (stopAt - System.nanoTime()) / 1_000_000_000L + 1) : 0;
     }
 
     /** server tick end (ServerTickEvent.Post) */
@@ -72,12 +100,18 @@ public final class ModProfile {
 
     /** client tick: the recording's end; true once when it just finished (the caller tells the player) */
     public static synchronized boolean poll() {
-        if (ON && System.nanoTime() >= stopAt) {
-            ON = false;
+        if (recordingNow && System.nanoTime() >= stopAt) {
+            recordingNow = false;
             wallNs = System.nanoTime() - startNs;
+            last = compute();
+            lastSpan = String.format(java.util.Locale.ROOT, "%.0f s, %d server ticks, %d frames", wallNs / 1e9, ticks, frames);
             ready = true;
-            System.out.println("[sleep/profile] done: " + ticks + " server ticks, " + frames + " frames in " + wallNs / 1_000_000 + " ms");
-            for (Result r : results()) if (r.total() > 0) System.out.println("[sleep/profile]   " + r.mod() + ": " + r.line());
+            System.out.println("[sleep/profile] done: " + lastSpan);
+            for (Result r : last) if (r.total() > 0) System.out.println("[sleep/profile]   " + r.mod() + ": " + r.line());
+            for (Map<Object, LongAdder> m : BY_TYPE) m.clear();   // (the HUD's window starts afresh)
+            ticks = frames = 0;
+            startNs = System.nanoTime();
+            ON = live;
         }
         if (ready && !announced) {
             announced = true;
@@ -113,8 +147,12 @@ public final class ModProfile {
         }
     }
 
-    /** every mod measured, the costliest first */
+    /** the last recording's results, the costliest first */
     public static List<Result> results() {
+        return last;
+    }
+
+    private static List<Result> compute() {
         Map<String, double[]> by = new HashMap<>();
         Map<String, Map<String, Double>> types = new HashMap<>();
         long t = Math.max(1, ticks), f = Math.max(1, frames);
@@ -146,7 +184,7 @@ public final class ModProfile {
 
     /** "8 s, 160 server ticks, 980 frames" */
     public static String span() {
-        return String.format(java.util.Locale.ROOT, "%.0f s, %d server ticks, %d frames", wallNs / 1e9, ticks, frames);
+        return lastSpan;
     }
 
     private static String typeName(Object type) {

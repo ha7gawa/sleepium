@@ -119,7 +119,7 @@ public final class SleepStats {
      * The F3 screen's entity and chunk lines (vanilla's own counters: entities drawn / in the level, culled, ...;
      * sections compiled / in view), for testers who open F3 only for them - gathered 4 times a second, not every frame
      */
-    private static String[] world() {
+    static String[] world() {
         long now = System.nanoTime();
         if (now - worldAt < 250_000_000L) return worldLines;
         worldAt = now;
