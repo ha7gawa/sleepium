@@ -297,6 +297,8 @@ public final class Hud {
     /** -Dsleep.hud.selfTime=true: the HUD's own time per frame (draw: census + mods + replay or redraw; frame start), logged every 10 s */
     private static final boolean SELF = Boolean.getBoolean("sleep.hud.selfTime");
     private static long selfDraw, selfRedraw, selfFrames, selfRedraws, selfAt;
+    /** the redraw's time, smoothed (it sets how often the HUD is redrawn on a slow device) */
+    private static long redrawNs;
 
     /** RenderGuiEvent.Post, no screen open */
     static void draw(GuiGraphics g) {
@@ -326,12 +328,17 @@ public final class Hud {
         load();
         census();
         mods();
-        TEXTURE.render(g, refreshMs * 1_000_000L, SELF ? (x, rects) -> {
+        long refresh = Math.max(refreshMs * 1_000_000L, redrawNs * 50);   // a slow device redraws less often (~2 % of the time at most)
+        TEXTURE.render(g, refresh, (x, rects) -> {
             long t = System.nanoTime();
             paint(x, rects);
-            selfRedraw += System.nanoTime() - t;
-            selfRedraws++;
-        } : Hud::paint);
+            long dt = System.nanoTime() - t;
+            redrawNs = redrawNs == 0 ? dt : (redrawNs * 3 + dt) / 4;
+            if (SELF) {
+                selfRedraw += dt;
+                selfRedraws++;
+            }
+        });
     }
 
     private static final int TEXT = 0xFFE6EAF5, DIM = 0xFFA8B3D0, WARN = 0xFFFFC857, BAD = 0xFFFF6B6B, GOOD = 0xFF7BE0A0, BOX = 0x90101418;
