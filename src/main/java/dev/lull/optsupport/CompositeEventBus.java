@@ -204,6 +204,21 @@ public final class CompositeEventBus extends EventBus {
         if (n == 0) {
             return event.isCanceled() && event.isCancelable();
         }
+        if (ModProfile.ON && ModProfile.take()) {   // the Mods page's recording (the HUD: 1 post in 16): each listener timed, the plain loop
+            int i = 0;
+            try {
+                for (; i < n; i++) {
+                    if (!trackPhases && current[i].getClass() == EventPriority.class) continue;
+                    long t0 = System.nanoTime();
+                    current[i].invoke(event);
+                    ModProfile.listener(current[i], event, System.nanoTime() - t0);
+                }
+            } catch (Throwable t) {
+                ((IEventExceptionHandler) delegate).handleException(delegate, event, current, i, t);
+                throw t;
+            }
+            return event.isCancelable() && event.isCanceled();
+        }
         if (n < COMPOSITE_MIN) {
             int i = 0;
             try {
