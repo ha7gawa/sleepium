@@ -84,6 +84,7 @@ public final class RenderFieldFlow {
     }
 
     public static synchronized Verdict of(String config) {
+        if (!Boolean.getBoolean("lab.prender.fieldFlow")) return null;   // (off: no analysis at start - it costs seconds in large packs)
         if (byConfig == null) analyse();
         return byConfig.get(config);
     }
@@ -132,8 +133,8 @@ public final class RenderFieldFlow {
     public static synchronized void early() {
         if (earlyDone) return;
         earlyDone = true;
+        if (!Boolean.getBoolean("lab.prender.fieldFlow")) return;   // (off: not analysed at all)
         if (byConfig == null) analyse();
-        if (!Boolean.getBoolean("lab.prender.fieldFlow")) return;
         if (!LateEventSites.register()) {
             System.out.println("[sleep/opt] render field flow: Mixin's extensions out of reach, no reads logged");
             return;
