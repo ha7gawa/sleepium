@@ -27,6 +27,11 @@ public final class SleepUi {
     public static void register(IEventBus gameBus) {
         ModLoadingContext.get().registerExtensionPoint(ConfigScreenHandler.ConfigScreenFactory.class,
                 () -> new ConfigScreenHandler.ConfigScreenFactory((mc, parent) -> new SleepScreen(parent)));
+        gameBus.addListener(EventPriority.NORMAL, false, ScreenEvent.Init.Post.class, e -> {   // the title screen after a crash in Sleepium: what to do (once)
+            if (!(e.getScreen() instanceof net.minecraft.client.gui.screens.TitleScreen title)) return;
+            net.minecraft.client.gui.screens.Screen hint = CrashHint.check(title);
+            if (hint != null) Minecraft.getInstance().tell(() -> Minecraft.getInstance().setScreen(hint));
+        });
         gameBus.addListener(EventPriority.NORMAL, false, ScreenEvent.Init.Post.class, e -> {
             // the Options screen and the pause menu: a button at the top left (1.20.1's PauseScreen does not say whether it
             // shows its menu - F3+Esc hides it - but a hidden menu has no widgets)
