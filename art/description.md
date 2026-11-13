@@ -38,6 +38,22 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.2.3: see and choose what Sleepium does to each mod
+
+- **Options -> Sleepium -> Mods:** what Sleepium does to every mod - which of its blocks and entities sleep and why
+  not, which of Sleepium's changes gave way to it - and per-mod switches: sleep, entity sleep, render cache, helper
+  threads, and whether Sleepium gives way to the mod (on a conflict / always / never).
+- **What each mod costs:** Measure 15 s (or `/sleepium profile 15` on a server) times every mod's block entities,
+  entities, event listeners and entity drawing - exact - and lists the ten chunks where the server's time goes.
+- **For modpack makers:** Save as pack settings writes `config/sleepium-pack.properties` - ship it, lock what players
+  must not change. Mod authors can declare rules for their own content in their mods.toml. See
+  [the page for pack makers](https://github.com/ha7gawa/sleepium/blob/main/docs/pack-makers.md).
+- **Find the cause:** a setting behind a problem found by halves, about 7-8 restarts. After a crash in Sleepium the
+  title screen names the part and offers to turn it off.
+- **HUD:** frames, a frame graph, stutters taken apart, server tick, GC, CPU per thread, memory, the costliest mods
+  now - in the corners you choose, at no measurable cost (Intel N100: 169 fps without, 168.5 with every widget).
+- **Fix:** joining a server with Krypton on the client failed ("VarInt too long").
+
 ## New in 1.2.2: mod machines sleep safely, no sound stalls
 
 A fix first: since 1.2.0 a Thermal dynamo given fuel could stay off under Sleepium. Machines of mods whose code Sleepium

@@ -4,6 +4,38 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.2.3 - 2026-11-13
+
+Tools for modpack makers, server owners and players: see what Sleepium does to each mod, what each mod costs and where
+the server's time goes, change it per mod, ship your choices with the pack - and a fix for logins with Krypton.
+
+- **Fix: joining a server with Krypton on the client failed** ("VarInt too long", GitHub issue #7). Krypton installs its
+  network cipher its own way; Sleepium's network decoder now sits where it always sees decrypted data, whoever set up
+  encryption. Checked with Krypton FNP (1.21.1) and Krypton Reno (1.20.1) against encrypted logins.
+- **Options -> Sleepium -> Mods.** Every mod with what Sleepium does to it: the rules set for it, Sleepium's changes
+  that gave way to it, which of its blocks and entities sleep - and why not ("can't prove its tick idle", "another mod
+  changes it", ...). Per mod: sleep of its blocks (on / watched / off), sleep of its entities, render cache, helper
+  threads, and whether Sleepium gives way to it (on a conflict / always / never - never: Sleepium's change wins and the
+  mod's conflicting mixin is taken out). Each value says where it comes from.
+- **Measure 15 s** (or `/sleepium profile 15` on a server): every block entity, entity, event listener and entity
+  drawing timed per mod - exact, no sampling - and the ten chunks where the server's time went, with what is in them.
+  **Write report** / `/sleepium report`: all of it in `config/sleepium-report.md`.
+- **For pack makers: `config/sleepium-pack.properties`.** Save as pack settings writes it from your choices; ship it,
+  lock keys with `lock.<key>=true`. Mod authors can declare rules about their own content in their mods.toml
+  (`[modproperties.<modid>] sleepium = {...}`), no dependency on Sleepium. The order: launch flag, pack lock, the
+  player's file, the pack's file, the mod's declaration, the defaults.
+- **Find the cause.** When something goes wrong and you do not know which part: each round turns half of the suspects
+  off until the next start, you answer Still happens / Gone; about 7-8 restarts for every setting.
+- **After a crash in Sleepium** the title screen names the part and offers to start with it off.
+- **HUD.** Frames and a frame graph, stutters taken apart (client tick, GC, the rest - also in
+  `logs/sleepium-stutters.log`), the server's tick, GC pauses, CPU per thread, memory, the mods that cost most right
+  now, what sleeps - each widget in the corner you choose. Drawn a few times a second into a texture; data only for the
+  widgets shown.
+- Several Sleepium jars in the mods folder: a warning (the log, the chat) naming the one used.
+- The sound setting (sounds without waiting for the sound thread) is in the settings screen now.
+
+The picture is the same as 1.2.2 bit for bit (frame hashes on both versions).
+
 ## 1.2.2 - 2026-11-13
 
 A fix first. Since 1.2.0 machines of some mods could stop: a Thermal dynamo given fuel stayed off. Sleepium lets a mod's
