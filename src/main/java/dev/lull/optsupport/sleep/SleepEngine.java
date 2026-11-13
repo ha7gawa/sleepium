@@ -578,7 +578,7 @@ public final class SleepEngine {
         Sleeper s = new Sleeper(be, info);
         int x = be.getBlockPos().getX();
         if (!info.plan.eligible() || x < MIN_X || x >= MAX_X) s.state = State.NEVER;
-        dev.lull.optsupport.ModReport.blockEntity(be.getType(), excluded ? "off (a rule)" : !info.plan.eligible() ? "never: " + info.plan.reason()
+        dev.lull.optsupport.ModReport.blockEntity(be.getType(), excluded ? "off (a rule)" : !info.plan.eligible() ? "never (" + dev.lull.optsupport.ModReport.kind(info.plan.reason()) + "): " + info.plan.reason()
                 : info.observedOnly ? "watched (sleeps after " + OBSERVED_STABLE + " idle ticks)" : "sleeps");
         ((SleeperHolder) be).sleep$setSleeper(s);
         ALL.add(s);

@@ -23,6 +23,32 @@ public final class ModReport {
     private static final Map<Object, String> BE = new ConcurrentHashMap<>(), ENT = new ConcurrentHashMap<>();
     private static final Map<Object, AtomicInteger> BE_SEEN = new ConcurrentHashMap<>(), ENT_SEEN = new ConcurrentHashMap<>();
 
+    /** a refusal's kind in plain words (the screen translates it: sleepium.ui.mods.why.<kind>) */
+    public static String kind(String reason) {
+        String r = reason == null ? "" : reason;
+        if (r.startsWith("calls ") || r.contains("not resolved")) return "unproven";
+        if (r.startsWith("writes an array")) return "hidden";
+        if (r.startsWith("writes ")) return "foreign";
+        if (r.startsWith("mixin-changed")) return "mixin";
+        if (r.startsWith("period")) return "timer";
+        if (r.contains("not accessible") || r.contains("inaccessible") || r.startsWith("clock") || r.startsWith("fingerprints") || r.startsWith("no tickCount")
+                || r.startsWith("still clock")) return "unreadable";
+        if (r.startsWith("analysis failed") || r.startsWith("ticker method") || r.startsWith("no ticker")) return "failed";
+        if (r.startsWith("context")) return "missing";
+        return "other";
+    }
+
+    static final Map<String, String> KIND_TEXT = Map.of("unproven", "its tick calls code Sleepium cannot prove idle", "hidden", "it keeps state Sleepium cannot see",
+            "foreign", "its tick changes other objects", "mixin", "another mod changes its code", "timer", "its timer runs too long to skip",
+            "unreadable", "its state cannot be read", "failed", "its code could not be analysed", "missing", "it needs objects that are not there yet",
+            "other", "not proven idle");
+
+    /** "never (unproven): calls ..." -> "never: its tick calls code Sleepium cannot prove idle - calls ..." (the report's words) */
+    static String plain(String verdict) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^never \\((\\w+)\\): (.*)$").matcher(verdict);
+        return m.find() ? "never: " + KIND_TEXT.getOrDefault(m.group(1), m.group(1)) + " - " + m.group(2) : verdict;
+    }
+
     static void mixin(String mod, String line) {
         MIXINS.computeIfAbsent(mod, k -> ConcurrentHashMap.newKeySet()).add(line);
     }
@@ -127,8 +153,8 @@ public final class ModReport {
             Mod r = of(m);
             sb.append("\n## ").append(m).append("  -  ").append(r.summary()).append('\n');
             for (String l : r.mixins()) sb.append("- ").append(l).append('\n');
-            for (var e : r.blockEntities().entrySet()) sb.append("- block ").append(e.getKey()).append(": ").append(e.getValue()).append('\n');
-            for (var e : r.entities().entrySet()) sb.append("- entity ").append(e.getKey()).append(": ").append(e.getValue()).append('\n');
+            for (var e : r.blockEntities().entrySet()) sb.append("- block ").append(e.getKey()).append(": ").append(plain(e.getValue())).append('\n');
+            for (var e : r.entities().entrySet()) sb.append("- entity ").append(e.getKey()).append(": ").append(plain(e.getValue())).append('\n');
         }
         return sb.toString();
     }
