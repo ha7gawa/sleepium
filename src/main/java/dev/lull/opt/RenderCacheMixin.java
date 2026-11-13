@@ -30,6 +30,20 @@ public abstract class RenderCacheMixin {
             target = "Lnet/minecraft/client/renderer/entity/EntityRenderer;render(Lnet/minecraft/world/entity/Entity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V"))
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void sleep$cached(EntityRenderer r, Entity e, float yaw, float pt, PoseStack pose, MultiBufferSource buffers, int light, Operation<Void> original) {
+        if (dev.lull.optsupport.ModProfile.ON) {   // the Mods page's recording: this type's drawing time (any thread)
+            long t0 = System.nanoTime();
+            try {
+                draw(r, e, yaw, pt, pose, buffers, light, original);
+            } finally {
+                dev.lull.optsupport.ModProfile.add(3, e.getType(), System.nanoTime() - t0);
+            }
+            return;
+        }
+        draw(r, e, yaw, pt, pose, buffers, light, original);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void draw(EntityRenderer r, Entity e, float yaw, float pt, PoseStack pose, MultiBufferSource buffers, int light, Operation<Void> original) {
         // a ParallelRender job merged inside the dispatcher (another mod's mixin in render: ParallelRender.INNER)
         if (dev.lull.optsupport.ParallelRender.innerMerge(e, yaw, pt, pose, buffers, light)) return;
         if (dev.lull.optsupport.RenderCache.bypass) {   // CacheTune: the workers draw entities faster here than the cache replays them

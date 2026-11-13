@@ -428,13 +428,30 @@ public final class SleepScreen extends Screen {
             }
         }).size(110, 20).build();
         Button export = Button.builder(Component.translatable("sleepium.ui.mods.export"), x -> exportPack()).size(150, 20).build();
+        Button measure = Button.builder(Component.translatable("sleepium.ui.mods.profile"), x -> {
+            if (minecraft.level == null) return;
+            dev.lull.optsupport.ModProfile.start(15);
+            save();
+            minecraft.setScreen(null);   // the game runs while it measures (a screen pauses singleplayer)
+        }).size(110, 20).build();
+        measure.active = !dev.lull.optsupport.ModProfile.recording();
+        list.add(new Row(null, () -> {
+            measure.active = minecraft.level != null && !dev.lull.optsupport.ModProfile.recording();
+            return null;
+        }, Component.translatable("sleepium.ui.mods.profile.tip"), measure));
         list.add(new Row(null, null, Component.translatable("sleepium.ui.mods.header").withStyle(ChatFormatting.WHITE).append("\n")
                 .append(Component.translatable("sleepium.ui.mods.export.tip", SleepConfig.packFile().toString())), report, export));
         String f = modFilter.toLowerCase(Locale.ROOT);
         List<String[]> mods = modList();
         java.util.Map<String, dev.lull.optsupport.ModReport.Mod> reps = new HashMap<>();
         for (String[] m : mods) reps.put(m[0], dev.lull.optsupport.ModReport.of(m[0]));
-        mods.sort((a, b) -> {   // what Sleepium touched or has rules for first, then by name
+        java.util.Map<String, dev.lull.optsupport.ModProfile.Result> cost = new HashMap<>();
+        if (dev.lull.optsupport.ModProfile.ready) for (var r : dev.lull.optsupport.ModProfile.results()) cost.put(r.mod(), r);
+        mods.sort((a, b) -> {   // measured: the costliest first; then what Sleepium touched or has rules for, then by name
+            var ca = cost.get(a[0]);
+            var cb = cost.get(b[0]);
+            double xa = ca == null ? 0 : ca.total(), xb = cb == null ? 0 : cb.total();
+            if (xa != xb) return Double.compare(xb, xa);
             boolean ta = reps.get(a[0]).touched() || hasRules(a[0]), tb = reps.get(b[0]).touched() || hasRules(b[0]);
             return ta != tb ? (ta ? -1 : 1) : a[1].compareToIgnoreCase(b[1]);
         });
@@ -449,9 +466,13 @@ public final class SleepScreen extends Screen {
             MutableComponent tip = Component.literal(m[1]).withStyle(ChatFormatting.WHITE).append(" ").append(Component.literal(m[0]).withStyle(ChatFormatting.DARK_GRAY))
                     .append("\n").append(sum.isEmpty() ? Component.translatable("sleepium.ui.mods.untouched") : Component.literal(sum));
             boolean ruled = hasRules(m[0]);
+            var c = cost.get(m[0]);
+            String costLine = c == null || c.brief().isEmpty() ? null : c.brief();
+            if (costLine != null) tip.append("\n").append(Component.literal(c.line()).withStyle(ChatFormatting.YELLOW));
             list.add(new Row(() -> Component.literal(m[1]), () -> {
                 MutableComponent st = Component.literal(dev.lull.optsupport.ModReport.of(m[0]).brief()).withStyle(ChatFormatting.GRAY);
                 if (ruled) st = Component.translatable("sleepium.ui.mods.ruled").withStyle(ChatFormatting.AQUA).append(st.getString().isEmpty() ? Component.empty() : Component.literal(" · ").append(st));
+                if (costLine != null) st = Component.literal(costLine).withStyle(ChatFormatting.YELLOW).append(st.getString().isEmpty() ? Component.empty() : Component.literal(" · ").append(st));
                 return st;
             }, tip, open));
         }
@@ -484,6 +505,17 @@ public final class SleepScreen extends Screen {
                 String src = SleepConfig.source(key);
                 return Component.translatable("sleepium.ui.mods.src." + (src.startsWith("mod:") ? "mod" : src)).withStyle(ChatFormatting.DARK_AQUA);
             }, tip, b));
+        }
+        if (dev.lull.optsupport.ModProfile.ready) {
+            var c = dev.lull.optsupport.ModProfile.of(mod);
+            list.add(new Row(() -> Component.translatable("sleepium.ui.mods.cost").withStyle(ChatFormatting.BOLD), null,
+                    Component.translatable("sleepium.ui.mods.cost.tip", dev.lull.optsupport.ModProfile.span())));
+            if (c == null) infoRow(Component.translatable("sleepium.ui.mods.cost.none").getString());
+            else {
+                String line = c.line();
+                list.add(new Row(() -> Component.literal(line).withStyle(ChatFormatting.YELLOW), null, Component.literal(line)));
+                for (String t : c.top()) infoRow("  " + t);
+            }
         }
         var rep = dev.lull.optsupport.ModReport.of(mod);
         list.add(new Row(() -> Component.translatable("sleepium.ui.mods.what").withStyle(ChatFormatting.BOLD), null, Component.translatable("sleepium.ui.mods.what.tip")));
