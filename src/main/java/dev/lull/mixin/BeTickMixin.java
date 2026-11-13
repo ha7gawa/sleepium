@@ -25,7 +25,7 @@ public abstract class BeTickMixin {
         if (SleepEngine.ON && SleepEngine.skip(be)) return;
         if (BeTickStats.ON) BeTickStats.before(be);
         if (SleepEngine.ON) SleepEngine.before(be);
-        boolean prof = dev.lull.optsupport.ModProfile.ON;   // the Mods page's recording: this type's tick time
+        boolean prof = dev.lull.optsupport.ModProfile.ON && dev.lull.optsupport.ModProfile.take();   // the Mods page's recording: this type's tick time
         long t0 = prof ? System.nanoTime() : 0L;
         ticker.tick(level, pos, state, be);
         if (prof) dev.lull.optsupport.ModProfile.add(0, be.getType(), System.nanoTime() - t0);
