@@ -39,14 +39,23 @@ public final class SleepUi {
         });
         // live numbers: frame times (every frame), the integrated server's tick and the sleep engine (its thread)
         gameBus.addListener(EventPriority.LOWEST, false, TickEvent.RenderTickEvent.class, e -> {
-            if (e.phase == TickEvent.Phase.START) SleepStats.frame();
+            if (e.phase == TickEvent.Phase.START) {
+                SleepStats.frame();
+                dev.lull.optsupport.ModProfile.frame();
+            }
         });
         // the main menu measures what it can before a world opens (Calibration: then kept, no measuring in the game)
         gameBus.addListener(EventPriority.NORMAL, false, TickEvent.ClientTickEvent.class, e -> {
-            if (e.phase == TickEvent.Phase.END) dev.lull.optsupport.GpuAnim.menuTick();
+            if (e.phase == TickEvent.Phase.END) {
+                dev.lull.optsupport.GpuAnim.menuTick();
+                profileTick();
+            }
         });
         gameBus.addListener(EventPriority.NORMAL, false, TickEvent.ServerTickEvent.class, e -> {
-            if (e.phase == TickEvent.Phase.END) SleepStats.serverTick(e.getServer());
+            if (e.phase == TickEvent.Phase.END) {
+                SleepStats.serverTick(e.getServer());
+                dev.lull.optsupport.ModProfile.serverTick();
+            }
         });
         gameBus.addListener(EventPriority.NORMAL, false, RenderGuiEvent.Post.class, e -> {
             if (Minecraft.getInstance().screen == null) SleepStats.drawHud(e.getGuiGraphics());
@@ -71,6 +80,13 @@ public final class SleepUi {
         if (USE_TEST != null) gameBus.addListener(EventPriority.NORMAL, false, TickEvent.RenderTickEvent.class, e -> {
             if (e.phase == TickEvent.Phase.END) useTest();
         });
+    }
+
+    /** the Mods page's recording: when it ends, a line in the chat */
+    static void profileTick() {
+        if (!dev.lull.optsupport.ModProfile.poll()) return;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.gui != null) mc.gui.getChat().addMessage(net.minecraft.network.chat.Component.translatable("sleepium.ui.mods.profile.done").withStyle(net.minecraft.ChatFormatting.AQUA));
     }
 
     private static void preparing(net.minecraft.client.gui.GuiGraphics g) {
@@ -255,6 +271,9 @@ public final class SleepUi {
             shot(mc, "world-hud");
             worldStep = 3;
             SleepStats.hud = false;
+        } else if (worldStep == 3 && t > 15 && Boolean.getBoolean("sleep.ui.shotProfile") && !dev.lull.optsupport.ModProfile.ready) {   // first a recording (8 s)
+            if (!dev.lull.optsupport.ModProfile.recording()) dev.lull.optsupport.ModProfile.start(8);
+            worldAt = now - (long) (15e9);   // (the next steps' clock starts after it)
         } else if (worldStep == 3 && t > 16 && System.getProperty("sleep.ui.shotMods") != null) {   // -Dsleep.ui.shotMods=<modid>: the Mods page and that mod's
             mc.setScreen(new SleepScreen(null, 4));
             worldStep = 4;

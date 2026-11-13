@@ -12,6 +12,12 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class EntSleepTickMixin {
     @Redirect(method = "tickNonPassenger", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;tick()V"))
     private void sleep$tick(Entity e) {
+        if (!dev.lull.optsupport.ModProfile.ON) {
+            EntitySleep.tick(e);
+            return;
+        }
+        long t0 = System.nanoTime();   // the Mods page's recording: this type's tick time
         EntitySleep.tick(e);
+        dev.lull.optsupport.ModProfile.add(1, e.getType(), System.nanoTime() - t0);
     }
 }

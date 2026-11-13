@@ -115,6 +115,14 @@ public final class ModReport {
         var rules = dev.lull.api.Compat.rules();
         if (!rules.isEmpty()) sb.append("Rules: ").append(rules).append('\n');
         if (!MixinYield.CANCELLED.isEmpty()) sb.append("Other mods' mixins taken out by a rule: ").append(MixinYield.CANCELLED).append('\n');
+        if (ModProfile.ready) {
+            sb.append("\n## What each mod cost (").append(ModProfile.span()).append(")\n");
+            for (ModProfile.Result r : ModProfile.results()) {
+                if (r.total() < 0.005) continue;
+                sb.append("- ").append(r.mod()).append(": ").append(r.line()).append('\n');
+                for (String t : r.top()) sb.append("  - ").append(t).append('\n');
+            }
+        }
         for (String m : mods()) {
             Mod r = of(m);
             sb.append("\n## ").append(m).append("  -  ").append(r.summary()).append('\n');
