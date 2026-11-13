@@ -14,6 +14,7 @@
   "sleepium.ui.restart": "Перезапустите игру, чтобы применить изменения: %s",
   "sleepium.ui.restart.short": "перезапуск",
   "sleepium.ui.locked": "Задано флагом запуска (-D%s): меняется в аргументах JVM лаунчера",
+  "sleepium.ui.duplicates": "Sleepium: в папке mods несколько копий (%s). Игра использует %s - удалите остальные.",
   "sleepium.ui.mods.never": "никогда:",
   "sleepium.ui.mods.why.unproven": "простой тика не доказан",
   "sleepium.ui.mods.why.hidden": "скрытое состояние",

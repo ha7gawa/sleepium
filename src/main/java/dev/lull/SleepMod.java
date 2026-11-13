@@ -39,6 +39,7 @@ public final class SleepMod {
         TickTimer.INSTANCE.register(gameBus);
         EventCounter.INSTANCE.attach(gameBus);
         EventBench.registerListeners(gameBus);
+        dev.lull.optsupport.DuplicateJars.find();   // two Sleepium jars in mods: said in the log (and in the chat on the client)
         gameBus.addListener(SleepCommand::register);
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Pre.class, e -> NetBench.onTickStart());
         modBus.addListener(net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent.class, dev.lull.net.BulkPayloads::register);
