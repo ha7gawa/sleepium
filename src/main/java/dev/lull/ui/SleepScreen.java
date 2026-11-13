@@ -582,6 +582,14 @@ public final class SleepScreen extends Screen {
     private void infoRow(String text) {
         ChatFormatting c = text.startsWith("cancelled") ? ChatFormatting.RED : text.startsWith("gave way") ? ChatFormatting.GOLD
                 : text.contains(": never") ? ChatFormatting.GRAY : ChatFormatting.WHITE;
+        // "Block x: never (kind): detail" -> the kind in plain words first, the detail after it (the description panel has it all)
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(.*?): never \\((\\w+)\\): (.*)$").matcher(text);
+        if (m.find()) {
+            Component shown = Component.literal(m.group(1) + ": ").append(Component.translatable("sleepium.ui.mods.never")).append(" ")
+                    .append(Component.translatable("sleepium.ui.mods.why." + m.group(2))).append(Component.literal(" - " + m.group(3)).withStyle(ChatFormatting.DARK_GRAY));
+            list.add(new Row(() -> shown.copy().withStyle(c), null, shown));
+            return;
+        }
         list.add(new Row(() -> Component.literal(text).withStyle(c), null, Component.literal(text)));
     }
 

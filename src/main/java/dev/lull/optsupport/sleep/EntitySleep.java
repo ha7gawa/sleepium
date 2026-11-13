@@ -1040,7 +1040,7 @@ public final class EntitySleep {
             s = new ES(e, c);
             boolean ruled = dev.lull.api.Compat.entitySleepExcluded(e);
             if (c.refuse != null || e.getBlockX() < MIN_X || ruled) s.st = St.NEVER;
-            if (!level.isClientSide && !(e instanceof net.minecraft.world.entity.player.Player)) dev.lull.optsupport.ModReport.entity(e.getType(), ruled ? "off (a rule)" : c.refuse != null ? "never: " + c.refuse : "sleeps when idle");
+            if (!level.isClientSide && !(e instanceof net.minecraft.world.entity.player.Player)) dev.lull.optsupport.ModReport.entity(e.getType(), ruled ? "off (a rule)" : c.refuse != null ? "never (" + dev.lull.optsupport.ModReport.kind(c.refuse) + "): " + c.refuse : "sleeps when idle");
             // the client: living entities follow the server's packets (interpolation, animation) - they stay awake there
             if (level.isClientSide && e instanceof net.minecraft.world.entity.LivingEntity) s.st = St.NEVER;
             else if (c.comp != null && (s.ctx = c.comp.resolveAll(e)) == null) s.st = St.NEVER;
