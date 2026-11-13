@@ -47,6 +47,7 @@ public final class HudTexture {
         long now = System.nanoTime();
         try {
             int fw = mc.getWindow().getWidth(), fh = mc.getWindow().getHeight();
+            if (fw <= 0 || fh <= 0) return;   // a minimised window: nothing to draw into
             if (target == null || target.width != fw || target.height != fh) {
                 if (target != null) target.destroyBuffers();
                 target = new TextureTarget(fw, fh, false, Minecraft.ON_OSX);
