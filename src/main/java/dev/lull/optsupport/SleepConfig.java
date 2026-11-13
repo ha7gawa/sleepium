@@ -43,34 +43,140 @@ public final class SleepConfig {
         return k.startsWith("lab.") || k.startsWith("sleep.");
     }
 
-    /** GameDefaults, first: remembers the launch flags, then sets the file's values that no launch flag gives */
+    /** the pack's file (a modpack ships it; Sleepium only reads it): config/sleepium-pack.properties */
+    public static Path packFile() {
+        return file().resolveSibling("sleepium-pack.properties");
+    }
+
+    /** the pack's values; its keys the player cannot change ({@code lock.<key>=true}) */
+    private static final Map<String, String> PACK = new TreeMap<>();
+    private static final Set<String> LOCKED = new HashSet<>();
+    /** the values mods declare about their own content (their mods.toml), and which mod declared each */
+    private static final Map<String, String> DECLARED = new TreeMap<>(), DECLARED_BY = new TreeMap<>();
+    /** where each value set from a file or a declaration came from (the rest: launch flags, defaults) */
+    private static final Map<String, String> SOURCE = new TreeMap<>();
+
+    /**
+     * GameDefaults, first: the layers, highest first - a launch flag; the pack's locked keys; the player's file; the
+     * pack's file; mods' declarations about their own content; (then GameDefaults: the jar's defaults). Lists of ids
+     * ({@code sleep.compat.*}) are joined across the layers instead of replaced.
+     */
     static synchronized void load() {
         if (loaded) return;
         loaded = true;
         for (String k : System.getProperties().stringPropertyNames()) if (engineKey(k)) LAUNCH.add(k);
-        Path f = file();
-        if (!Files.exists(f)) {
-            write(f, Map.of());   // the documented catalogue, every line commented: the defaults stay the jar's
-            return;
+        Path pf = packFile();
+        if (Files.exists(pf)) {
+            Map<String, String> raw = read(pf);
+            for (var e : raw.entrySet()) {
+                String k = e.getKey();
+                if (k.startsWith("lock.")) {
+                    if (Boolean.parseBoolean(e.getValue()) && engineKey(k.substring(5))) LOCKED.add(k.substring(5));
+                } else if (engineKey(k)) PACK.put(k, e.getValue());
+            }
+            LOCKED.retainAll(PACK.keySet());   // a lock without a value locks nothing
         }
+        ModDeclarations.read(DECLARED, DECLARED_BY);
+        Path f = file();
+        boolean exists = Files.exists(f);
+        if (exists) for (var e : read(f).entrySet()) if (engineKey(e.getKey())) FILE.put(e.getKey(), e.getValue());
+        java.util.Set<String> keys = new java.util.TreeSet<>(PACK.keySet());
+        keys.addAll(FILE.keySet());
+        keys.addAll(DECLARED.keySet());
+        int fromFile = 0, fromPack = 0, fromMods = 0;
+        for (String k : keys) {
+            if (LAUNCH.contains(k)) continue;
+            if (k.startsWith("sleep.compat.")) {   // id lists: every layer's ids
+                java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
+                for (Map<String, String> m : java.util.List.of(DECLARED, PACK, FILE)) {
+                    String v = m.get(k);
+                    if (v != null) for (String id : v.split(",")) if (!id.isBlank()) ids.add(id.trim());
+                }
+                System.setProperty(k, String.join(",", ids));
+                SOURCE.put(k, "joined");
+                continue;
+            }
+            String v, src;
+            if (LOCKED.contains(k)) {
+                v = PACK.get(k);
+                src = "pack-locked";
+                fromPack++;
+            } else if (FILE.containsKey(k)) {
+                v = FILE.get(k);
+                src = "player";
+                fromFile++;
+            } else if (PACK.containsKey(k)) {
+                v = PACK.get(k);
+                src = "pack";
+                fromPack++;
+            } else {
+                v = DECLARED.get(k);
+                src = "mod:" + DECLARED_BY.get(k);
+                fromMods++;
+            }
+            System.setProperty(k, v);
+            SOURCE.put(k, src);
+        }
+        System.out.println("[sleep/opt] settings: " + fromFile + " from " + f + (Files.exists(pf) ? ", " + fromPack + " from the pack's " + pf.getFileName()
+                + (LOCKED.isEmpty() ? "" : " (" + LOCKED.size() + " locked)") : "") + (DECLARED.isEmpty() ? "" : ", " + fromMods + " declared by mods (" + DECLARED.size() + " in all)"));
+        if (!exists) write(f, Map.of());   // the documented catalogue, every line commented: the defaults stay the jar's
+    }
+
+    /** a properties-like file: key=value lines, # comments (the order kept) */
+    private static Map<String, String> read(Path f) {
+        Map<String, String> m = new java.util.LinkedHashMap<>();
         try {
-            int set = 0;
             for (String line : Files.readAllLines(f, StandardCharsets.UTF_8)) {
                 line = line.trim();
                 int eq = line.indexOf('=');
                 if (line.isEmpty() || line.startsWith("#") || eq < 0) continue;
-                String k = line.substring(0, eq).trim(), v = line.substring(eq + 1).trim();
-                if (!engineKey(k)) continue;
-                FILE.put(k, v);
-                if (!LAUNCH.contains(k)) {
-                    System.setProperty(k, v);
-                    set++;
-                }
+                m.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
             }
-            System.out.println("[sleep/opt] settings: " + set + " from " + f + (FILE.size() > set ? " (" + (FILE.size() - set) + " overridden by launch flags)" : ""));
         } catch (IOException e) {
             System.out.println("[sleep/opt] settings: " + f + ": " + e);
         }
+        return m;
+    }
+
+    /** the player cannot change it: a launch flag or a key the pack locked */
+    public static boolean locked(String key) {
+        return LAUNCH.contains(key) || LOCKED.contains(key);
+    }
+
+    public static boolean packLocked(String key) {
+        return LOCKED.contains(key) && !LAUNCH.contains(key);
+    }
+
+    /**
+     * Where the key's value comes from: "launch", "pack-locked", "player", "pack", "mod:<id>", "joined" (id lists) or
+     * "default" (the jar's defaults, or unset).
+     */
+    public static String source(String key) {
+        if (LAUNCH.contains(key)) return "launch";
+        return SOURCE.getOrDefault(key, "default");
+    }
+
+    /** the value without the player's file: the pack's, a mod's declaration, else the given default */
+    public static String baseline(String key, String byDefault) {
+        if (PACK.containsKey(key)) return PACK.get(key);
+        if (DECLARED.containsKey(key)) return DECLARED.get(key);
+        return byDefault;
+    }
+
+    /** the pack's values and locks (copies) */
+    public static synchronized Map<String, String> pack() {
+        return new TreeMap<>(PACK);
+    }
+
+    public static synchronized Set<String> packLocks() {
+        return new java.util.TreeSet<>(LOCKED);
+    }
+
+    /** the mods' declarations: key -> "value (mod id)" */
+    public static synchronized Map<String, String> declared() {
+        Map<String, String> m = new TreeMap<>();
+        for (var e : DECLARED.entrySet()) m.put(e.getKey(), e.getValue() + " (" + DECLARED_BY.get(e.getKey()) + ")");
+        return m;
     }
 
     /** GameDefaults, last: the values the game starts with */
@@ -96,7 +202,8 @@ public final class SleepConfig {
     public static synchronized void save(Map<String, String> values) {
         FILE.clear();
         FILE.putAll(values);
-        for (var e : FILE.entrySet()) if (!LAUNCH.contains(e.getKey())) System.setProperty(e.getKey(), e.getValue());
+        FILE.keySet().removeAll(LOCKED);   // the pack's locks stay the pack's
+        for (var e : FILE.entrySet()) if (!LAUNCH.contains(e.getKey()) && !e.getKey().startsWith("sleep.compat.")) System.setProperty(e.getKey(), e.getValue());
         write(file(), FILE);
     }
 
