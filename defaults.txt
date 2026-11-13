@@ -213,3 +213,4 @@
 -Dlab.opt.ParticleLightMemoMixin=true
 -Dlab.opt.ParticleShapeMemoMixin=true
 -Dlab.opt.RenderPriorityMixin=true
+-Dlab.opt.SoundNoWaitMixin=true
