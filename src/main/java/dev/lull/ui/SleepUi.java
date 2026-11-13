@@ -254,6 +254,22 @@ public final class SleepUi {
         } else if (worldStep == 2 && t > 14) {
             shot(mc, "world-hud");
             worldStep = 3;
+            SleepStats.hud = false;
+        } else if (worldStep == 3 && t > 16 && System.getProperty("sleep.ui.shotMods") != null) {   // -Dsleep.ui.shotMods=<modid>: the Mods page and that mod's
+            mc.setScreen(new SleepScreen(null, 4));
+            worldStep = 4;
+        } else if (worldStep == 4 && t > 19) {
+            shot(mc, "world-mods");
+            mc.setScreen(new SleepScreen(null, 5));
+            worldStep = 5;
+        } else if (worldStep == 5 && t > 22) {
+            shot(mc, "world-mod-" + System.getProperty("sleep.ui.shotMods"));
+            if (mc.screen instanceof SleepScreen s) s.probeScrollEnd();
+            worldStep = 6;
+        } else if (worldStep == 6 && t > 24) {
+            shot(mc, "world-mod-" + System.getProperty("sleep.ui.shotMods") + "-end");
+            mc.setScreen(null);
+            worldStep = 7;
         }
     }
 

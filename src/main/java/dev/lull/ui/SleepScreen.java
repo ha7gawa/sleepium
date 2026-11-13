@@ -42,7 +42,11 @@ import net.minecraft.util.FormattedCharSequence;
  * background of their own here: the screen's, which 1.20.1's Screen.render leaves to the screen).
  */
 public final class SleepScreen extends Screen {
-    private static final int OVERVIEW = 0, SHADERS = 100, FLAGS = 101;
+    private static final int OVERVIEW = 0, SHADERS = 100, FLAGS = 101, MODS = 102;
+    /** the Mods page: the mod shown (null: the list) and the list's search */
+    private static String modSel, modFilter = "";
+    /** the Mods page's rules as this screen would leave them: sleep.mod.<id>.<rule> -> value */
+    private final Map<String, String> rules = new HashMap<>();
     private static final int SIDEBAR_W = 116, TOP = 26, BOTTOM = 30, DESC_H = 42;
     private static int page = OVERVIEW;   // remembered while the game runs
     private final Screen parent;
@@ -73,8 +77,16 @@ public final class SleepScreen extends Screen {
             case 1 -> 1;
             case 2 -> SHADERS;
             case 3 -> FLAGS;
+            case 4, 5 -> MODS;
             default -> OVERVIEW;
         };
+        if (shot == 4) modSel = null;
+        if (shot == 5) modSel = System.getProperty("sleep.ui.shotMods");
+    }
+
+    /** the dev probe: the page's list scrolled to its end (the Mods page's "What happened") */
+    void probeScrollEnd() {
+        list.setScrollAmount(list.getMaxScroll());
     }
 
     /** the dev probe (-Dsleep.ui.saveTest): a flag switched as its button would, then Done */
@@ -138,6 +150,17 @@ public final class SleepScreen extends Screen {
         addRenderableWidget(side);
         sidebar();
         int contentTop = TOP;
+        if (page == MODS && modSel == null) {
+            EditBox search = new EditBox(font, SIDEBAR_W + 10, TOP, width - SIDEBAR_W - 20, 18, Component.translatable("sleepium.ui.mods.search"));
+            search.setHint(Component.translatable("sleepium.ui.mods.search").withStyle(ChatFormatting.DARK_GRAY));
+            search.setValue(modFilter);
+            search.setResponder(x -> {
+                modFilter = x;
+                fill();
+            });
+            addRenderableWidget(search);
+            contentTop = TOP + 24;
+        }
         if (page == FLAGS) {
             EditBox search = new EditBox(font, SIDEBAR_W + 10, TOP, width - SIDEBAR_W - 20, 18, Component.translatable("sleepium.ui.search"));
             search.setHint(Component.translatable("sleepium.ui.search").withStyle(ChatFormatting.DARK_GRAY));
@@ -164,6 +187,7 @@ public final class SleepScreen extends Screen {
     private void sidebar() {
         side.clear();
         sideEntry(OVERVIEW, Component.translatable("sleepium.ui.page.overview"));
+        sideEntry(MODS, Component.translatable("sleepium.ui.side.mods"));
         int i = 1;
         var groups = SleepOptions.byGroup();
         for (String g : SleepOptions.GROUPS) {
@@ -188,6 +212,7 @@ public final class SleepScreen extends Screen {
         if (page == OVERVIEW) fillOverview();
         else if (page == SHADERS) fillShaders();
         else if (page == FLAGS) fillFlags(null);
+        else if (page == MODS) fillMods();
         else fillFlags(SleepOptions.GROUPS[page - 1]);
     }
 
@@ -361,6 +386,175 @@ public final class SleepScreen extends Screen {
         }
     }
 
+    // ------------------------------------------------------------------ the Mods page (notes/73)
+
+    private static final String[] RULES = {"sleep", "entitySleep", "renderCache", "parallelRender", "giveWay"};
+
+    private static String[] ruleValues(String rule) {
+        return switch (rule) {
+            case "sleep" -> new String[] {"on", "observed", "off"};
+            case "giveWay" -> new String[] {"conflicts", "always", "never"};
+            default -> new String[] {"on", "off"};
+        };
+    }
+
+    private static String ruleDefault(String key) {
+        return key.endsWith(".giveWay") ? "conflicts" : "on";
+    }
+
+    private static String norm(String v, String def) {
+        if (v == null || v.isBlank()) return def;
+        return v.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String rule(String key) {
+        return rules.computeIfAbsent(key, k -> norm(System.getProperty(k), ruleDefault(k)));
+    }
+
+    private boolean ruleRestart(String key) {
+        return !rule(key).equals(norm(SleepConfig.startup(key), ruleDefault(key)));
+    }
+
+    /** the mods the loader lists (id, name), Sleepium itself aside */
+    private static List<String[]> modList() {
+        List<String[]> out = new ArrayList<>();
+        for (var m : net.minecraftforge.fml.ModList.get().getMods()) {
+            if (m.getModId().equals("sleepium")) continue;
+            out.add(new String[] {m.getModId(), m.getDisplayName()});
+        }
+        return out;
+    }
+
+    private boolean hasRules(String mod) {
+        for (String r : RULES) {
+            String key = "sleep.mod." + mod + "." + r;
+            if (!rule(key).equals(ruleDefault(key))) return true;
+        }
+        return false;
+    }
+
+    private void fillMods() {
+        if (modSel != null) {
+            fillMod(modSel);
+            return;
+        }
+        Button report = Button.builder(Component.translatable("sleepium.ui.mods.report"), x -> {
+            try {
+                Path f = dev.lull.optsupport.ModReport.write();
+                flash(Component.translatable("sleepium.ui.mods.report.done", f.toString()).withStyle(ChatFormatting.GREEN));
+            } catch (IOException e) {
+                flash(Component.literal(e.toString()).withStyle(ChatFormatting.RED));
+            }
+        }).size(110, 20).build();
+        Button export = Button.builder(Component.translatable("sleepium.ui.mods.export"), x -> exportPack()).size(150, 20).build();
+        list.add(new Row(null, null, Component.translatable("sleepium.ui.mods.header").withStyle(ChatFormatting.WHITE).append("\n")
+                .append(Component.translatable("sleepium.ui.mods.export.tip", SleepConfig.packFile().toString())), report, export));
+        String f = modFilter.toLowerCase(Locale.ROOT);
+        List<String[]> mods = modList();
+        java.util.Map<String, dev.lull.optsupport.ModReport.Mod> reps = new HashMap<>();
+        for (String[] m : mods) reps.put(m[0], dev.lull.optsupport.ModReport.of(m[0]));
+        mods.sort((a, b) -> {   // what Sleepium touched or has rules for first, then by name
+            boolean ta = reps.get(a[0]).touched() || hasRules(a[0]), tb = reps.get(b[0]).touched() || hasRules(b[0]);
+            return ta != tb ? (ta ? -1 : 1) : a[1].compareToIgnoreCase(b[1]);
+        });
+        for (String[] m : mods) {
+            if (!f.isEmpty() && !m[0].toLowerCase(Locale.ROOT).contains(f) && !m[1].toLowerCase(Locale.ROOT).contains(f)) continue;
+            var r = reps.get(m[0]);
+            Button open = Button.builder(Component.literal(">"), x -> {
+                modSel = m[0];
+                rebuildWidgets();
+            }).size(24, 20).build();
+            String sum = r.summary();
+            MutableComponent tip = Component.literal(m[1]).withStyle(ChatFormatting.WHITE).append(" ").append(Component.literal(m[0]).withStyle(ChatFormatting.DARK_GRAY))
+                    .append("\n").append(sum.isEmpty() ? Component.translatable("sleepium.ui.mods.untouched") : Component.literal(sum));
+            boolean ruled = hasRules(m[0]);
+            list.add(new Row(() -> Component.literal(m[1]), () -> {
+                MutableComponent st = Component.literal(dev.lull.optsupport.ModReport.of(m[0]).brief()).withStyle(ChatFormatting.GRAY);
+                if (ruled) st = Component.translatable("sleepium.ui.mods.ruled").withStyle(ChatFormatting.AQUA).append(st.getString().isEmpty() ? Component.empty() : Component.literal(" · ").append(st));
+                return st;
+            }, tip, open));
+        }
+    }
+
+    private void fillMod(String mod) {
+        String name = modList().stream().filter(m -> m[0].equals(mod)).map(m -> m[1]).findFirst().orElse(mod);
+        Button back = Button.builder(Component.translatable("sleepium.ui.mods.back"), x -> {
+            modSel = null;
+            rebuildWidgets();
+        }).size(90, 20).build();
+        list.add(new Row(() -> Component.literal(name).withStyle(ChatFormatting.BOLD).append(Component.literal("  " + mod).withStyle(ChatFormatting.DARK_GRAY)), null, null, back));
+        for (String r : RULES) {
+            String key = "sleep.mod." + mod + "." + r;
+            String[] vals = ruleValues(r);
+            boolean locked = SleepConfig.locked(key);
+            Button b = Button.builder(Component.empty(), x -> {
+                String cur = rule(key);
+                int i = java.util.Arrays.asList(vals).indexOf(cur);
+                rules.put(key, vals[(i + 1) % vals.length]);
+            }).size(110, 20).build();
+            b.active = !locked;
+            MutableComponent tip = Component.translatable("sleepium.ui.mods.rule." + r + ".tip").append(" ")
+                    .append(Component.literal(key).withStyle(ChatFormatting.DARK_GRAY));
+            if (locked) tip.append(" ").append(Component.translatable(SleepConfig.packLocked(key) ? "sleepium.ui.lockedPack" : "sleepium.ui.locked", key).withStyle(ChatFormatting.GOLD));
+            list.add(new Row(() -> Component.translatable("sleepium.ui.mods.rule." + r), () -> {
+                String v = rule(key);
+                b.setMessage(Component.translatable("sleepium.ui.mods.val." + v).withStyle(v.equals(ruleDefault(key)) ? ChatFormatting.GREEN : v.equals("never") || v.equals("off") ? ChatFormatting.RED : ChatFormatting.YELLOW));
+                if (ruleRestart(key)) return Component.translatable("sleepium.ui.restart.short").withStyle(ChatFormatting.YELLOW);
+                String src = SleepConfig.source(key);
+                return Component.translatable("sleepium.ui.mods.src." + (src.startsWith("mod:") ? "mod" : src)).withStyle(ChatFormatting.DARK_AQUA);
+            }, tip, b));
+        }
+        var rep = dev.lull.optsupport.ModReport.of(mod);
+        list.add(new Row(() -> Component.translatable("sleepium.ui.mods.what").withStyle(ChatFormatting.BOLD), null, Component.translatable("sleepium.ui.mods.what.tip")));
+        if (!rep.touched()) list.add(new Row(() -> Component.translatable("sleepium.ui.mods.untouched").withStyle(ChatFormatting.GRAY), null, Component.translatable("sleepium.ui.mods.what.tip")));
+        for (String l : rep.mixins()) infoRow(l);
+        for (var e : rep.blockEntities().entrySet()) infoRow(Component.translatable("sleepium.ui.mods.block").getString() + " " + e.getKey() + ": " + e.getValue());
+        for (var e : rep.entities().entrySet()) infoRow(Component.translatable("sleepium.ui.mods.entity").getString() + " " + e.getKey() + ": " + e.getValue());
+    }
+
+    private void infoRow(String text) {
+        ChatFormatting c = text.startsWith("cancelled") ? ChatFormatting.RED : text.startsWith("gave way") ? ChatFormatting.GOLD
+                : text.contains(": never") ? ChatFormatting.GRAY : ChatFormatting.WHITE;
+        list.add(new Row(() -> Component.literal(text).withStyle(c), null, Component.literal(text)));
+    }
+
+    private void flash(Component c) {
+        flash = c;
+        flashUntil = System.currentTimeMillis() + 6000;
+    }
+
+    /**
+     * Save as the pack's settings: config/sleepium-pack.properties from this screen's choices - every switch that differs
+     * from the jar's default and every mod rule that is not the default; the file's locks stay. The pack author ships the
+     * file; players' own changes still win unless a key is locked.
+     */
+    private void exportPack() {
+        Map<String, String> values = new TreeMap<>();
+        for (SleepOptions.Option o : SleepOptions.all()) {
+            if (!o.partOf().isEmpty()) continue;
+            boolean v = desired.get(o.key());
+            if (v != o.byDefault()) values.put(o.key(), Boolean.toString(v));
+        }
+        Map<String, String> all = new TreeMap<>(rules);
+        for (var e : SleepConfig.pack().entrySet()) if (e.getKey().startsWith("sleep.mod.")) all.putIfAbsent(e.getKey(), e.getValue());
+        for (var e : all.entrySet()) if (!norm(e.getValue(), ruleDefault(e.getKey())).equals(ruleDefault(e.getKey()))) values.put(e.getKey(), e.getValue());
+        for (var e : SleepConfig.pack().entrySet()) if (e.getKey().startsWith("sleep.compat.")) values.put(e.getKey(), e.getValue());
+        StringBuilder sb = new StringBuilder();
+        sb.append("# Sleepium settings of this modpack (Options -> Sleepium -> Mods -> Save as pack settings)\n");
+        sb.append("# Ship this file in the pack's config folder. A player's own choice (config/sleepium.properties) wins over it,\n");
+        sb.append("# except for keys locked below with lock.<key>=true. Rules per mod: sleep.mod.<modid>.<rule>.\n");
+        for (var e : values.entrySet()) sb.append(e.getKey()).append('=').append(e.getValue()).append('\n');
+        for (String k : SleepConfig.packLocks()) if (values.containsKey(k)) sb.append("lock.").append(k).append("=true\n");
+        try {
+            Path f = SleepConfig.packFile();
+            Files.createDirectories(f.getParent());
+            Files.writeString(f, sb, java.nio.charset.StandardCharsets.UTF_8);
+            flash(Component.translatable("sleepium.ui.mods.export.done", values.size(), f.toString()).withStyle(ChatFormatting.GREEN));
+        } catch (IOException e) {
+            flash(Component.literal(e.toString()).withStyle(ChatFormatting.RED));
+        }
+    }
+
     // ------------------------------------------------------------------ shaderpacks
 
     private void fillShaders() {
@@ -444,7 +638,8 @@ public final class SleepScreen extends Screen {
         int x0 = SIDEBAR_W + 10, y0 = height - BOTTOM - DESC_H + 4, w = width - SIDEBAR_W - 20;
         g.fill(x0 - 4, y0 - 3, x0 + w + 4, height - BOTTOM - 2, 0x50000000);
         Component desc = hoverTip;
-        long n = SleepOptions.all().stream().filter(o -> o.partOf().isEmpty() && restartNeeded(o.key())).count();
+        long n = SleepOptions.all().stream().filter(o -> o.partOf().isEmpty() && restartNeeded(o.key())).count()
+                + rules.keySet().stream().filter(this::ruleRestart).count();
         if (desc == null && flash != null && System.currentTimeMillis() < flashUntil) desc = flash;
         if (desc == null && n > 0) desc = Component.translatable("sleepium.ui.restart", n).withStyle(ChatFormatting.YELLOW);
         if (desc == null) desc = Component.translatable("sleepium.ui.hover").withStyle(ChatFormatting.DARK_GRAY);
@@ -472,6 +667,12 @@ public final class SleepScreen extends Screen {
             boolean base = Boolean.parseBoolean(SleepConfig.baseline(o.key(), Boolean.toString(o.byDefault())));   // the pack's or a mod's value, else the default
             if (v != base || v != Boolean.parseBoolean(SleepConfig.startup(o.key()))) out.put(o.key(), Boolean.toString(v));
             else out.remove(o.key());
+        }
+        for (var e : rules.entrySet()) {
+            if (SleepConfig.packLocked(e.getKey())) continue;
+            String base = SleepConfig.baseline(e.getKey(), ruleDefault(e.getKey()));
+            if (!e.getValue().equals(base)) out.put(e.getKey(), e.getValue());
+            else out.remove(e.getKey());
         }
         if (pack != null) out.put("sleep.shaders", pack);
         else out.remove("sleep.shaders");
@@ -539,10 +740,16 @@ public final class SleepScreen extends Screen {
                 x -= 4;
             }
             int textRight = x - 4;
+            int avail = textRight - left - 2;
+            if (st != null && label != null) {   // the label keeps up to 60 % of the room; the status line is cut first
+                int lw = Math.min(font.width(label.get()), avail * 6 / 10);
+                int sroom = avail - lw - 8;
+                if (font.width(st) > sroom) st = sroom < 12 ? null : Component.literal(font.substrByWidth(st, sroom - 6).getString() + "…").withStyle(st.getStyle());
+            }
             if (label != null) {
                 Component l = label.get();
-                int room = textRight - left - 2 - (st == null ? 0 : font.width(st) + 6);
-                g.drawString(font, font.width(l) > room ? Component.literal(font.substrByWidth(l, Math.max(0, room - 6)).getString() + "…") : l, left + 2, top + 6, 0xFFFFFF);
+                int room = avail - (st == null ? 0 : font.width(st) + 6);
+                g.drawString(font, font.width(l) > room ? Component.literal(font.substrByWidth(l, Math.max(0, room - 6)).getString() + "…").withStyle(l.getStyle()) : l, left + 2, top + 6, 0xFFFFFF);
             }
             if (st != null) g.drawString(font, st, textRight - font.width(st), top + 6, 0xAAAAAA);
             if (tip != null && hovering) hoverTip = tip;

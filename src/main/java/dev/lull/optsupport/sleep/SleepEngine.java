@@ -578,6 +578,8 @@ public final class SleepEngine {
         Sleeper s = new Sleeper(be, info);
         int x = be.getBlockPos().getX();
         if (!info.plan.eligible() || x < MIN_X || x >= MAX_X) s.state = State.NEVER;
+        dev.lull.optsupport.ModReport.blockEntity(be.getType(), excluded ? "off (a rule)" : !info.plan.eligible() ? "never: " + info.plan.reason()
+                : info.observedOnly ? "watched (sleeps after " + OBSERVED_STABLE + " idle ticks)" : "sleeps");
         ((SleeperHolder) be).sleep$setSleeper(s);
         ALL.add(s);
         if ((ALL.size() & 4095) == 0) ALL.removeIf(o -> o.be.isRemoved() && o.state != State.ASLEEP);   // bounded bookkeeping

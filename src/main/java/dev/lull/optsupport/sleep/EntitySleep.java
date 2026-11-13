@@ -1038,7 +1038,9 @@ public final class EntitySleep {
             if (c.refuse != null && c.mob == null && c.retryAt == 0 && COMPONENTS && (c.retryNull = sampleNulls(c.refuse)) != null)
                 c.retryAt = now + 20;   // refused for objects the sample held (a path while it walked): an entity without them later
             s = new ES(e, c);
-            if (c.refuse != null || e.getBlockX() < MIN_X || dev.lull.api.Compat.entitySleepExcluded(e)) s.st = St.NEVER;
+            boolean ruled = dev.lull.api.Compat.entitySleepExcluded(e);
+            if (c.refuse != null || e.getBlockX() < MIN_X || ruled) s.st = St.NEVER;
+            if (!level.isClientSide && !(e instanceof net.minecraft.world.entity.player.Player)) dev.lull.optsupport.ModReport.entity(e.getType(), ruled ? "off (a rule)" : c.refuse != null ? "never: " + c.refuse : "sleeps when idle");
             // the client: living entities follow the server's packets (interpolation, animation) - they stay awake there
             if (level.isClientSide && e instanceof net.minecraft.world.entity.LivingEntity) s.st = St.NEVER;
             else if (c.comp != null && (s.ctx = c.comp.resolveAll(e)) == null) s.st = St.NEVER;
