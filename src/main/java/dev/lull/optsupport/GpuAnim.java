@@ -121,10 +121,10 @@ public final class GpuAnim {
         if (INTERP && !interpBroken) tuneTick(ns, tickHadInterp);
         tickHadInterp = false;
         if (++ticks % 2400 == 0 || ticks == 200)   // (once early too: a short measured run sees it)
-            LOG.info("[sleep/opt] gpu anim: {} atlas ticks ({} empty ones skipped), {} ms each; {} frame copies ({} per tick, {} us each, {} ms per tick), {} interpolated frames per tick (vanilla's path; their upload {} ms per tick, through the ring {} ms per tick, {} ring waits), {} sheets, {} blended on the GPU{}",
+            LOG.info("[sleep/opt] gpu anim: {} atlas ticks ({} empty ones skipped), {} ms each; {} frame copies ({} per tick, {} us each, {} ms per tick), {} interpolated frames per tick (vanilla's path; their upload {} ms per tick, through the ring {} ms per tick, {} ring waits), {} sheets, {} blended on the GPU ({} tables built, {} of them in a reused slot){}",
                     ticks, emptyAtlasTicks, String.format(java.util.Locale.ROOT, "%.3f", tickNs / 1e6 / ticks), copies, String.format(java.util.Locale.ROOT, "%.1f", (double) copies / ticks),
                     String.format(java.util.Locale.ROOT, "%.1f", copyNs / 1e3 / Math.max(1, copies)), String.format(java.util.Locale.ROOT, "%.3f", copyNs / 1e6 / ticks),
-                    String.format(java.util.Locale.ROOT, "%.1f", (double) (SpriteMix.fast + SpriteMix.slow) / ticks), String.format(java.util.Locale.ROOT, "%.3f", interpUploadNs / 1e6 / ticks), String.format(java.util.Locale.ROOT, "%.3f", pboNs / 1e6 / ticks), ringWaits, sheetsMade, gpuBlends,
+                    String.format(java.util.Locale.ROOT, "%.1f", (double) (SpriteMix.fast + SpriteMix.slow) / ticks), String.format(java.util.Locale.ROOT, "%.3f", interpUploadNs / 1e6 / ticks), String.format(java.util.Locale.ROOT, "%.3f", pboNs / 1e6 / ticks), ringWaits, sheetsMade, gpuBlends, tableBuilds, tableReuses,
                     VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "");
     }
 
@@ -338,7 +338,14 @@ public final class GpuAnim {
     private static int interpProgram = -1, interpVao, interpFbo;
     private static int uSheet, uTable, uSrc0, uSrc1, uDst;
     private static boolean interpBroken, interpChecked;
-    private static final Map<Long, Integer> TABLES = new java.util.HashMap<>();
+    /**
+     * The blend tables by blend fraction, least recently used first (access order): a ring of TABLE_SLOTS textures,
+     * a slot overwritten when a new fraction comes and the ring is full - no texture created or deleted then.
+     */
+    private static final java.util.LinkedHashMap<Long, Integer> TABLES = new java.util.LinkedHashMap<>(64, 0.75f, true);
+    private static final int TABLE_SLOTS = Integer.getInteger("lab.gpuAnim.tableSlots", 384);
+    private static ByteBuffer tableStaging;
+    public static long tableBuilds, tableReuses;
     private static final int SHEET_UNIT = 15, TABLE_UNIT = 14;   // (above vanilla's tracked units: its cache untouched)
     public static long gpuBlends;
 
@@ -402,29 +409,36 @@ public final class GpuAnim {
         long key = Double.doubleToRawLongBits(d);
         Integer t = TABLES.get(key);
         if (t != null) return t;
-        if (TABLES.size() >= 256) {   // (far more than vanilla's sprites use: frame times are short)
-            for (int id : TABLES.values()) TextureUtil.releaseTextureId(id);
-            TABLES.clear();
-        }
-        ByteBuffer b = MemoryUtil.memAlloc(256 * 256);
+        if (tableStaging == null) tableStaging = MemoryUtil.memAlloc(256 * 256);
+        ByteBuffer b = tableStaging;
         for (int a = 0; a < 256; a++)
             for (int c = 0; c < 256; c++) b.put(a << 8 | c, (byte) SpriteMix.mix(d, a, c));
-        int id = TextureUtil.generateTextureId();
+        boolean reuse = TABLES.size() >= TABLE_SLOTS;
+        int id;
+        if (reuse) {   // the least recently used fraction's slot (its last blend long done: the ring is large)
+            var eldest = TABLES.entrySet().iterator().next();
+            id = eldest.getValue();
+            TABLES.remove(eldest.getKey());
+            tableReuses++;
+        } else id = TextureUtil.generateTextureId();
+        tableBuilds++;
         int prevUnit = GL11C.glGetInteger(org.lwjgl.opengl.GL13C.GL_ACTIVE_TEXTURE);   // raw, put back raw (vanilla tracks 12 units)
         org.lwjgl.opengl.GL13C.glActiveTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + TABLE_UNIT);
         GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, id);
-        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MIN_FILTER, GL11C.GL_NEAREST);
-        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MAG_FILTER, GL11C.GL_NEAREST);
-        GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, org.lwjgl.opengl.GL12C.GL_TEXTURE_MAX_LEVEL, 0);
         GlStateManager._pixelStore(GL11C.GL_UNPACK_ROW_LENGTH, 0);
         GlStateManager._pixelStore(GL11C.GL_UNPACK_SKIP_PIXELS, 0);
         GlStateManager._pixelStore(GL11C.GL_UNPACK_SKIP_ROWS, 0);
         GlStateManager._pixelStore(GL11C.GL_UNPACK_ALIGNMENT, 1);
-        GL11C.glTexImage2D(GL11C.GL_TEXTURE_2D, 0, org.lwjgl.opengl.GL30C.GL_R8, 256, 256, 0, GL11C.GL_RED, GL11C.GL_UNSIGNED_BYTE, b);
+        if (reuse) GL11C.glTexSubImage2D(GL11C.GL_TEXTURE_2D, 0, 0, 0, 256, 256, GL11C.GL_RED, GL11C.GL_UNSIGNED_BYTE, b);
+        else {
+            GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MIN_FILTER, GL11C.GL_NEAREST);
+            GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, GL11C.GL_TEXTURE_MAG_FILTER, GL11C.GL_NEAREST);
+            GL11C.glTexParameteri(GL11C.GL_TEXTURE_2D, org.lwjgl.opengl.GL12C.GL_TEXTURE_MAX_LEVEL, 0);
+            GL11C.glTexImage2D(GL11C.GL_TEXTURE_2D, 0, org.lwjgl.opengl.GL30C.GL_R8, 256, 256, 0, GL11C.GL_RED, GL11C.GL_UNSIGNED_BYTE, b);
+        }
         GlStateManager._pixelStore(GL11C.GL_UNPACK_ALIGNMENT, 4);
         GL11C.glBindTexture(GL11C.GL_TEXTURE_2D, 0);
         org.lwjgl.opengl.GL13C.glActiveTexture(prevUnit);
-        MemoryUtil.memFree(b);
         TABLES.put(key, id);
         return id;
     }
