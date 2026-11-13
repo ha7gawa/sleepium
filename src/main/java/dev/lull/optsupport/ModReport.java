@@ -148,6 +148,10 @@ public final class ModReport {
                 sb.append("- ").append(r.mod()).append(": ").append(r.line()).append('\n');
                 for (String t : r.top()) sb.append("  - ").append(t).append('\n');
             }
+            if (!ModProfile.spots().isEmpty()) {
+                sb.append("\n## Where the server's time went (the costliest chunks)\n");
+                for (ModProfile.Spot s : ModProfile.spots()) sb.append("- ").append(s.line()).append('\n');
+            }
         }
         for (String m : mods()) {
             Mod r = of(m);
