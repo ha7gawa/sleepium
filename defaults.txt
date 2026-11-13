@@ -208,3 +208,4 @@
 -Dlab.opt.ParticleGpuMixin=true
 -Dlab.opt.ParticleLightMemoMixin=true
 -Dlab.opt.ParticleShapeMemoMixin=true
+-Dlab.opt.SoundNoWaitMixin=true
