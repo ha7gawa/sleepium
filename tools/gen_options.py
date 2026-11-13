@@ -57,6 +57,7 @@ DESCRIPTIONS = {
     'ParallelEntityTicksMixin': "Dropped items and other non-living entities tick on Sleepium's worker threads in long runs, each exactly as vanilla ticks it; their moves in the entity storage are made in order after the run. A pile of 2 500 items: client tick 13.1 -> 11.5 ms; on an Intel N100 42.6 -> 60.9 fps.",
     'ObservedModSleep': "Machines of mods whose tick the analysis cannot follow (Industrial Foregoing, Functional Storage, PneumaticCraft...) sleep while Sleepium sees them idle and wake on any change it observes: idle machines cost less. Checked exact on the mods we test; if a machine of some mod stops or misbehaves, turn this off and please tell us which one.",
     'GpuAnim': "Animated textures (water, lava, fire, mods' animated blocks) change frames by a GPU copy instead of an upload from the CPU: less work on the render thread, the same picture.",
+    'SoundNoWaitMixin': "Sounds start without waiting for the sound thread to hand out a channel (a mod that works there - Sound Physics Remastered - held every frame up next to a crowd of mobs); when that thread is far behind a new sound is dropped, as the game drops one when no channel is free.",
     'DebugScreenCacheMixin': "The F3 debug screen's lines are gathered 10 times a second instead of every frame (its FPS line changes once a second anyway): opening F3 no longer costs a large part of your frame rate. sleep.f3.refreshMs sets the interval.",
     'DebugScreenTextCacheMixin': "The F3 debug screen's text is laid out 10 times a second and its vertices reused in between, instead of laying out every line each frame: F3 open costs far less. With an F3 chart open it draws as usual.",
 }
@@ -72,6 +73,7 @@ EXPERIMENTAL = [
     ('lab.voxel.stream.lodNear', 'chunks', 'GPU terrain: level of detail closer (from 4 chunks, coarser from 8) - for weak graphics; the middle distance looks coarser.', 'lab.voxel.stream'),
     ('lab.voxel.stream.cone', 'chunks', 'GPU terrain: terrain toward the screen edges and behind goes coarse sooner. A few more fps; after a fast turn detail fills in over a moment.', 'lab.voxel.stream'),
     ('lab.chunkmd.occlusion', 'chunks', 'GPU occlusion culling of chunk sections (two phases, exact). Pays off where most of the loaded terrain is hidden.'),
+    ('lab.prender.fieldFlow', 'threads', 'Entities next to mods that hook their drawing (Shoulder Surfing, Entity Model Features...): at start Sleepium reads what such a mod passes from the entity dispatcher into the models; a mod that passes nothing a model reads no longer keeps every entity on the render thread, and what a worker read is checked again when the frame is put together. Up to a few seconds at start in large packs.', 'lab.opt.ParallelEntitiesMixin'),
 ]
 
 ANNOTATIONS = r'(?:@[\w.]+(?:\((?:[^()]|\([^()]*\))*\))?\s*)*'
