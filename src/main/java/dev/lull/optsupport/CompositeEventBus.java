@@ -204,7 +204,7 @@ public final class CompositeEventBus extends EventBus {
         if (n == 0) {
             return event.isCanceled() && event.isCancelable();
         }
-        if (ModProfile.ON && ModProfile.take(dev.lull.optsupport.ModProfile.SERVER_EVENT)) {   // the Mods page's recording (the HUD: 1 post in 16): each listener timed, the plain loop
+        if ((ModProfile.ON_SERVER || ModProfile.ON_CLIENT) && ModProfile.timingHere()) {   // the Mods page's recording (the HUD: 1 post in 16): each listener timed, the plain loop
             int i = 0;
             try {
                 for (; i < n; i++) {

@@ -277,7 +277,7 @@ public final class Hud {
     private static void mods() {
         boolean want = shown("mods");
         long now = System.nanoTime();
-        if (want && !dev.lull.optsupport.ModProfile.ON) modsAt = now;   // (the first window: a whole one)
+        if (want && !dev.lull.optsupport.ModProfile.active()) modsAt = now;   // (the first window: a whole one)
         dev.lull.optsupport.ModProfile.live(want);
         if (!want) return;
         if (now - modsAt < 3_000_000_000L) return;

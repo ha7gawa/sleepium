@@ -30,7 +30,7 @@ public abstract class RenderCacheMixin {
             target = "Lnet/minecraft/client/renderer/entity/EntityRenderer;render(Lnet/minecraft/world/entity/Entity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V"))
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void sleep$cached(EntityRenderer r, Entity e, float yaw, float pt, PoseStack pose, MultiBufferSource buffers, int light, Operation<Void> original) {
-        if (dev.lull.optsupport.ModProfile.ON && dev.lull.optsupport.ModProfile.take(dev.lull.optsupport.ModProfile.ENT_DRAW)) {   // the Mods page's recording: this type's drawing time (any thread)
+        if (dev.lull.optsupport.ModProfile.ON_CLIENT) {   // the Mods page's recording: this type's drawing time (any thread)
             long t0 = System.nanoTime();
             try {
                 draw(r, e, yaw, pt, pose, buffers, light, original);
