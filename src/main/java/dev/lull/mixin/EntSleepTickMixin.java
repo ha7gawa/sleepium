@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class EntSleepTickMixin {
     @Redirect(method = "tickNonPassenger", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;tick()V"))
     private void sleep$tick(Entity e) {
-        if (!dev.lull.optsupport.ModProfile.ON) {
+        if (!dev.lull.optsupport.ModProfile.ON || !dev.lull.optsupport.ModProfile.take()) {
             EntitySleep.tick(e);
             return;
         }

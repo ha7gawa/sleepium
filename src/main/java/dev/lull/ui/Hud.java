@@ -34,7 +34,7 @@ public final class Hud {
     private static final Map<String, String> CORNER = new LinkedHashMap<>();
     static int refreshMs = 250;
     private static boolean loaded;
-    private static final dev.lull.optsupport.HudReplay REPLAY = new dev.lull.optsupport.HudReplay();
+    private static final dev.lull.optsupport.HudTexture TEXTURE = new dev.lull.optsupport.HudTexture();
 
     static Path file() {
         return dev.lull.optsupport.SleepConfig.file().resolveSibling("sleepium-hud.properties");
@@ -74,7 +74,7 @@ public final class Hud {
         } catch (Exception e) {
             System.out.println("[sleep/hud] " + file() + ": " + e);
         }
-        REPLAY.invalidate();
+        TEXTURE.invalidate();
     }
 
     static String corner(String w) {
@@ -206,6 +206,7 @@ public final class Hud {
     private static long censusAt;
     private static volatile boolean censusRunning;
     private static final Map<Long, Long> CPU = new HashMap<>();
+    private static final Map<Long, String> NAMES = new HashMap<>();
     private static long censusWall, allocLast;
 
     private static void census() {
@@ -214,7 +215,7 @@ public final class Hud {
         censusAt = now;
         censusRunning = true;
         boolean threads = shown("threads"), memory = shown("memory");
-        java.util.concurrent.CompletableFuture.runAsync(() -> {
+        dev.lull.api.Pools.background().execute(() -> {
             try {
                 var tmx = ManagementFactory.getThreadMXBean();
                 long t = System.nanoTime(), dt = censusWall == 0 ? 0 : t - censusWall;
@@ -222,15 +223,22 @@ public final class Hud {
                 if (threads && tmx.isThreadCpuTimeSupported()) {
                     Map<String, Long> groups = new HashMap<>();
                     Map<Long, Long> seen = new HashMap<>();
-                    for (java.lang.management.ThreadInfo ti : tmx.getThreadInfo(tmx.getAllThreadIds())) {
-                        if (ti == null) continue;
-                        long cpu = tmx.getThreadCpuTime(ti.getThreadId());
+                    long[] ids = tmx.getAllThreadIds();
+                    List<Long> unnamed = new ArrayList<>();
+                    for (long id : ids) if (!NAMES.containsKey(id)) unnamed.add(id);
+                    if (!unnamed.isEmpty())   // the names of new threads only (a ThreadInfo each)
+                        for (java.lang.management.ThreadInfo ti : tmx.getThreadInfo(unnamed.stream().mapToLong(Long::longValue).toArray()))
+                            if (ti != null) NAMES.put(ti.getThreadId(), ti.getThreadName().replaceAll("\\d+", "N").replace("#N", "").replace(" thread", "").replace("-N", "").trim());
+                    long[] cpus = tmx instanceof com.sun.management.ThreadMXBean sunT ? sunT.getThreadCpuTime(ids) : null;   // one call for all
+                    for (int i = 0; i < ids.length; i++) {
+                        long cpu = cpus != null ? cpus[i] : tmx.getThreadCpuTime(ids[i]);
                         if (cpu < 0) continue;
-                        Long prev = CPU.get(ti.getThreadId());
-                        seen.put(ti.getThreadId(), cpu);
+                        Long prev = CPU.get(ids[i]);
+                        seen.put(ids[i], cpu);
                         if (prev == null || dt == 0) continue;
-                        groups.merge(ti.getThreadName().replaceAll("\\d+", "N").replace("#N", "").replace(" thread", "").replace("-N", "").trim(), cpu - prev, Long::sum);
+                        groups.merge(NAMES.getOrDefault(ids[i], "?"), cpu - prev, Long::sum);
                     }
+                    NAMES.keySet().retainAll(seen.keySet());
                     CPU.clear();
                     CPU.putAll(seen);
                     if (dt > 0) {
@@ -286,8 +294,31 @@ public final class Hud {
 
     // ------------------------------------------------------------------ drawing
 
+    /** -Dsleep.hud.selfTime=true: the HUD's own time per frame (draw: census + mods + replay or redraw; frame start), logged every 10 s */
+    private static final boolean SELF = Boolean.getBoolean("sleep.hud.selfTime");
+    private static long selfDraw, selfRedraw, selfFrames, selfRedraws, selfAt;
+
     /** RenderGuiEvent.Post, no screen open */
     static void draw(GuiGraphics g) {
+        if (!SELF) {
+            draw0(g);
+            return;
+        }
+        long t0 = System.nanoTime();
+        draw0(g);
+        long t1 = System.nanoTime();
+        selfDraw += t1 - t0;
+        selfFrames++;
+        if (selfAt == 0) selfAt = t1;
+        if (t1 - selfAt > 10_000_000_000L) {
+            System.out.println(String.format(Locale.ROOT, "[sleep/hud] self time: %.1f us a frame (redraws %d, %.0f us each), %d frames",
+                    selfDraw / 1e3 / Math.max(1, selfFrames), selfRedraws, selfRedraw / 1e3 / Math.max(1, selfRedraws), selfFrames));
+            selfDraw = selfRedraw = selfFrames = selfRedraws = 0;
+            selfAt = t1;
+        }
+    }
+
+    private static void draw0(GuiGraphics g) {
         if (!SleepStats.hud || Minecraft.getInstance().options.renderDebug) {   // (1.20.1: F3 is an option)
             dev.lull.optsupport.ModProfile.live(false);
             return;
@@ -295,7 +326,12 @@ public final class Hud {
         load();
         census();
         mods();
-        REPLAY.render(g, refreshMs * 1_000_000L, Hud::paint);
+        TEXTURE.render(g, refreshMs * 1_000_000L, SELF ? (x, rects) -> {
+            long t = System.nanoTime();
+            paint(x, rects);
+            selfRedraw += System.nanoTime() - t;
+            selfRedraws++;
+        } : Hud::paint);
     }
 
     private static final int TEXT = 0xFFE6EAF5, DIM = 0xFFA8B3D0, WARN = 0xFFFFC857, BAD = 0xFFFF6B6B, GOOD = 0xFF7BE0A0, BOX = 0x90101418;
@@ -304,7 +340,7 @@ public final class Hud {
     /** a line of a widget: text and colour, or the frame graph (text null) */
     private record Item(String text, int color) {}
 
-    private static void paint(GuiGraphics g) {
+    private static void paint(GuiGraphics g, List<int[]> rects) {
         Minecraft mc = Minecraft.getInstance();
         Font font = mc.font;
         double[] pct = percentiles();
@@ -355,6 +391,7 @@ public final class Hud {
             int x = c.endsWith("l") ? 4 : g.guiWidth() - 4 - w;
             int y = c.startsWith("t") ? top + 2 : g.guiHeight() - 4 - h;
             g.fill(x - 3, y - 2, x + w + 3, y + h + 1, BOX);
+            rects.add(new int[] {x - 3, y - 2, x + w + 3, y + h + 1});
             for (Item it : items) {
                 if (it.text() == null) {
                     graph(g, x + (c.endsWith("r") ? w - GRAPH_W : 0), y);

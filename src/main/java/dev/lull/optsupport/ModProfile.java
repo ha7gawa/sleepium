@@ -41,7 +41,17 @@ public final class ModProfile {
     public static volatile boolean ready;
 
     public static void add(int kind, Object type, long ns) {
-        BY_TYPE[kind].computeIfAbsent(type, k -> new LongAdder()).add(ns);
+        BY_TYPE[kind].computeIfAbsent(type, k -> new LongAdder()).add(recordingNow ? ns : ns << 4);
+    }
+
+    private static int sampleAt;
+
+    /**
+     * Whether to time this call: always while recording (exact), one in 16 for the HUD's live list (weighted 16 in add:
+     * the live list costs a sixteenth). A racy counter is fine: it only spreads the samples.
+     */
+    public static boolean take() {
+        return recordingNow || (++sampleAt & 15) == 0;
     }
 
     /** a recording of this many seconds, from now */
