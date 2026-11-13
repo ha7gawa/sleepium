@@ -250,7 +250,9 @@ public final class RenderFieldFlow {
                 }
             }
         }
+        long tScan = System.nanoTime();
         for (var e : byMod.entrySet()) {
+            long tMod = System.nanoTime();
             List<Handler> hs = e.getValue();
             if (hs.stream().noneMatch(h -> h.side.equals("D")) || hs.stream().noneMatch(h -> h.side.equals("W"))) continue;
             Walk d = new Walk(), w = new Walk();
@@ -269,10 +271,13 @@ public final class RenderFieldFlow {
             for (String c : configsOf.getOrDefault(e.getKey(), List.of())) byConfig.put(c, v);
             System.out.println("[sleep/opt] render field flow: " + e.getKey() + " (" + hs.size() + " injections: "
                     + hs.stream().filter(h -> h.side.equals("D")).count() + " around the draw, " + hs.stream().filter(h -> h.side.equals("W")).count()
-                    + " in models / renderers; " + d.methods + " + " + w.methods + " methods walked): " + v.why());
+                    + " in models / renderers; " + d.methods + " + " + w.methods + " methods walked, " + (System.nanoTime() - tMod) / 1_000_000 + " ms): " + v.why());
         }
         System.out.println("[sleep/opt] render field flow: " + BY_MOD.size() + " mods with mixins on both sides, "
-                + BY_MOD.values().stream().filter(Verdict::trusted).count() + " trusted, " + skipped + " mixins their configs declined, "
+                + BY_MOD.values().stream().filter(Verdict::trusted).count() + " trusted, " + skipped + " mixins their configs declined, the mixins read in "
+                + (tScan - t0) / 1_000_000 + " ms (lookups: has " + Classes.hasN + " x " + Classes.hasNs / 1_000_000 + " ms, game layer " + Classes.resN + " x "
+                + Classes.resNs / 1_000_000 + " ms, mod reads " + Classes.readN + " x " + Classes.readNs / 1_000_000 + " ms; subclass index of " + Classes.idxN
+                + " mod files, " + Classes.idxClasses + " classes, " + Classes.idxNs / 1_000_000 + " ms), "
                 + (System.nanoTime() - t0) / 1_000_000 + " ms"
                 + (Boolean.getBoolean("lab.prender.fieldFlow") ? "" : " (log only: -Dlab.prender.fieldFlow=true to use)"));
     }
@@ -447,6 +452,9 @@ public final class RenderFieldFlow {
         private static final Map<ModFile, Map<String, Set<String>>> SUBS = new HashMap<>();
         private static List<ModFile> all;
 
+        private static final Map<String, ModFile> PKG_FILE = new HashMap<>();
+        private static final Set<String> PKG_MISSING = new java.util.HashSet<>();
+
         static ClassNode read(ModFile file, String internal) {
             return find(file, internal, new ModFile[1]);
         }
@@ -461,12 +469,21 @@ public final class RenderFieldFlow {
             if (MISSING.contains(internal) || outside(internal)) return null;
             ModFile f = home != null && has(home, internal) ? home : null;
             if (f == null) {
-                if (all == null) {
-                    all = new ArrayList<>();
-                    var mods = net.minecraftforge.fml.loading.LoadingModList.get();
-                    if (mods != null) for (var i : mods.getModFiles()) all.add(i.getFile());
+                // the file its package was found in first; a package no mod file has: the game's class loader (below) -
+                // every mod file asked for every class cost 2.6 s on a 229-mod pack (absent optional dependencies)
+                String pkg = internal.substring(0, Math.max(0, internal.lastIndexOf('/')));
+                ModFile pf = PKG_FILE.get(pkg);
+                if (pf != null && has(pf, internal)) f = pf;
+                else if (!PKG_MISSING.contains(pkg)) {
+                    if (all == null) {
+                        all = new ArrayList<>();
+                        var mods = net.minecraftforge.fml.loading.LoadingModList.get();
+                        if (mods != null) for (var i : mods.getModFiles()) all.add(i.getFile());
+                    }
+                    for (ModFile m : all) if (has(m, internal)) { f = m; break; }   // (a split package: its other file)
+                    if (f != null) PKG_FILE.putIfAbsent(pkg, f);
+                    else if (pf == null) PKG_MISSING.add(pkg);
                 }
-                for (ModFile m : all) if (has(m, internal)) { f = m; break; }
             }
             if (f == null) {
                 cn = resource(internal);   // a library jar-in-jar (not a mod file): the game layer has it
@@ -479,9 +496,12 @@ public final class RenderFieldFlow {
                 where[0] = home;
                 return cn;
             }
+            long tr = System.nanoTime();
+            readN++;
             try {
                 cn = new ClassNode();
                 new ClassReader(Files.readAllBytes(f.findResource(internal + ".class"))).accept(cn, ClassReader.SKIP_FRAMES);
+                readNs += System.nanoTime() - tr;
             } catch (Throwable t) {
                 MISSING.add(internal);
                 return null;
@@ -492,12 +512,18 @@ public final class RenderFieldFlow {
             return cn;
         }
 
+        static long hasN, hasNs, resN, resNs, readN, readNs;
+
         private static boolean has(ModFile f, String internal) {
+            long t0 = System.nanoTime();
+            hasN++;
             try {
                 Path p = f.findResource(internal + ".class");
                 return p != null && Files.exists(p);
             } catch (Throwable t) {
                 return false;
+            } finally {
+                hasNs += System.nanoTime() - t0;
             }
         }
 
@@ -528,6 +554,8 @@ public final class RenderFieldFlow {
          * gives no untransformed bytecode), or null.
          */
         static ClassNode resource(String internal) {
+            long t0 = System.nanoTime();
+            resN++;
             try (java.io.InputStream in = RenderFieldFlow.class.getClassLoader().getResourceAsStream(internal + ".class")) {
                 if (in == null) return null;
                 ClassNode cn = new ClassNode();
@@ -535,6 +563,8 @@ public final class RenderFieldFlow {
                 return cn;
             } catch (Throwable t) {
                 return null;
+            } finally {
+                resNs += System.nanoTime() - t0;
             }
         }
 
@@ -567,6 +597,12 @@ public final class RenderFieldFlow {
             Set<String> out = new TreeSet<>();
             Set<ModFile> files = new HashSet<>(FILE_OF.values());
             if (home != null) files.add(home);
+            // the files not indexed yet, in parallel (each on its own: the whole jar's class headers - 225 files, 57 k
+            // classes, 2.8 s one after another on a 229-mod pack)
+            List<ModFile> missing = new ArrayList<>();
+            for (ModFile f : files) if (!SUBS.containsKey(f)) missing.add(f);
+            if (missing.size() > 1)
+                for (var e : missing.parallelStream().map(f -> Map.entry(f, index(f))).toList()) SUBS.put(e.getKey(), e.getValue());
             for (ModFile f : files) {
                 Map<String, Set<String>> subs = SUBS.computeIfAbsent(f, Classes::index);
                 List<String> q = new ArrayList<>(List.of(owner));
@@ -578,7 +614,11 @@ public final class RenderFieldFlow {
             return out;
         }
 
+        static volatile long idxN, idxNs, idxClasses;   // (stats; the parallel indexing may lose a count)
+
         private static Map<String, Set<String>> index(ModFile f) {
+            long ti = System.nanoTime();
+            idxN++;
             Map<String, Set<String>> subs = new HashMap<>();
             try {
                 Path root = f.getSecureJar().getRootPath();
@@ -587,6 +627,7 @@ public final class RenderFieldFlow {
                         if (!p.toString().endsWith(".class")) continue;
                         try {
                             ClassReader r = new ClassReader(Files.readAllBytes(p));
+                            idxClasses++;
                             if (r.getSuperName() != null) subs.computeIfAbsent(r.getSuperName(), k -> new HashSet<>()).add(r.getClassName());
                             for (String i : r.getInterfaces()) subs.computeIfAbsent(i, k -> new HashSet<>()).add(r.getClassName());
                         } catch (Throwable t) { /* a broken class: skipped */ }
@@ -595,6 +636,7 @@ public final class RenderFieldFlow {
             } catch (Throwable t) {
                 System.out.println("[sleep/opt] render field flow: " + f.getFileName() + " not indexed: " + t);
             }
+            idxNs += System.nanoTime() - ti;
             return subs;
         }
     }
