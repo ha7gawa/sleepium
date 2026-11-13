@@ -32,6 +32,7 @@ public final class MixinYield {
         if (REPORTED.add(mixinClassName)) {
             yielded++;
             System.out.println(why);
+            NOTES.getOrDefault(mixinClassName, java.util.Map.of()).forEach(ModReport::mixin);   // (the Mods page, the report)
         }
         return true;
     }
@@ -53,6 +54,13 @@ public final class MixinYield {
     public static final java.util.List<String> CANCELLED = new java.util.concurrent.CopyOnWriteArrayList<>();
     /** our mixins that gave way because a rule asked (no conflict of their own): the report */
     public static final java.util.List<String> BY_RULE = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** per our mixin that would give way: mod id -> the Mods page's line (kept until its plugin asks: a flag off never does) */
+    private static final java.util.Map<String, java.util.Map<String, String>> NOTES = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static void note(String ourMixin, String culprit, String line) {
+        NOTES.computeIfAbsent(ourMixin, k -> new java.util.concurrent.ConcurrentHashMap<>()).merge(culprit.substring(0, culprit.indexOf('\t')), line, (a, b) -> a);
+    }
 
     private static String rule(String key) {
         return System.getProperty(key, "").trim().toLowerCase(java.util.Locale.ROOT);
@@ -110,7 +118,11 @@ public final class MixinYield {
             java.util.Set<String> mods = new java.util.TreeSet<>();
             for (String c : v.culprits()) mods.add(c.substring(0, c.indexOf('\t')));
             boolean win = !v.culprits().isEmpty() && ("never".equals(own) || mods.stream().allMatch(m -> "never".equals(rule("sleep.mod." + m + ".giveWay"))));
-            if (!win) return v.why();
+            if (!win) {
+                for (String c : v.culprits())
+                    note(mixinClassName, c, "gave way: our " + simple + " to its " + simple(c.substring(c.indexOf('\t') + 1)) + " - " + v.why().substring(v.why().indexOf("not applied: ") + 13));
+                return v.why();
+            }
             for (String c : v.culprits())
                 if (!MixinTouch.cancel(c.substring(c.indexOf('\t') + 1), true)) {
                     System.out.println("[sleep/opt] " + simple + ": a rule asks it to apply over " + mods + ", but " + c.replace('\t', ' ')
@@ -123,6 +135,7 @@ public final class MixinYield {
                 String label = c.substring(0, c.indexOf('\t')) + " (" + simple(c.substring(c.indexOf('\t') + 1)) + ")";
                 names.add(label);
                 CANCELLED.add(simple + " over " + label);
+                ModReport.mixin(c.substring(0, c.indexOf('\t')), "cancelled: its " + simple(c.substring(c.indexOf('\t') + 1)) + " taken out so that our " + simple + " applies (a rule: never give way)");
             }
             System.out.println("[sleep/opt] RULE: " + simple + " applied over another mod - CANCELLED " + names + " ("
                     + ("never".equals(own) ? "sleep.yield." + simple + "=never" : "sleep.mod.<id>.giveWay=never") + "); without the rule: " + v.why().replace("[sleep/opt] ", ""));
@@ -147,6 +160,7 @@ public final class MixinYield {
                     String why = "[sleep/opt] " + simple + " not applied: a rule asks it to give way to " + mod + " (" + simple(c.substring(c.indexOf('\t') + 1))
                             + ") on " + t.replace('/', '.') + "#" + n + " (" + ("always".equals(own) ? "sleep.yield." + simple : "sleep.mod." + mod + ".giveWay") + "=always)";
                     BY_RULE.add(simple + " to " + mod);
+                    note(mixinClassName, c, "gave way by a rule: our " + simple + " to its " + simple(c.substring(c.indexOf('\t') + 1)) + " on " + t.substring(t.lastIndexOf('/') + 1) + "#" + n);
                     return why;
                 }
             }
