@@ -53,6 +53,13 @@ public final class SleepConfig {
     private static final Set<String> LOCKED = new HashSet<>();
     /** the values mods declare about their own content (their mods.toml), and which mod declared each */
     private static final Map<String, String> DECLARED = new TreeMap<>(), DECLARED_BY = new TreeMap<>();
+    /** the keys a bisect round turned off for this run (read at start) */
+    private static final java.util.List<String> BISECT_OFF = new java.util.ArrayList<>();
+
+    public static java.util.List<String> bisectOffThisRun() {
+        return java.util.List.copyOf(BISECT_OFF);
+    }
+
     /** where each value set from a file or a declaration came from (the rest: launch flags, defaults) */
     private static final Map<String, String> SOURCE = new TreeMap<>();
 
@@ -117,6 +124,13 @@ public final class SleepConfig {
             System.setProperty(k, v);
             SOURCE.put(k, src);
         }
+        BISECT_OFF.addAll(Bisect.offNow());   // a search for a problem's setting: this round's keys off (over the files, not over launch flags)
+        for (String k : BISECT_OFF) {
+            if (LAUNCH.contains(k)) continue;
+            System.setProperty(k, "false");
+            SOURCE.put(k, "bisect");
+        }
+        if (!BISECT_OFF.isEmpty()) System.out.println("[sleep/bisect] this run: " + BISECT_OFF.size() + " settings off - " + BISECT_OFF);
         System.out.println("[sleep/opt] settings: " + fromFile + " from " + f + (Files.exists(pf) ? ", " + fromPack + " from the pack's " + pf.getFileName()
                 + (LOCKED.isEmpty() ? "" : " (" + LOCKED.size() + " locked)") : "") + (DECLARED.isEmpty() ? "" : ", " + fromMods + " declared by mods (" + DECLARED.size() + " in all)"));
         if (!exists) write(f, Map.of());   // the documented catalogue, every line commented: the defaults stay the jar's
