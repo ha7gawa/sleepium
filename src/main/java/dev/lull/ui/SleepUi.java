@@ -57,7 +57,6 @@ public final class SleepUi {
         gameBus.addListener(EventPriority.NORMAL, false, TickEvent.ServerTickEvent.class, e -> {
             if (e.phase == TickEvent.Phase.END) {
                 SleepStats.serverTick(e.getServer());
-                dev.lull.optsupport.ModProfile.serverTick();
             }
         });
         gameBus.addListener(EventPriority.NORMAL, false, RenderGuiEvent.Post.class, e -> {
