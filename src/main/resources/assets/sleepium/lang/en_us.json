@@ -48,7 +48,7 @@
   "sleepium.ui.mods.src.default": "default",
   "sleepium.ui.mods.src.player": "yours",
   "sleepium.ui.mods.src.pack": "the pack's",
-  "sleepium.ui.mods.src.pack-locked": "locked by the pack",
+  "sleepium.ui.mods.src.pack-locked": "pack, locked",
   "sleepium.ui.mods.src.mod": "the mod's",
   "sleepium.ui.mods.src.launch": "launch flag",
   "sleepium.ui.mods.src.joined": "joined",

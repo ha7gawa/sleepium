@@ -48,7 +48,7 @@
   "sleepium.ui.mods.src.default": "по умолчанию",
   "sleepium.ui.mods.src.player": "ваше",
   "sleepium.ui.mods.src.pack": "от сборки",
-  "sleepium.ui.mods.src.pack-locked": "закреплено сборкой",
+  "sleepium.ui.mods.src.pack-locked": "закреплено",
   "sleepium.ui.mods.src.mod": "от мода",
   "sleepium.ui.mods.src.launch": "флаг запуска",
   "sleepium.ui.mods.src.joined": "объединено",
