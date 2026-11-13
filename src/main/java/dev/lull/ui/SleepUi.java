@@ -1,6 +1,7 @@
 package dev.lull.ui;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.options.OptionsScreen;
@@ -19,7 +20,12 @@ public final class SleepUi {
 
     public static void register(ModContainer container, IEventBus gameBus) {
         container.registerExtensionPoint(IConfigScreenFactory.class, (IConfigScreenFactory) (c, parent) -> new SleepScreen(parent));
-        gameBus.addListener(ScreenEvent.Init.Post.class, e -> {
+        gameBus.addListener(ScreenEvent.Init.Post.class, e -> {   // the title screen after a crash in Sleepium: what to do (once)
+            if (!(e.getScreen() instanceof net.minecraft.client.gui.screens.TitleScreen title)) return;
+            Screen hint = CrashHint.check(title);
+            if (hint != null) Minecraft.getInstance().tell(() -> Minecraft.getInstance().setScreen(hint));
+        });
+        gameBus.addListener(ScreenEvent.Init.Post.class, e -> {
             // the Options screen and the pause menu: a button at the top left
             if (!(e.getScreen() instanceof OptionsScreen) && !(e.getScreen() instanceof net.minecraft.client.gui.screens.PauseScreen p && p.showsPauseMenu())) return;
             var screen = e.getScreen();
