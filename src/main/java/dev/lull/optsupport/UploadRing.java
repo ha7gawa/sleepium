@@ -24,9 +24,12 @@ public final class UploadRing {
     private UploadRing() {}
 
     public static final boolean ON = Boolean.getBoolean("lab.gpu.uploadRing");
-    private static final int NSEG = 4;
-    private static final long SEG = Long.getLong("lab.gpu.uploadRing.segMiB", 4) << 20;
+    /** segments: more than the frames the driver keeps in flight (N100 at the GPU limit: 4 were too few - 80 % busy) */
+    private static final int NSEG = Integer.getInteger("lab.gpu.uploadRing.segments", 8);
+    private static final long SEG = Long.getLong("lab.gpu.uploadRing.segMiB", 8) << 20;
     private static final long ALIGN = 256;
+    /** uploads smaller than this keep the driver's own path (GrowBuffer): the ring is for the large ones that made allocations */
+    public static final long MIN_BYTES = Long.getLong("lab.gpu.uploadRing.minKiB", 64) << 10;
     private static int buffer;
     private static long ptr;
     private static int seg;
@@ -46,15 +49,44 @@ public final class UploadRing {
         return capable;
     }
 
-    /** Minecraft.runTick HEAD (UploadRingMixin): the last frame's segment gets its fence, the next one is taken if the GPU is done with it */
+    /**
+     * -Dlab.gpu.framesInFlight=K (K > 0): at a frame's start the render thread waits (an OS wait on a fence, up to 100 ms)
+     * until the GPU has finished the frame K frames back. The N100's Intel driver lets the CPU run far ahead of the GPU
+     * (the ring's segments were still busy 8 frames later): K bounds that queue - the input reaches the screen sooner and
+     * the ring's NSEG > K segments are always free. Works with the ring off too (its fences are made either way).
+     */
+    private static final int FIF = Integer.getInteger("lab.gpu.framesInFlight", 0);
+    private static final long[] FRAME_FENCES = new long[16];
+    private static int frameNo;
+    public static long fifWaits, fifWaitNs, frames;
+
+    /** Minecraft.runTick HEAD (UploadRingMixin): the last frame gets its fence, the next segment is taken if the GPU is done with it */
     public static void frameBegin() {
+        if (FIF > 0) {
+            // a fence for every frame, the oldest one we keep waited for: at most FIF frames queued ahead of the GPU
+            int i = frameNo & 15;
+            if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
+            FRAME_FENCES[i] = GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+            long old = frameNo >= FIF ? FRAME_FENCES[(frameNo - FIF) & 15] : 0;
+            if (old != 0) {
+                int r = GL32C.glClientWaitSync(old, GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 0);
+                if (r == GL32C.GL_TIMEOUT_EXPIRED) {
+                    long t0 = System.nanoTime();
+                    GL32C.glClientWaitSync(old, GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 100_000_000L);
+                    fifWaits++;
+                    fifWaitNs += System.nanoTime() - t0;
+                }
+            }
+            frameNo++;
+        }
+        frames++;
         if (buffer == 0) return;
         if (used > 0) FENCES[seg] = GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
         seg = (seg + 1) % NSEG;
         used = 0;
         long f = FENCES[seg];
         if (f != 0) {
-            int r = GL32C.glClientWaitSync(f, 0, 0);   // a look, never a wait
+            int r = GL32C.glClientWaitSync(f, GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 0);   // a look, never a wait (the fence sent on)
             segFree = r == GL32C.GL_ALREADY_SIGNALED || r == GL32C.GL_CONDITION_SATISFIED;
             if (segFree) {
                 GL32C.glDeleteSync(f);
@@ -102,7 +134,7 @@ public final class UploadRing {
     }
 
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "upload ring: %d copies, %.1f MB; fallbacks: segment busy %d, full %d",
-                copies, bytes / 1e6, fallbackBusy, fallbackFull);
+        return String.format(java.util.Locale.ROOT, "upload ring: %d copies, %.1f MB; fallbacks: segment busy %d, full %d; frames %d, frames-in-flight %d: waited %d times, %.2f ms a frame",
+                copies, bytes / 1e6, fallbackBusy, fallbackFull, frames, FIF, fifWaits, frames == 0 ? 0 : fifWaitNs / 1e6 / frames);
     }
 }

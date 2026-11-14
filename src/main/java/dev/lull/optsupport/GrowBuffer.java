@@ -18,6 +18,12 @@ public final class GrowBuffer {
 
     /** the bound buffer `id` at `target` gets `bytes` from `ptr` (STREAM_DRAW) */
     public static void upload(int target, int id, long bytes, long ptr) {
+        if (UploadRing.ON && bytes < UploadRing.MIN_BYTES) {
+            // small uploads as before: the ring's copy (memcpy + 3 GL calls) cost more than the driver's own path
+            // (host: everything through the ring 1005 -> 680 fps); the allocations that hurt were the large ones
+            GL15C.nglBufferData(target, bytes, ptr, GL15C.GL_STREAM_DRAW);
+            return;
+        }
         if (UploadRing.ON) {
             // the storage made once at a grown size and never specified again; the frame's bytes copied in on the GPU.
             // The size asked of the buffer itself: GL names are reused after a delete (a table by name went stale)
