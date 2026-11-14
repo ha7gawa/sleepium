@@ -887,7 +887,7 @@ public final class VoxelStream {
         int offBlk = pk.position() - start;
         if (bd != null) packBytes(bd);
         int end = pk.position();
-        pk.put(header, gx | gy << 10 | gz << 20);
+        pk.put(header, gx >> 4 | (gy >> 4) << 8 | (gz >> 4) << 16);   // in sections (8 bits each): any view distance, worlds up to 4 080 high
         pk.put(header + 1, bits | psz << 8 | flags << 20);
         pk.put(header + 2, sDef | bDef << 4);
         pk.put(header + 3, offS);
@@ -986,7 +986,7 @@ public final class VoxelStream {
                     uint base = starts[gl_WorkGroupID.x];
                     uint cpos = pk[base], h = pk[base + 1u], defs = pk[base + 2u];
                     uint offS = base + pk[base + 3u], offSky = base + pk[base + 4u], offBlk = base + pk[base + 5u], offCol = base + pk[base + 6u];
-                    ivec3 g = ivec3(int(cpos & 1023u), int((cpos >> 10u) & 1023u), int((cpos >> 20u) & 1023u));
+                    ivec3 g = ivec3(int(cpos & 255u), int((cpos >> 8u) & 255u), int((cpos >> 16u) & 255u)) * 16;
                     uint bits = h & 255u, flags = h >> 20u;
                     for (uint i = gl_LocalInvocationIndex; i < 4096u; i += 256u) {
                         uint x = i & 15u, z = (i >> 4u) & 15u, y = i >> 8u;   // the container's order: y << 8 | z << 4 | x
@@ -1592,7 +1592,10 @@ public final class VoxelStream {
         GL11C.glTexParameteri(GL12C.GL_TEXTURE_3D, GL11C.GL_TEXTURE_MIN_FILTER, GL11C.GL_NEAREST);
         GL11C.glTexParameteri(GL12C.GL_TEXTURE_3D, GL11C.GL_TEXTURE_MAG_FILTER, GL11C.GL_NEAREST);
         GL11C.glTexParameteri(GL12C.GL_TEXTURE_3D, GL12C.GL_TEXTURE_MAX_LEVEL, 0);
+        while (GL11C.glGetError() != GL11C.GL_NO_ERROR) {}   // (earlier errors are not ours)
         org.lwjgl.opengl.GL42C.glTexStorage3D(GL12C.GL_TEXTURE_3D, 1, internal, nx, ny, nx);
+        if (GL11C.glGetError() == GL11C.GL_OUT_OF_MEMORY)   // a tall world at a far view: the dense grid does not fit in video memory
+            throw new IllegalStateException(String.format(java.util.Locale.ROOT, "GPU terrain: the %d x %d x %d grid does not fit in video memory - the normal terrain is drawn", nx, ny, nx));
         GL11C.glBindTexture(GL12C.GL_TEXTURE_3D, 0);
         GlStateManager._activeTexture(GL13C.GL_TEXTURE0);
         if (org.lwjgl.opengl.GL44C.glGetError() == 0) org.lwjgl.opengl.GL44C.glClearTexImage(tex, 0, GL30C.GL_RED_INTEGER, internal == GL30C.GL_R16UI ? GL11C.GL_UNSIGNED_SHORT : GL11C.GL_UNSIGNED_BYTE, (ByteBuffer) null);
@@ -2091,8 +2094,26 @@ public final class VoxelStream {
         firstViewAt = DIRTY.isEmpty() && FLIGHTS.isEmpty() ? windowStart : 0;
     }
 
+    /**
+     * The GL GPU terrain needs: 4.5 (compute shaders, storage buffers, immutable textures, direct state access) and
+     * indirect draw counts (4.6 or ARB_indirect_parameters). Without them a missing GL function is not an exception
+     * LWJGL can throw - it aborts the game (Android's GL 3.3 over GLES: glTexStorage3D). Then the normal terrain stays.
+     */
+    public static boolean glSupported() {
+        if (glSupported == null) {
+            var c = org.lwjgl.opengl.GL.getCapabilities();
+            glSupported = c.OpenGL45 && (c.OpenGL46 || c.GL_ARB_indirect_parameters);
+            if (!glSupported) LOG.warn("[sleep/voxel] GPU terrain needs OpenGL 4.5 with indirect draw counts (4.6); this driver has {} - the normal terrain is drawn",
+                    GL11C.glGetString(GL11C.GL_VERSION));
+        }
+        return glSupported;
+    }
+
+    private static Boolean glSupported;
+
     public static void start() {
         if (started) return;   // the lifecycle started it already (ClientAuto calls this too)
+        if (!glSupported()) return;
         windowStart = System.nanoTime();
         active = true;
         started = true;
@@ -3929,6 +3950,11 @@ public final class VoxelStream {
         chunks = 2 * dm + 1;
         nx = chunks * 16;
         ny = level.getHeight();
+        // a section's place in the grid travels in sections, 8 bits a coordinate (until 1.2.5 in blocks, 10 bits: from
+        // view distance 31 the columns past 1 023 landed on the first ones - a cross of missing chunks)
+        int max3d = GL11C.glGetInteger(GL12C.GL_MAX_3D_TEXTURE_SIZE);
+        if (chunks > 255 || ny > 4080 || nx > max3d || ny > max3d)
+            throw new IllegalStateException("GPU terrain: a grid of " + nx + " x " + ny + " x " + nx + " blocks does not fit (3D textures up to " + max3d + ") - the normal terrain is drawn");
         minY = level.getMinBuildHeight();
         secY = level.getSectionsCount();
         pcData = net.minecraft.world.level.chunk.PalettedContainer.class.getDeclaredField(dev.lull.Names.field("net/minecraft/world/level/chunk/PalettedContainer", "data"));
