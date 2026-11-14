@@ -19,13 +19,17 @@ import java.util.concurrent.ExecutorService;
 public final class LabPools {
     /** the background workers: 4; with ParallelWorldgen (its steps wait for a worker with 4: notes/41) half the cores, 4 to 8 -
      *  8 here (16 cores), 4 on a friend's 8-core machine; lab.opt.bgThreads sets it */
-    private static final int BG = Integer.getInteger("lab.opt.bgThreads", Boolean.getBoolean("lab.opt.ParallelWorldgenMixin")
+    static final int BG = Integer.getInteger("lab.opt.bgThreads", Boolean.getBoolean("lab.opt.ParallelWorldgenMixin")
             ? Math.max(4, Math.min(8, Runtime.getRuntime().availableProcessors() / 2)) : 4);
     private static final int IO = Integer.getInteger("lab.opt.ioThreads", 4);
 
     private LabPools() {}
 
     public static ExecutorService background(String serviceName, Thread.UncaughtExceptionHandler handler) {
+        if (Boolean.getBoolean("lab.opt.OnePool") && "Main".equals(serviceName)) {
+            System.out.println("[sleep/opt] one pool: vanilla's background work goes to the client's or the server's pool, by the side that gives it");
+            return new SidePool();
+        }
         LabRuntime rt = new LabRuntime(LabRuntime.Config.of("Worker-" + serviceName, BG)
                 .withPriority(OsThreads.BELOW_NORMAL).withHandler(handler));
         System.out.println("[sleep/opt] LabRuntime background pool 'Worker-" + serviceName + "': " + BG

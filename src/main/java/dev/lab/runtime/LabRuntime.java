@@ -67,6 +67,13 @@ public final class LabRuntime extends AbstractExecutorService {
         public Config withHandler(Thread.UncaughtExceptionHandler handler) {
             return new Config(name, maxWorkers, maxSpinners, spinNanos, osPriority, laneCapacity, dequeCapacity, daemon, handler);
         }
+
+        /** the OS priority a worker takes for TICK work (fan-outs, the TICK lane); the config's own one for the rest */
+        public LabRuntime withTickPriority(int p) {
+            LabRuntime rt = new LabRuntime(this);
+            rt.tickPriority = p;
+            return rt;
+        }
     }
 
     /** Worker thread carrying its own state: "thread-local by construction", no ThreadLocal lookups. */
@@ -78,6 +85,11 @@ public final class LabRuntime extends AbstractExecutorService {
             super(worker, name);
             this.owner = owner;
             this.worker = worker;
+        }
+
+        /** the runtime this worker belongs to */
+        public LabRuntime owner() {
+            return owner;
         }
     }
 
@@ -119,6 +131,10 @@ public final class LabRuntime extends AbstractExecutorService {
 
     public final LongAdder executed = new LongAdder(), localPushes = new LongAdder(), steals = new LongAdder(),
             parks = new LongAdder(), wakes = new LongAdder(), overflowed = new LongAdder(), failures = new LongAdder();
+
+    /** OS priority for TICK work (Integer.MIN_VALUE: the same as the rest) - set before the workers start their first task */
+    volatile int tickPriority = Integer.MIN_VALUE;
+    public long priorityChanges;
 
     public LabRuntime(Config cfg) {
         if (cfg.maxWorkers < 1 || cfg.maxWorkers > 63) throw new IllegalArgumentException("1..63 workers");
@@ -241,16 +257,32 @@ public final class LabRuntime extends AbstractExecutorService {
             this.stealStart = id + 1;
         }
 
+        private int prio = Integer.MIN_VALUE;
+
+        /** the OS priority for the work about to run: the tick one for TICK work, else the base one (a call on change only) */
+        private void priority(boolean tick) {
+            int tp = tickPriority;
+            int p = tick && tp != Integer.MIN_VALUE ? tp : cfg.osPriority;
+            if (p != prio) {
+                OsThreads.setCurrentPriority(p);
+                prio = p;
+                priorityChanges++;
+            }
+        }
+
         @Override
         public void run() {
-            OsThreads.setCurrentPriority(cfg.osPriority);
+            priority(false);
             while (!shutdown || hasWork()) {
                 RangeJob j = tickJob;
                 if (j != null && j.hasUnclaimed()) {       // TICK fan-out has absolute priority
+                    priority(true);
                     j.drain();
                     continue;
                 }
+                lastLane = -1;
                 Runnable t = find();
+                if (t != null) priority(lastLane == 0);
                 if (t != null) {
                     if (spinning) {
                         spinning = false;
@@ -263,6 +295,9 @@ public final class LabRuntime extends AbstractExecutorService {
                 idle();
             }
         }
+
+        /** the lane find() took the task from (-1: own deque or a steal - CHUNK / BACKGROUND work) */
+        private int lastLane = -1;
 
         private boolean sourceHasMore() {
             Object s = lastSource;
@@ -316,6 +351,7 @@ public final class LabRuntime extends AbstractExecutorService {
                 if (t != null) {
                     lastShared = true;
                     lastSource = r;
+                    lastLane = lane;
                     return t;
                 }
                 if ((spillMask & (1L << ri)) != 0) {        // ring drained: its overflow holds the newer tasks

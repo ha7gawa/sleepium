@@ -355,7 +355,7 @@ public final class ParallelRender {
         j.camX = camX;
         j.camY = camY;
         j.camZ = camZ;
-        j.pt = pt;
+        j.pt = TickSlice.ON ? TickSlice.partial(e, pt) : pt;
         j.pose = pose;
         j.buffers = buffers;
         j.done = false;

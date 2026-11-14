@@ -33,7 +33,7 @@ public final class FrameReactor {
     }
 
     private static final int THREADS = Integer.getInteger("lab.reactor.threads", Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() - 2)));
-    private static LabRuntime pool;
+    private static volatile LabRuntime pool;
     private static final MpmcRing DONE = new MpmcRing(1024);
     private static final ArrayDeque<Runnable> OVERFLOW = new ArrayDeque<>();
     private static final List<Participant> PARTICIPANTS = new ArrayList<>();
@@ -43,8 +43,23 @@ public final class FrameReactor {
         return THREADS;
     }
 
+    /** the client's pool if it was made (Sides: no pool made by asking) */
+    public static LabRuntime poolIfMade() {
+        return pool;
+    }
+
     public static synchronized LabRuntime pool() {
         if (pool == null) {
+            if (Boolean.getBoolean("lab.opt.OnePool")) {
+                // one pool: the client's background work too (chunk meshes, resource loading), below normal for that work,
+                // normal while the workers help a frame (TICK work). Its own size, not Worker-Main's: 8 meshing workers
+                // finished more sections a frame than the render thread uploads smoothly (11-14 host: stutters 0.58 -> 0.84 %,
+                // with 4: 0.49-0.69 %); the server's pool takes Worker-Main's workers (generation)
+                int n = THREADS;
+                pool = LabRuntime.Config.of("Frame-Worker", n).withPriority(OsThreads.BELOW_NORMAL).withDaemon(true).withTickPriority(OsThreads.NORMAL);
+                System.out.println("[sleep/opt] frame reactor: " + n + " workers (one pool: the client's background work too)");
+                return pool;
+            }
             pool = new LabRuntime(LabRuntime.Config.of("Frame-Worker", THREADS).withPriority(OsThreads.NORMAL).withDaemon(true));
             System.out.println("[sleep/opt] frame reactor: " + THREADS + " workers");
         }

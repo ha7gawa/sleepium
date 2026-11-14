@@ -39,6 +39,8 @@ public final class ClientCounters {
                 + (EmfSplit.classes.get() > 0 ? "; " + EmfSplit.report() : "")
                 + (Boolean.getBoolean("lab.opt.PartBatchMixin") ? "; " + PartBatch.report() + "; " + Materials.report() : "") + extra()
                 + (Boolean.getBoolean("lab.opt.FrustumRegionMixin") ? "; " + FrustumRegions.report() : "")
+                + (TickSlice.ON ? "; " + TickSlice.report() : "")
+                + (GlInbox.ON ? "; " + GlInbox.report() : "")
                 + (Boolean.getBoolean("lab.opt.SectionListsMixin") ? "; " + SectionLists.report() : "")
                 + (Boolean.getBoolean("lab.opt.BlockMeshMemoMixin") ? "; " + BlockMeshMemo.report() : "")
                 + (Boolean.getBoolean("lab.opt.ShaderLightMixin") ? "; " + LightVolumes.report() : "")
