@@ -12,7 +12,14 @@ public final class GpuTimer {
     private static final int RING = 64, HALF = RING / 2;
     private static final int[] BEGIN = new int[RING], END = new int[RING];
     private static int slot;
-    private static long written, frames, gpuNanos;
+    private static long written, frames, gpuNanos, notReady;
+    /** the GPU time of each frame since the reset (ms; NaN: not read) - the frame log's gpu_ms column */
+    private static final float[] PER_FRAME = new float[1 << 16];
+    private static final int[] SLOT_FRAME = new int[RING];
+
+    public static float frameMs(int i) {
+        return i >= 0 && i < PER_FRAME.length ? PER_FRAME[i] : Float.NaN;
+    }
     /** per frame slot: timestamps at renderLevel's section changes (DrawStats.section) and the sections' names */
     private static final int MAXS = 40;
     private static final int[][] SQ = new int[RING][];
@@ -66,6 +73,8 @@ public final class GpuTimer {
         GPU_SECTIONS.clear();
         STAT_SECTIONS.clear();
         java.util.Arrays.fill(SC, 0);
+        java.util.Arrays.fill(PER_FRAME, Float.NaN);
+        notReady = 0;
         written = 0;
         slot = 0;
     }
@@ -84,15 +93,24 @@ public final class GpuTimer {
         if (!DrawStats.active || BEGIN[0] == 0) return;
         statSwitch(-1);
         GL33C.glQueryCounter(END[slot], GL33C.GL_TIMESTAMP);
+        SLOT_FRAME[slot] = (int) written;
         written++;
         slot = (slot + 1) % RING;
-        if (slot % HALF == 0 && written >= RING) {
-            // the half we are about to overwrite next was written 32..63 frames ago
-            int from = slot;
-            for (int i = from; i < from + HALF; i++) {
+        if (written >= RING) {
+            // one slot a frame: the one about to be overwritten, written RING frames ago - read only if the driver says
+            // its result is there (11-14: reading a half of the ring at once every 32 frames made the Intel driver wait
+            // for the GPU - a 40-50 ms frame every 200 ms on the N100)
+            int i = slot;
+            if (GL15C.glGetQueryObjecti(END[i], GL15C.GL_QUERY_RESULT_AVAILABLE) == 0) {
+                notReady++;
+                return;
+            }
+            {
                 long b = GL33C.glGetQueryObjecti64(BEGIN[i], GL15C.GL_QUERY_RESULT), e = GL33C.glGetQueryObjecti64(END[i], GL15C.GL_QUERY_RESULT);
                 gpuNanos += e - b;
                 frames++;
+                int fno = SLOT_FRAME[i];
+                if (fno < PER_FRAME.length) PER_FRAME[fno] = (e - b) / 1e6f;
                 int n = SC[i];   // the sections: from each timestamp to the next (the last to the frame's end)
                 long prev = b;
                 String prevName = "(before renderLevel)";
@@ -114,8 +132,8 @@ public final class GpuTimer {
 
     static String report() {
         if (frames == 0) return "gpu time: no samples";
-        StringBuilder sb = new StringBuilder(String.format(java.util.Locale.ROOT, "gpu time (render start -> end on the GPU clock): %.3f ms per frame (%d frames)",
-                gpuNanos / 1e6 / frames, frames));
+        StringBuilder sb = new StringBuilder(String.format(java.util.Locale.ROOT, "gpu time (render start -> end on the GPU clock): %.3f ms per frame (%d frames, %d not ready when read)",
+                gpuNanos / 1e6 / frames, frames, notReady));
         sb.append("\n  gpu time by renderLevel section (ms per frame):");
         GPU_SECTIONS.forEach((k, t) -> sb.append(String.format(java.util.Locale.ROOT, " %s %.3f;", k, t[0] / 1e6 / frames)));
         if (PIPELINE) {

@@ -709,9 +709,27 @@ public final class ClientAuto {
             Matcher m = p.matcher(t.getName());
             String key = m.matches() ? m.group(1) : t.getName();
             int idx = m.matches() ? Integer.parseInt(m.group(2)) : 0;
-            int[] v = g.computeIfAbsent(key, k -> new int[2]);
+            int[] v = g.computeIfAbsent(key, k -> new int[5]);
             v[0]++;
             v[1] = Math.max(v[1], idx);
+            // the kind of thread (0 own Thread, 1 ThreadPoolExecutor, 2 ForkJoinPool) and whether it sits idle in its pool
+            StackTraceElement[] st = e.getValue();
+            int kind = 0;
+            boolean idle = false;
+            for (StackTraceElement f : st) {
+                String c = f.getClassName(), mth = f.getMethodName();
+                if (c.startsWith("java.util.concurrent.ThreadPoolExecutor")) kind = Math.max(kind, 1);
+                if (c.startsWith("java.util.concurrent.ForkJoin")) kind = 2;
+                if ((c.equals("java.util.concurrent.ThreadPoolExecutor") && mth.equals("getTask"))
+                        || (c.equals("java.util.concurrent.ForkJoinPool") && mth.equals("awaitWork"))) idle = true;
+            }
+            if (!idle && st.length > 0 && (t.getState() == Thread.State.WAITING || t.getState() == Thread.State.TIMED_WAITING)) {
+                String top = st[0].getClassName() + "." + st[0].getMethodName();
+                // own threads parked waiting for work (queues, sleeps) - idle as well, but not a pool's
+                if (top.contains("Unsafe.park") || top.contains("Thread.sleep") || top.contains("Object.wait")) v[4]++;
+            }
+            v[2] = Math.max(v[2], kind);
+            if (idle) v[3]++;
             long c = mx.getThreadCpuTime(t.threadId());
             if (c > 0) cpu.computeIfAbsent(key, k -> new long[1])[0] += c;
             if (!owner.containsKey(key)) {
@@ -721,8 +739,26 @@ public final class ClientAuto {
         }
         StringBuilder sb = new StringBuilder(String.format(Locale.ROOT, "threads: live %d, peak %d, total started since JVM start %d%n",
                 mx.getThreadCount(), mx.getPeakThreadCount(), mx.getTotalStartedThreadCount()));
-        g.forEach((k, v) -> sb.append(String.format(Locale.ROOT, "  %-44s live %3d   highest index %4d   cpu %7.1f s   %s%n", k, v[0], v[1],
-                cpu.getOrDefault(k, new long[1])[0] / 1e9, owner.getOrDefault(k, ""))));
+        String[] kinds = {"thread", "tpe", "fjp"};
+        int[] sum = new int[6];
+        g.forEach((k, v) -> {
+            sb.append(String.format(Locale.ROOT, "  %-44s live %3d   highest index %4d   cpu %7.1f s   %s idle %3d parked %3d   %s%n", k, v[0], v[1],
+                    cpu.getOrDefault(k, new long[1])[0] / 1e9, kinds[v[2]], v[3], v[4], owner.getOrDefault(k, "")));
+            sum[v[2]] += v[0];
+            sum[3] += v[3];
+            sum[4] += v[4];
+        });
+        sb.append(String.format(Locale.ROOT, "  census sum: own threads %d, ThreadPoolExecutor %d, ForkJoinPool %d; idle in a pool %d, other parked %d%n",
+                sum[0], sum[1], sum[2], sum[3], sum[4]));
+        // the mods' pool (lab prototype jar sleepium-zoo, a loader service) if it is there
+        for (ClassLoader cl : new ClassLoader[] {ClientAuto.class.getClassLoader(), Thread.currentThread().getContextClassLoader()}) {
+            try {
+                Class<?> z = Class.forName("dev.lull.zoo.Zoo", true, cl);
+                sb.append("  ").append(z.getMethod("report").invoke(null)).append('\n');
+                break;
+            } catch (Throwable ignored) {
+            }
+        }
         return sb.toString();
     }
 
