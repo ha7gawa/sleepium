@@ -214,3 +214,6 @@
 -Dlab.opt.ParticleShapeMemoMixin=true
 -Dlab.opt.RenderPriorityMixin=true
 -Dlab.opt.SoundNoWaitMixin=true
+# the frustum culls chunk sections on flat arrays (origins, regions) instead of the occlusion graph's linked set: fast
+# camera turns at far view distances (1.2.5; the same sections in the same order, frame hashes unchanged)
+-Dlab.opt.FrustumRegionMixin=true
