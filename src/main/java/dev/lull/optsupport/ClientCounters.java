@@ -42,6 +42,7 @@ public final class ClientCounters {
                 + (TickSlice.ON ? "; " + TickSlice.report() : "")
                 + (GlInbox.ON ? "; " + GlInbox.report() : "")
                 + (TaskBudget.ON ? "; " + TaskBudget.report() : "")
+                + (StallProbe.ON ? "; " + StallProbe.report() : "")
                 + (Boolean.getBoolean("lab.opt.SectionListsMixin") ? "; " + SectionLists.report() : "")
                 + (Boolean.getBoolean("lab.opt.BlockMeshMemoMixin") ? "; " + BlockMeshMemo.report() : "")
                 + (Boolean.getBoolean("lab.opt.ShaderLightMixin") ? "; " + LightVolumes.report() : "")

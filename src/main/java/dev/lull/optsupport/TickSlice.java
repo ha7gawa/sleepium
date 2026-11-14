@@ -28,6 +28,8 @@ public final class TickSlice {
     public static final boolean ON = Boolean.getBoolean("lab.opt.TickSlice");
     /** -Dlab.tickSlice.ms: a fixed budget; unset - 1.5x the usual frame interval (an average of the frames), at least 2 ms */
     private static final long FIXED = (long) (Double.parseDouble(System.getProperty("lab.tickSlice.ms", "0")) * 1e6);
+    /** -Dlab.tickSlice.factor: a frame in the middle once the frame would pass this many usual intervals (1.5) */
+    private static final double FACTOR = Double.parseDouble(System.getProperty("lab.tickSlice.factor", "1.5"));
     private static long prevFrameEnd;
     private static double avgInterval = 8e6;
     /** the tick an entity was last ticked in (TickSliceEntityMixin: a field on the entity - entities tick on several
@@ -62,7 +64,7 @@ public final class TickSlice {
     }
 
     private static long budget() {
-        return FIXED > 0 ? FIXED : Math.max(2_000_000L, (long) (avgInterval * 1.5));
+        return FIXED > 0 ? FIXED : Math.max(2_000_000L, (long) (avgInterval * FACTOR));
     }
 
     public static void tickStart() {

@@ -155,6 +155,7 @@
     "LightTimingMixin"
   ],
   "client": [
+    "StallProbeMixin",
     "TaskBudgetMixin",
     "TaskQueueAccessor",
     "GlInboxMixin",
