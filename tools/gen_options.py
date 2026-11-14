@@ -16,7 +16,7 @@ OUT = os.path.join(ROOT, 'src', 'main', 'resources', 'assets', 'sleepium', 'opti
 # first matching rule wins: (group, name regex)
 GROUPS = [
     ('lighting', r'^(Light|ShaderLight|ClientLight)'),
-    ('chunks', r'^(Chunk(Multi|Section|Shader|Upload)|Section(Layer|Lists|ModCount)|BlockMesh|VertexSort|SamplerUnit|Uniform|ShaderSampler|Frame|RenderCache|RenderCall|OverworldFog|AmbientParticle|ItemFrame|Texture|ParallelReload|ClientBiome|ClientChunkCacheBiome|GpuAnim|DebugScreen)'),
+    ('chunks', r'^(Chunk(Multi|Section|Shader|Upload)|Section(Layer|Lists|ModCount)|FrustumRegion|BlockMesh|VertexSort|SamplerUnit|Uniform|ShaderSampler|Frame|RenderCache|RenderCall|OverworldFog|AmbientParticle|ItemFrame|Texture|ParallelReload|ClientBiome|ClientChunkCacheBiome|GpuAnim|DebugScreen)'),
     ('entities_render', r'^(EntityBatch|ItemGpu|QuadGpu|Part|ParallelParticles|ModelPart|PoseStack|EntityCull|EntityLight|BlockEntityCull|Vec3FromRgb)'),
     ('animation', r'^(Geo|Molang|Keyframe|AnimStream)'),
     ('threads', r'^(MainReactor|Reactor|ParallelEntities|ParallelEntityTicks|LabPools|PersistentPools|MailboxBatch|NeoForgeBus|RenderPriority)'),
@@ -35,6 +35,7 @@ META = {'universal'}
 
 # flags that switch several mixins (no class of their own), described here
 DESCRIPTIONS = {
+    'FrustumRegionMixin': "Chunk sections in view picked from flat arrays instead of the occlusion graph's linked set: no stall when the camera turns at far view distances (32 chunks: 167 -> 1100 fps while turning), the same sections in the same order.",
     'QuadGpuMixin': "Baked models that block entities and other renderers write every frame (machines' moving parts: Immersive Engineering's crushers, turrets...) drawn from GPU memory: a pose per part instead of its vertices, the same picture. About 1.7-2.8x fps with hundreds of working machines.",
     'ItemGpuMixin': 'Items in the world (on the ground, in frames, in hands) drawn from GPU memory: a pose per item each frame instead of its vertices, no sorting of their quads. About 2x fps with a thousand dropped items.',
     'FrameGarbageMixin': 'The per-frame garbage fixes in one switch: fog colour, frustum and light checks of entities and block entities, item frames, memoized lookups - without allocating every frame.',

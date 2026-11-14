@@ -155,7 +155,6 @@
     "LightTimingMixin"
   ],
   "client": [
-    "TickPaceMixin",
     "FrustumRegionMixin",
     "FrustumRegionAccessor",
     "SectionNodeAccessor",

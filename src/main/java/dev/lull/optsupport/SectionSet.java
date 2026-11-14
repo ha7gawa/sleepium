@@ -110,7 +110,6 @@ public final class SectionSet extends LinkedHashSet<Object> {
         if (state.length < regions) state = new byte[regions * 2];
         java.util.Arrays.fill(state, 0, regions, (byte) 0);
         List<Object> list = (List<Object>) out;
-        long tested = 0, byRegion = 0;
         SectionLists.walkBegin(list.size(), n);
         Object[] wr = SectionLists.walkRefs;
         int[] wi = SectionLists.walkIdx;
@@ -124,23 +123,16 @@ public final class SectionSet extends LinkedHashSet<Object> {
                 st = res == FrustumIntersection.INSIDE ? (byte) 2 : res == FrustumIntersection.INTERSECT ? (byte) 3 : (byte) 1;
                 state[r] = st;
             }
-            if (st == 1) {
-                byRegion++;
-                continue;
-            }
+            if (st == 1) continue;
             if (st == 3) {   // on the border: the section's own test, as Frustum.cubeInFrustum
-                tested++;
                 double x = ox[i], y = oy[i], z = oz[i];
                 if (!fi.testAab((float) (x - cx), (float) (y - cy), (float) (z - cz), (float) (x + 16 - cx), (float) (y + 16 - cy), (float) (z + 16 - cz))) continue;
-            } else byRegion++;
+            }
             list.add(sec[i]);
             wr[k] = sec[i];
             wi[k++] = sidx[i];
         }
         SectionLists.walkN = k;
-        FrustumRegions.boxTests += tested;
-        FrustumRegions.boxesSkipped += byRegion;
-        FrustumRegions.regionTests += regions;
         return true;
     }
 }
