@@ -1648,7 +1648,7 @@ public final class PartBatch {
         if (ssbo == 0) ssbo = GL15C.glGenBuffers();
         GL15C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, ssbo);
         long bytes = 144L * q.n;
-        GL15C.nglBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, bytes, q.mem, GL15C.GL_STREAM_DRAW);
+        GrowBuffer.upload(GL43C.GL_SHADER_STORAGE_BUFFER, ssbo, bytes, q.mem);
         GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, SSBO_BINDING, ssbo);
         if (mode == 6) {   // level-lit SuperByteBuffers: their light transforms (spin binding) and the light boxes
             if (st[6] == GL31C.GL_INVALID_INDEX) {
@@ -1658,7 +1658,7 @@ public final class PartBatch {
             }
             if (auxSsbo == 0) auxSsbo = GL15C.glGenBuffers();
             GL15C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, auxSsbo);
-            GL15C.nglBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, 48L * q.n, q.aux, GL15C.GL_STREAM_DRAW);
+            GrowBuffer.upload(GL43C.GL_SHADER_STORAGE_BUFFER, auxSsbo, 48L * q.n, q.aux);
             GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, SPIN_BINDING, auxSsbo);
             GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, LightBoxes.BINDING, LightBoxes.buffer());
         }
@@ -1755,7 +1755,7 @@ public final class PartBatch {
             texelInts = GL11C.glGenTextures();
         }
         GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, texelBuf);
-        GL15C.nglBufferData(GL31C.GL_TEXTURE_BUFFER, bytes, texelMem, GL15C.GL_STREAM_DRAW);
+        GrowBuffer.upload(GL31C.GL_TEXTURE_BUFFER, texelBuf, bytes, texelMem);
         GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, 0);
         int prevUnit = com.mojang.blaze3d.platform.GlStateManager._getActiveTexture();
         com.mojang.blaze3d.platform.GlStateManager._activeTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + TEXEL_UNIT);
