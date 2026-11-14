@@ -783,7 +783,7 @@ public final class ClientAuto {
             Matcher m = p.matcher(t.getName());
             String key = m.matches() ? m.group(1) : t.getName();
             int idx = m.matches() ? Integer.parseInt(m.group(2)) : 0;
-            int[] v = g.computeIfAbsent(key, k -> new int[2]);
+            int[] v = g.computeIfAbsent(key, k -> new int[5]);
             v[0]++;
             v[1] = Math.max(v[1], idx);
         }

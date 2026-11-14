@@ -310,11 +310,13 @@ public final class ClientMeter {
             // other_ms: the frame's time outside the ticks and GameRenderer.render - queued tasks (packets), sound, swap, waits
             StringBuilder fl = new StringBuilder("frame_ms,game_time,ticks,tick_ms,render_ms,other_ms,particle_ms,alloc_kib,gc_ms,sounds,entities_added,server_ms");
             if (FLS != null) for (String p : testmods.meter.TickSplit.PARTS) fl.append(",t_").append(p).append("_ms");
+            if (DrawStats.ON) fl.append(",gpu_ms");
             fl.append('\n');
             for (int i = 0; i < n; i++) {
                 fl.append(String.format(Locale.ROOT, "%.3f,%d,%d,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%.3f", frames[i] / 1e6, frameGameTime[i], FL[0][i], frameTick[i] / 1e6,
                         renders[i] / 1e6, (frames[i] - renders[i] - frameTick[i]) / 1e6, FL[1][i] / 1e6, allocs[i] >> 10, FL[2][i], FL[3][i], FL[4][i], FL[5][i] / 1e6));
                 if (FLS != null) for (long[] col : FLS) fl.append(String.format(Locale.ROOT, ",%.3f", col[i] / 1e6));
+                if (DrawStats.ON) fl.append(String.format(Locale.ROOT, ",%.3f", GpuTimer.frameMs(i)));
                 fl.append('\n');
             }
             try {
