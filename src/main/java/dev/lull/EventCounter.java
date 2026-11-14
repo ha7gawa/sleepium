@@ -65,7 +65,8 @@ final class EventCounter {
     private IEventBus bus;
     /** EventListenerHelper.listeners' map and lock (null: not reachable) */
     private Map<?, ?> listenerLists;
-    private ReadWriteLock listenerLock;
+    /** the helper's lock: a ReadWriteLock (eventbus 6.0, LockHelper) or a plain monitor (6.2 in Forge 47.4.2x, internal.Cache) */
+    private Object listenerLock;
     private int busId = -1;
     private int tickCounter;
     private long startNanos;
@@ -84,7 +85,8 @@ final class EventCounter {
             Field l = helper.getClass().getDeclaredField("lock");
             l.setAccessible(true);
             listenerLists = (Map<?, ?>) m.get(helper);
-            listenerLock = (ReadWriteLock) l.get(helper);
+            listenerLock = l.get(helper);
+            if (listenerLock == null) throw new IllegalStateException("no lock in " + helper.getClass());
             busId = BusAnatomy.busId(bus);
         } catch (ReflectiveOperationException | RuntimeException e) {
             SleepMod.LOGGER.error("Cannot reach EventBus internals ({}); event counting disabled", bus.getClass(), e);
@@ -158,11 +160,16 @@ final class EventCounter {
 
     /** the classes with a listener list now (copied under the helper's read lock: other threads post and register) */
     private Object[] knownTypes() {
-        listenerLock.readLock().lock();
-        try {
+        if (listenerLock instanceof ReadWriteLock rw) {
+            rw.readLock().lock();
+            try {
+                return listenerLists.keySet().toArray();
+            } finally {
+                rw.readLock().unlock();
+            }
+        }
+        synchronized (listenerLock) {   // eventbus 6.2: the cache writes its map under synchronized (lock)
             return listenerLists.keySet().toArray();
-        } finally {
-            listenerLock.readLock().unlock();
         }
     }
 
