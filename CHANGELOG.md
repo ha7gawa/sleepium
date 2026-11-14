@@ -4,6 +4,26 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.2.5 - 2026-11-14
+
+Smooth camera turns at far view distances, and two fixes for the experimental GPU terrain.
+
+- **No stutter when you turn the camera at far view distances.** Every time the camera turns by 2 degrees, the game
+  works out again which chunk sections are in view. It walked a linked list of every loaded section and read each
+  section's box, so the processor waited on memory for each one: about 7 ms a turn at 32 chunks. Sleepium now keeps
+  the sections' positions in flat arrays and tests whole 32-block regions at once. It picks the same sections in the
+  same order (frame hashes unchanged). The lists of sections to draw are rebuilt from compact per-section records too,
+  without reading every section again. Turning the camera at 32 chunks on a desktop: 167 -> 1 124 fps, stutters
+  38.6 -> 0.06 %; with the GPU terrain 131 -> 379 fps. A phone at 6 chunks: about +7 %. No change while the camera
+  stands still. Switch: `lab.opt.FrustumRegionMixin`.
+- **Fix: GPU terrain left a cross of missing chunks at view distance 31 and above** (since 1.2.0). A section's place in
+  the GPU's grid did not fit in its field from 31 chunks on, and three columns and three rows of chunks were drawn over
+  others.
+- **Fix: turning on the GPU terrain on a device without OpenGL 4.5 crashed the game** (Android launchers with OpenGL
+  3.3). The GPU terrain now checks the driver first and leaves the normal terrain when it cannot run. The same happens
+  when its grid does not fit in video memory, for example a very tall world (JJThunder To The Max) at a far view
+  distance.
+
 ## 1.2.4 - 2026-11-14
 
 A fix for servers with Krypton.

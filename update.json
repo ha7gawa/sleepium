@@ -1,6 +1,7 @@
 {
   "homepage": "https://modrinth.com/mod/sleepium",
   "1.21.1": {
+    "1.2.5": "No stutter when the camera turns at far view distances (32 chunks while turning: 167 -> 1 124 fps); GPU terrain: no cross of missing chunks from 31 chunks, no crash without OpenGL 4.5.",
     "1.2.4": "Fix: players were disconnected from a server with Krypton ('a frame cut inside a container', since 1.2.3).",
     "1.2.3": "See and choose what Sleepium does to each mod (Options -> Sleepium -> Mods), what each mod costs and where the server's time goes, a pack settings file for modpack makers, Find the cause, a HUD; fix: joining with Krypton.",
     "1.2.2": "Thermal dynamos and other mods' machines no longer stop under Sleepium's sleep (since 1.2.0); sounds no longer stall the game (a heavy sound mod's horde 11 -> 41 fps); measured choices kept per machine; no join stalls on Intel; the log names the mod Sleepium gave way to.",
@@ -24,12 +25,13 @@
     "1.0.0": "The first public release."
   },
   "promos": {
-    "1.21.1-latest": "1.2.4",
-    "1.21.1-recommended": "1.2.4",
-    "1.20.1-latest": "1.2.4",
-    "1.20.1-recommended": "1.2.4"
+    "1.21.1-latest": "1.2.5",
+    "1.21.1-recommended": "1.2.5",
+    "1.20.1-latest": "1.2.5",
+    "1.20.1-recommended": "1.2.5"
   },
   "1.20.1": {
+    "1.2.5": "No stutter when the camera turns at far view distances; GPU terrain: no cross of missing chunks from 31 chunks, no crash without OpenGL 4.5 (Android launchers).",
     "1.2.4": "The same network fix as 1.21.1 (Krypton Reno on 1.20.1 was not affected).",
     "1.2.3": "See and choose what Sleepium does to each mod (Options -> Sleepium -> Mods), what each mod costs and where the server's time goes, a pack settings file for modpack makers, Find the cause, a HUD; fix: joining with Krypton.",
     "1.2.2": "The same as 1.21.1; the Thermal series checked (its dynamos stayed off with fuel in under 1.2.0-1.2.1).",
