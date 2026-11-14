@@ -18,6 +18,19 @@ public final class GrowBuffer {
 
     /** the bound buffer `id` at `target` gets `bytes` from `ptr` (STREAM_DRAW) */
     public static void upload(int target, int id, long bytes, long ptr) {
+        if (UploadRing.ON) {
+            // the storage made once at a grown size and never specified again; the frame's bytes copied in on the GPU.
+            // The size asked of the buffer itself: GL names are reused after a delete (a table by name went stale)
+            long cap = org.lwjgl.opengl.GL32C.glGetBufferParameteri64(target, GL15C.GL_BUFFER_SIZE);
+            if (bytes > cap) {
+                cap = Math.max(65536L, Long.highestOneBit(Math.max(1, bytes - 1)) << 1);
+                GL15C.nglBufferData(target, cap, 0L, GL15C.GL_DYNAMIC_DRAW);
+                grows++;
+            }
+            if (bytes > 0 && !UploadRing.copy(id, 0, ptr, bytes)) GL15C.nglBufferSubData(target, 0, bytes, ptr);
+            uploads++;
+            return;
+        }
         if (!ON) {
             GL15C.nglBufferData(target, bytes, ptr, GL15C.GL_STREAM_DRAW);
             return;

@@ -158,6 +158,8 @@
     "GrowVertexBufferMixin",
     "StallProbeMixin",
     "StallProbeGlMixin",
+    "UploadRingMixin",
+    "NoFrameYieldMixin",
     "TaskBudgetMixin",
     "TaskQueueAccessor",
     "GlInboxMixin",

@@ -1113,10 +1113,15 @@ public final class PartBatch {
             persistUploads++;
         } else if (pHi >= pLo) {
             int n = pHi - pLo + 1;
-            GL15C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, pSsbo);
-            GL15C.nglBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 144L * pLo, 144L * n, pMem + 144L * pLo);
-            GL15C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, pSpinSsbo);
-            GL15C.nglBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, SPIN_BYTES * pLo, SPIN_BYTES * n, pSpin + SPIN_BYTES * pLo);
+            // the changed records through the upload ring (no staging allocation by the driver); else as before
+            if (!UploadRing.copy(pSsbo, 144L * pLo, pMem + 144L * pLo, 144L * n)) {
+                GL15C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, pSsbo);
+                GL15C.nglBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 144L * pLo, 144L * n, pMem + 144L * pLo);
+            }
+            if (!UploadRing.copy(pSpinSsbo, SPIN_BYTES * pLo, pSpin + SPIN_BYTES * pLo, SPIN_BYTES * n)) {
+                GL15C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, pSpinSsbo);
+                GL15C.nglBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, SPIN_BYTES * pLo, SPIN_BYTES * n, pSpin + SPIN_BYTES * pLo);
+            }
             persistUploads++;
         }
         pLo = Integer.MAX_VALUE;
