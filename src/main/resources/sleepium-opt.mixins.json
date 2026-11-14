@@ -159,6 +159,14 @@
     "EntityFluidLoopMixin"
   ],
   "client": [
+    "TickSliceMinecraftMixin",
+    "MinecraftTimerAccessor",
+    "TickSliceLevelMixin",
+    "TickSliceEntityMixin",
+    "TickSliceRenderMixin",
+    "TickSliceBlockEntityMixin",
+    "GlInboxMixin",
+    "TickSliceLaterMixin",
     "ArmorResourceMemoMixin",
     "DebugScreenCacheMixin",
     "ForgeHudTextBatchMixin",

@@ -41,6 +41,8 @@ public final class ClientCounters {
                 + (Boolean.getBoolean("lab.opt.ChunkMultiDrawMixin") ? "; " + (RegionDraw.on() ? RegionDraw.report() : ChunkMultiDraw.report()) : "")
                 + (Boolean.getBoolean("lab.opt.VertexSortRadixMixin") ? "; " + QuadSort.report() : "") + extra()
                 + (Boolean.getBoolean("lab.opt.SectionListsMixin") ? "; " + SectionLists.report() : "")
+                + (TickSlice.ON ? "; " + TickSlice.report() : "")
+                + (GlInbox.ON ? "; " + GlInbox.report() : "")
                 + (Boolean.getBoolean("lab.opt.FrustumRegionMixin") ? "; " + FrustumRegions.report() : "")
                 + (Boolean.getBoolean("lab.opt.ShaderLightMixin") ? "; " + LightVolumes.report() : "")
                 + (Boolean.getBoolean("lab.opt.ChunkTickMemoMixin") ? "; chunk tick memo: hits " + ChunkTickMemo.hits + ", misses " + ChunkTickMemo.misses + ", epoch " + ChunkTickMemo.epoch : "")

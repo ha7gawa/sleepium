@@ -116,6 +116,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SectionListsMixin")) && Boolean.getBoolean("lab.opt.ChunkMultiDrawMixin");
         if (simple.equals("FrustumRegionAccessor") || simple.equals("RenderChunkInfoAccessor") || simple.equals("SectionSetMixin") || simple.equals("SectionOriginEpochMixin"))   // part of the flat frustum walk
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.FrustumRegionMixin");
+        if (simple.startsWith("TickSlice") || simple.equals("MinecraftTimerAccessor")) on = Boolean.getBoolean("lab.opt.TickSlice");
+        if (simple.equals("GlInboxMixin")) on = Boolean.getBoolean("lab.opt.GlInbox");
         if (simple.equals("ClientChunkCacheBiomeMixin"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ClientBiomeMemoMixin");
         if (simple.equals("SamplerUnitDedupeMixin"))
