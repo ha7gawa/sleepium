@@ -58,11 +58,17 @@ public abstract class ChunkSectionMixin implements ChunkMultiDraw.ChunkEntries {
             var o = ((SectionRenderDispatcher.RenderSection) (Object) this).getOrigin();
             dev.lull.optsupport.LightBoxes.sectionChanged(o.getX() >> 4, o.getY() >> 4, o.getZ() >> 4);
         }
+    }
+
+    /** after the field is set: SectionLists' "maybe dirty" never lags the section (setDirty can come from another thread) */
+    @Inject(method = "setDirty", at = @At("RETURN"))
+    private void sleep$dirtied(boolean playerChanged, CallbackInfo ci) {
         dev.lull.optsupport.SectionLists.dirtied((SectionRenderDispatcher.RenderSection) (Object) this);
     }
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void sleep$tag(CallbackInfo ci) {
+        dev.lull.optsupport.SectionLists.born((SectionRenderDispatcher.RenderSection) (Object) this);
         if (((SectionRenderDispatcher.RenderSection) (Object) this).index < 0) return;   // not the level's (Sable's ship sections: local origins)
         for (var e : buffers.entrySet()) ((ChunkBufferTag) e.getValue()).sleep$tag((SectionRenderDispatcher.RenderSection) (Object) this, e.getKey());
     }
@@ -75,8 +81,13 @@ public abstract class ChunkSectionMixin implements ChunkMultiDraw.ChunkEntries {
     @Inject(method = "reset", at = @At("HEAD"))
     private void sleep$reset(CallbackInfo ci) {
         sleep$epoch++;
-        dev.lull.optsupport.SectionLists.changed();
-        dev.lull.optsupport.SectionLists.dirtied((SectionRenderDispatcher.RenderSection) (Object) this);   // reset sets dirty
         ChunkMultiDraw.release((SectionRenderDispatcher.RenderSection) (Object) this);
+    }
+
+    /** reset set the section uncompiled and dirty */
+    @Inject(method = "reset", at = @At("RETURN"))
+    private void sleep$wasReset(CallbackInfo ci) {
+        dev.lull.optsupport.SectionLists.changed((SectionRenderDispatcher.RenderSection) (Object) this);
+        dev.lull.optsupport.SectionLists.dirtied((SectionRenderDispatcher.RenderSection) (Object) this);
     }
 }

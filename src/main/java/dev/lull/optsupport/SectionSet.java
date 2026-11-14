@@ -22,7 +22,7 @@ import org.joml.FrustumIntersection;
  */
 public final class SectionSet extends LinkedHashSet<Object> {
     private Object[] sec = new Object[256];
-    private int[] ox = new int[256], oy = new int[256], oz = new int[256], rid = new int[256];
+    private int[] ox = new int[256], oy = new int[256], oz = new int[256], rid = new int[256], sidx = new int[256];
     private int n, regions, epoch = -1;
     private int[] rx = new int[64], ry = new int[64], rz = new int[64];
     private final Long2IntOpenHashMap regionOf = new Long2IntOpenHashMap();
@@ -47,9 +47,11 @@ public final class SectionSet extends LinkedHashSet<Object> {
             oy = java.util.Arrays.copyOf(oy, c);
             oz = java.util.Arrays.copyOf(oz, c);
             rid = java.util.Arrays.copyOf(rid, c);
+            sidx = java.util.Arrays.copyOf(sidx, c);
         }
         SectionRenderDispatcher.RenderSection s = ((dev.lull.opt.SectionNodeAccessor) node).sleep$section();
         sec[n] = s;
+        sidx[n] = s.index;
         place(n, s);
         n++;
         return true;
@@ -109,6 +111,10 @@ public final class SectionSet extends LinkedHashSet<Object> {
         java.util.Arrays.fill(state, 0, regions, (byte) 0);
         List<Object> list = (List<Object>) out;
         long tested = 0, byRegion = 0;
+        SectionLists.walkBegin(list.size(), n);
+        Object[] wr = SectionLists.walkRefs;
+        int[] wi = SectionLists.walkIdx;
+        int k = 0;
         for (int i = 0; i < n; i++) {
             int r = rid[i];
             byte st = state[r];
@@ -128,7 +134,10 @@ public final class SectionSet extends LinkedHashSet<Object> {
                 if (!fi.testAab((float) (x - cx), (float) (y - cy), (float) (z - cz), (float) (x + 16 - cx), (float) (y + 16 - cy), (float) (z + 16 - cz))) continue;
             } else byRegion++;
             list.add(sec[i]);
+            wr[k] = sec[i];
+            wi[k++] = sidx[i];
         }
+        SectionLists.walkN = k;
         FrustumRegions.boxTests += tested;
         FrustumRegions.boxesSkipped += byRegion;
         FrustumRegions.regionTests += regions;

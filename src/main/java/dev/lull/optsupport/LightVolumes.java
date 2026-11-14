@@ -397,7 +397,7 @@ public final class LightVolumes {
     private static void assign(net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection section, int vol) {
         Object[] md = ((ChunkMultiDraw.ChunkEntries) section).sleep$md();
         for (Object o : md) if (o instanceof ChunkMultiDraw.Entry e) e.vol = e.recipes ? vol : -1;
-        SectionLists.changed();
+        SectionLists.changed(section);
     }
 
     /** RenderSection reset (origin change, release): its volume is free again. */

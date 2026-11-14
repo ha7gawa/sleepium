@@ -36,6 +36,6 @@ public abstract class SectionListsMixin {
 
     @Inject(method = "addRecentlyCompiledSection", at = @At("HEAD"))
     private void sleep$compiled(SectionRenderDispatcher.RenderSection section, CallbackInfo ci) {
-        SectionLists.changed();
+        SectionLists.changed(section);
     }
 }
