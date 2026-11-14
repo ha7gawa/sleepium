@@ -224,7 +224,7 @@ public final class SleepUi {
         } else if (worldStep == 2 && t > 14) {
             shot(mc, "world-hud");
             worldStep = 3;
-            SleepStats.hud = false;
+            SleepStats.hud = Boolean.getBoolean("sleep.ui.hud");   // (the HUD asked for stays on: the HUD page shows it on)
         } else if (worldStep == 3 && t > 15 && Boolean.getBoolean("sleep.ui.shotProfile") && !dev.lull.optsupport.ModProfile.ready) {   // first a recording (8 s)
             if (!dev.lull.optsupport.ModProfile.recording()) dev.lull.optsupport.ModProfile.start(8);
             worldAt = now - (long) (15e9);   // (the next steps' clock starts after it)

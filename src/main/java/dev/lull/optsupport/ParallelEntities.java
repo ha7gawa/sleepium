@@ -34,6 +34,8 @@ public final class ParallelEntities {
     public static volatile boolean enabled = true;
     private static final int MIN = Integer.getInteger("lab.pentities.min", 128);
     private static final int CHUNK = Integer.getInteger("lab.pentities.chunk", 16);
+    /** the fan-out's threads (guided claims: LabRuntime.claim) */
+    private static volatile int parts = 1;
     /** classes a conflict refused (their entities tick in the head from then on) */
     private static final Set<Class<?>> REFUSED = ConcurrentHashMap.newKeySet();
     public static long walks, tails, inTail, deferredMoves, deferredRemoves, conflicts;
@@ -296,7 +298,8 @@ public final class ParallelEntities {
         try {
             LabRuntime pool = FrameReactor.pool();
             int chunks = (runEnd - t + CHUNK - 1) / CHUNK;
-            int helpers = Math.min(pool.workerCount(), chunks - 1);
+            int helpers = Math.min(pool.workerCount(), LabRuntime.GUIDED ? runEnd - t - 1 : chunks - 1);
+            parts = helpers + 1;
             for (int k = 0; k < helpers; k++) pool.execute(ParallelEntities::workerRun);
             drain(true);
             long spinUntil = System.nanoTime() + 20_000;
@@ -346,8 +349,8 @@ public final class ParallelEntities {
     private static void drain(boolean render) {
         int done = 0;
         int[] cur = CURRENT.get();
-        for (int s; (s = NEXT.getAndAdd(CHUNK)) < end; ) {
-            int e = Math.min(end, s + CHUNK);
+        for (long r; (r = LabRuntime.claim(NEXT, end, CHUNK, parts)) >= 0; ) {
+            int s = (int) (r >>> 32), e = (int) r;
             for (int j = s; j < e; j++) {
                 cur[0] = j;
                 try {

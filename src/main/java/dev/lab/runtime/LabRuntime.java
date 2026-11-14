@@ -467,9 +467,10 @@ public final class LabRuntime extends AbstractExecutorService {
     public void forRange(int n, int chunk, int helpers, IntConsumer body) {
         if (n <= 0) return;
         int c = Math.max(1, chunk);
-        RangeJob job = new RangeJob(n, c, body, Thread.currentThread());
-        tickJob = job;
         int wake = Math.min(Math.min(helpers, workers.length), (n + c - 1) / c - 1);
+        if (GUIDED && c > 1) wake = Math.min(Math.min(helpers, workers.length), n - 1);   // guided claims shrink: every helper can get some
+        RangeJob job = new RangeJob(n, c, body, Thread.currentThread(), Math.max(1, wake + 1));
+        tickJob = job;
         for (int i = 0; i < wake; i++) if (!wakeOne()) break;
         job.drain();
         job.await(cfg.spinNanos);
@@ -482,17 +483,42 @@ public final class LabRuntime extends AbstractExecutorService {
         }
     }
 
+    /**
+     * -Dlab.runtime.guided=true: forRange claims shrink as the range drains (bench_cpu.c's guided self-scheduling: a claim
+     * is remaining / (4 * participants), at least 1) instead of fixed chunks; a caller's chunk of 1 stays 1. Standalone
+     * (tools/bench/PoolBench.java, 8 threads): never slower, twice as fast for small fan-outs (fixed chunks of 16 left
+     * threads idle at n = 64).
+     */
+    public static final boolean GUIDED = Boolean.getBoolean("lab.runtime.guided");
+
+    /**
+     * A claim from a shared counter for the game's own fan-outs (ParallelEntities, ParallelParticles): fixed chunks, or
+     * with GUIDED remaining / (4 * parts) at least 1. Returns start << 32 | end, or -1 when the range is drained.
+     */
+    public static long claim(AtomicInteger next, int end, int chunk, int parts) {
+        int c = chunk;
+        if (GUIDED && chunk > 1) {
+            int cur = next.get();
+            if (cur >= end) return -1;
+            c = Math.max(1, (end - cur) / (Math.max(1, parts) * 4));
+        }
+        int s = next.getAndAdd(c);
+        if (s >= end) return -1;
+        return ((long) s << 32) | Math.min(end, s + c);
+    }
+
     private static final class RangeJob {
-        final int n, chunk;
+        final int n, chunk, parts;
         final IntConsumer body;
         final Thread waiter;
         final AtomicInteger next = new AtomicInteger();
         final AtomicInteger remaining;
         volatile Throwable error;
 
-        RangeJob(int n, int chunk, IntConsumer body, Thread waiter) {
+        RangeJob(int n, int chunk, IntConsumer body, Thread waiter, int parts) {
             this.n = n;
             this.chunk = chunk;
+            this.parts = parts;
             this.body = body;
             this.waiter = waiter;
             this.remaining = new AtomicInteger(n);
@@ -504,8 +530,17 @@ public final class LabRuntime extends AbstractExecutorService {
 
         void drain() {
             int done = 0;
-            for (int s; (s = next.getAndAdd(chunk)) < n; ) {
-                int e = Math.min(n, s + chunk);
+            boolean guided = GUIDED && chunk > 1;
+            while (true) {
+                int c = chunk;
+                if (guided) {
+                    int cur = next.get();
+                    if (cur >= n) break;
+                    c = Math.max(1, (n - cur) / (parts * 4));
+                }
+                int s = next.getAndAdd(c);
+                if (s >= n) break;
+                int e = Math.min(n, s + c);
                 try {
                     for (int i = s; i < e; i++) body.accept(i);
                 } catch (Throwable t) {

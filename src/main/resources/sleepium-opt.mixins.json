@@ -155,8 +155,11 @@
     "LightTimingMixin"
   ],
   "client": [
+    "TaskBudgetMixin",
+    "TaskQueueAccessor",
     "GlInboxMixin",
     "TickSliceMinecraftMixin",
+    "TickSliceEntityMixin",
     "TickSliceTimerMixin",
     "TickSliceLevelMixin",
     "TickSliceRenderMixin",

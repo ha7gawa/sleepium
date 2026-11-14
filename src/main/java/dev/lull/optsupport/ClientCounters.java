@@ -41,6 +41,7 @@ public final class ClientCounters {
                 + (Boolean.getBoolean("lab.opt.FrustumRegionMixin") ? "; " + FrustumRegions.report() : "")
                 + (TickSlice.ON ? "; " + TickSlice.report() : "")
                 + (GlInbox.ON ? "; " + GlInbox.report() : "")
+                + (TaskBudget.ON ? "; " + TaskBudget.report() : "")
                 + (Boolean.getBoolean("lab.opt.SectionListsMixin") ? "; " + SectionLists.report() : "")
                 + (Boolean.getBoolean("lab.opt.BlockMeshMemoMixin") ? "; " + BlockMeshMemo.report() : "")
                 + (Boolean.getBoolean("lab.opt.ShaderLightMixin") ? "; " + LightVolumes.report() : "")

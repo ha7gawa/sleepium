@@ -30,6 +30,8 @@ public final class ParallelParticles {
 
     private static final int MIN = Integer.getInteger("lab.particles.min", 256);
     private static final int CHUNK = Integer.getInteger("lab.particles.chunk", 64);
+    /** the fan-out's threads (guided claims: LabRuntime.claim) */
+    private static volatile int parts = 1;
     public static volatile boolean enabled = true;
     public static long lists, parallel, serial;
 
@@ -189,7 +191,8 @@ public final class ParallelParticles {
             // for the particle tick, ticking no particle itself; its place taken by the seat
             Integer lastAsked = ASKED.get(list);
             boolean reactor = chunks > 1 && (SERVE_ONLY < 0 || SERVE_ONLY > 0 && lastAsked != null && lastAsked > SERVE_ONLY);
-            int helpers = Math.min(pool.workerCount(), reactor ? chunks : chunks - 1);
+            int helpers = Math.min(pool.workerCount(), LabRuntime.GUIDED ? (reactor ? np : np - 1) : reactor ? chunks : chunks - 1);
+            parts = reactor ? Math.max(1, helpers) : helpers + 1;
             for (int k = 0; k < helpers; k++) pool.execute(ParallelParticles::workerRun);
             if (reactor) {
                 reactorTicks++;
@@ -241,8 +244,8 @@ public final class ParallelParticles {
 
     private static void drain(boolean render) {
         int done = 0;
-        for (int s; (s = NEXT.getAndAdd(CHUNK)) < jobN; ) {
-            int e = Math.min(jobN, s + CHUNK);
+        for (long r; (r = LabRuntime.claim(NEXT, jobN, CHUNK, parts)) >= 0; ) {
+            int s = (int) (r >>> 32), e = (int) r;
             long c0 = BURST_LOG ? System.nanoTime() : 0;
             for (int j = s; j < e; j++) {
                 Particle p = items[pureIdx[j]];
