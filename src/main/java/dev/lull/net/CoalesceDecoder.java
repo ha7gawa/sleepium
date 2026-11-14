@@ -17,7 +17,8 @@ import java.util.zip.Inflater;
  * <p>Up to 1.2.2 it sat before the splitter and cut the stream into frames itself, so it had to stand behind the
  * cipher: it was moved there when vanilla's setEncryptionKey ran. A mod that installs its cipher another way (Krypton:
  * its own setupEncryption) left it in front, reading encrypted bytes as lengths - "VarInt too long" (GitHub issue #7).
- * After the splitter its place no longer depends on how a cipher got in. The wire is the same as before.
+ * After the splitter its place no longer depends on how a cipher got in. The wire is the same as before. A frame a
+ * container ends inside (a 1.2.3 server whose prepender writes a length and a body apart: Krypton) waits for its rest.
  */
 public final class CoalesceDecoder extends MessageToMessageDecoder<ByteBuf> {
     private boolean on;
@@ -26,6 +27,8 @@ public final class CoalesceDecoder extends MessageToMessageDecoder<ByteBuf> {
     private final int[] len = new int[1];
     /** the most a container may inflate to (a broken or hostile stream cannot make the client allocate more) */
     private static final int MAX_OUT = 8 << 20;
+    /** the start of a frame a container ended inside (a server whose frames came as length + body buffers: Krypton), kept for the next container */
+    private ByteBuf carry;
 
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf frame, List<Object> out) throws Exception {
@@ -44,15 +47,27 @@ public final class CoalesceDecoder extends MessageToMessageDecoder<ByteBuf> {
         if (flag == 0) frames = frame.retainedSlice();
         else if (flag == 1) frames = inflate(ctx, frame);
         else throw new CorruptedFrameException("sleep coalesce: container flag " + flag);
+        if (carry != null && carry.isReadable()) {   // the rest of a frame the last container began: joined, then read from the copy
+            carry.writeBytes(frames);
+            frames.release();
+            frames = carry;
+        }
         try {
             while (frames.isReadable()) {   // the container's frames, each with its length: the bodies go on
                 int n = Coalesce.peekVarInt(frames, len);
-                if (n < 0 || frames.readableBytes() < len[0] + n) throw new CorruptedFrameException("sleep coalesce: a frame cut inside a container");
+                if (n < 0 || frames.readableBytes() < len[0] + n) break;   // cut: its rest comes in the next container
                 frames.skipBytes(len[0]);
-                out.add(frames.readRetainedSlice(n));
+                out.add(frames == carry ? frames.readBytes(n) : frames.readRetainedSlice(n));   // (the carry is reused: copies from it)
             }
+            if (frames.isReadable()) {
+                if (frames.readableBytes() > MAX_OUT) throw new CorruptedFrameException("sleep coalesce: a frame over " + MAX_OUT + " bytes across containers");
+                if (frames != carry) {
+                    if (carry == null) carry = ctx.alloc().heapBuffer(Math.max(256, frames.readableBytes() * 2));
+                    carry.writeBytes(frames);
+                } else carry.discardReadBytes();
+            } else if (carry != null) carry.clear();
         } finally {
-            frames.release();
+            if (frames != carry) frames.release();
         }
     }
 
@@ -88,6 +103,10 @@ public final class CoalesceDecoder extends MessageToMessageDecoder<ByteBuf> {
     @Override
     public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
         inflater.end();
+        if (carry != null) {
+            carry.release();
+            carry = null;
+        }
         super.handlerRemoved(ctx);
     }
 }
