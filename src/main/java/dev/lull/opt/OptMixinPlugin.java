@@ -121,7 +121,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.equals("RenderPriorityServerMixin"))   // part of the render priority flag
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.RenderPriorityMixin");
         if (simple.equals("GrowVertexBufferMixin")) on = Boolean.getBoolean("lab.gpu.growOnly");
-        if (simple.equals("StallProbeMixin")) on = Boolean.getBoolean("lab.stallProbe");
+        if (simple.startsWith("StallProbe")) on = Boolean.getBoolean("lab.stallProbe");
         if (simple.equals("TaskBudgetMixin") || simple.equals("TaskQueueAccessor")) on = Boolean.getBoolean("lab.opt.TaskBudget");
         if (simple.equals("GlInboxMixin")) on = Boolean.getBoolean("lab.opt.GlInbox");
         if (simple.startsWith("TickSlice")) on = Boolean.getBoolean("lab.opt.TickSlice");

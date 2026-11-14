@@ -157,6 +157,7 @@
   "client": [
     "GrowVertexBufferMixin",
     "StallProbeMixin",
+    "StallProbeGlMixin",
     "TaskBudgetMixin",
     "TaskQueueAccessor",
     "GlInboxMixin",

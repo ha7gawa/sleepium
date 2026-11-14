@@ -24,8 +24,10 @@ public final class StallProbe {
             t.setDaemon(true);
             t.start();
         }
+        long now = System.nanoTime();
+        if (frameId > 0) GlFrame.frameEnd(now - frameStart, LIMIT);
         frameId++;
-        frameStart = System.nanoTime();
+        frameStart = now;
     }
 
     private static void run() {
@@ -62,6 +64,6 @@ public final class StallProbe {
         StringBuilder sb = new StringBuilder("stall probe: " + longFrames + " frames over " + LIMIT / 1_000_000 + " ms, " + samples + " stacks; the most common:");
         SEEN.entrySet().stream().sorted((a, b) -> b.getValue()[0] - a.getValue()[0]).limit(4)
                 .forEach(e -> sb.append("\n    ").append(e.getValue()[0]).append(" x").append(e.getKey()));
-        return sb.toString();
+        return sb.append("\n  ").append(GlFrame.report()).toString();
     }
 }

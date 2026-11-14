@@ -26,9 +26,15 @@ public abstract class GlTraceMixin {
     @Inject(method = "enableDebugCallback", at = @At("TAIL"))
     private static void sleep$trace(int verbosity, boolean synchronous, CallbackInfo ci) {
         GL11.glEnable(KHRDebug.GL_DEBUG_OUTPUT);
-        GL11.glEnable(KHRDebug.GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        if (!Boolean.getBoolean("sleep.glTrace.async")) GL11.glEnable(KHRDebug.GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        // every message kind on (vanilla's verbosity may have filtered some out)
+        KHRDebug.glDebugMessageControl(GL11.GL_DONT_CARE, GL11.GL_DONT_CARE, GL11.GL_DONT_CARE, (java.nio.IntBuffer) null, true);
         sleep$callback = GLDebugMessageCallback.create((source, type, id, severity, length, message, user) -> {
-            if (type != KHRDebug.GL_DEBUG_TYPE_ERROR) return;
+            if (type != KHRDebug.GL_DEBUG_TYPE_ERROR) {
+                if (dev.lull.optsupport.StallProbe.ON && com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread())
+                    dev.lull.optsupport.GlFrame.msg(type, severity, id, GLDebugMessageCallback.getMessage(length, message));
+                return;
+            }
             StringBuilder sb = new StringBuilder();
             int n = 0;
             for (StackTraceElement e : Thread.currentThread().getStackTrace()) {

@@ -81,7 +81,10 @@ final class ClientMeter {
         if (FRAME_LOG) {   // the frame log's counters: sounds started, entities added to the client level
             bus.addListener(net.neoforged.neoforge.client.event.sound.PlaySoundEvent.class, e -> sounds++);
             bus.addListener(net.neoforged.neoforge.event.entity.EntityJoinLevelEvent.class, e -> {
-                if (e.getLevel().isClientSide()) added++;
+                if (e.getLevel().isClientSide()) {
+                    added++;
+                    if (dev.lull.optsupport.StallProbe.ON) dev.lull.optsupport.GlFrame.count(dev.lull.optsupport.GlFrame.ENTITIES_ADDED, 1);
+                }
             });
         }
         bus.addListener(RegisterClientCommandsEvent.class, e -> e.getDispatcher().register(
