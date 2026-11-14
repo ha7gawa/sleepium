@@ -155,6 +155,12 @@
     "LightTimingMixin"
   ],
   "client": [
+    "TickPaceMixin",
+    "FrustumRegionMixin",
+    "FrustumRegionAccessor",
+    "SectionNodeAccessor",
+    "SectionSetMixin",
+    "SectionOriginEpochMixin",
     "DebugScreenCacheMixin",
     "DebugScreenTextCacheMixin",
     "VoxelStreamCompileMixin",

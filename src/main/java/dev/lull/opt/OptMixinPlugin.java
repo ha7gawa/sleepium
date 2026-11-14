@@ -120,6 +120,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SoundNoWaitMixin");
         if (simple.equals("RenderPriorityServerMixin"))   // part of the render priority flag
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.RenderPriorityMixin");
+        if (simple.equals("FrustumRegionAccessor") || simple.equals("SectionNodeAccessor") || simple.equals("SectionSetMixin") || simple.equals("SectionOriginEpochMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.FrustumRegionMixin");
         // exp/frame-garbage: one flag for the per-frame garbage fixes
         if (simple.equals("Vec3FromRgbMixin") || simple.equals("OverworldFogMixin") || simple.equals("EntityCullNoAllocMixin") || simple.equals("FrustumInvoker")
                 || simple.equals("ItemFrameOffsetMixin") || simple.equals("EntityLightNoAllocMixin") || simple.equals("BlockEntityCullNoAllocMixin")

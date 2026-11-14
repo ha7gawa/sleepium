@@ -398,8 +398,28 @@ public final class ClientAuto {
 
     private ClientAuto() {}
 
+    /** -Dsleep.clientAuto.spin=<degrees a second>: the camera turns smoothly every frame (a fast look around: new sections in view every frame) */
+    private static final double SPIN = Double.parseDouble(System.getProperty("sleep.clientAuto.spin", "0"));
+    private static long spinAt;
+
+    private static void spin() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null || mc.screen != null) {
+            spinAt = 0;
+            return;
+        }
+        long now = System.nanoTime();
+        if (spinAt != 0) {
+            float d = (float) (SPIN * (now - spinAt) / 1e9);
+            mc.player.setYRot(mc.player.getYRot() + d);
+            mc.player.yRotO = mc.player.getYRot();
+        }
+        spinAt = now;
+    }
+
     static void register(IEventBus bus) {
         bus.addListener(ClientTickEvent.Post.class, e -> tick());
+        if (SPIN != 0) bus.addListener(net.neoforged.neoforge.client.event.RenderFrameEvent.Pre.class, e -> spin());
         log("enabled, label '" + LABEL + "'");
         // -Dsleep.clientAuto.asPlayers=true: vanilla's development-only paths off, as in a player's game (e.g. the
         // two warnings per sound that finds the channel pool full: a dev run measured their logging, not the game)

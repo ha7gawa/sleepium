@@ -41,10 +41,26 @@ public final class DrawStats {
         if (!active) return;
         GpuTimer.section(name);
         long now = System.nanoTime();
-        if (section != null) SECTIONS.computeIfAbsent(section, k -> new long[1])[0] += now - sectionAt;
+        if (section != null) {
+            long[] t = SECTIONS.computeIfAbsent(section, k -> new long[3]);
+            t[0] += now - sectionAt;
+            t[1] += now - sectionAt;
+        }
         section = name;
         sectionAt = now;
+        if (name == null) {   // renderLevel ended: a slow one adds its sections to the slow tally
+            long sum = 0;
+            for (long[] t : SECTIONS.values()) sum += t[1];
+            boolean slow = sum > SLOW_NS;
+            if (slow) slowFrames++;
+            for (long[] t : SECTIONS.values()) {
+                if (slow) t[2] += t[1];
+                t[1] = 0;
+            }
+        }
     }
+    private static final long SLOW_NS = (long) (Double.parseDouble(System.getProperty("sleep.drawStats.slowMs", "3")) * 1e6);
+    private static int slowFrames;
 
     private DrawStats() {}
 
@@ -54,6 +70,7 @@ public final class DrawStats {
         TYPES.clear();
         OBJECTS.clear();
         SECTIONS.clear();
+        slowFrames = 0;
         section = null;
         java.util.Arrays.fill(PHASE, 0);
         java.util.Arrays.fill(PHASE_START, 0);
@@ -110,6 +127,8 @@ public final class DrawStats {
                 dev.lull.optsupport.ChunkMultiDraw.loopNanos / 1e6 / frames, dev.lull.optsupport.ChunkMultiDraw.drawNanos / 1e6 / frames));
         sb.append("\n  renderLevel sections (ms per frame):");
         SECTIONS.forEach((k, t) -> sb.append(String.format(Locale.ROOT, " %s %.3f;", k, t[0] / 1e6 / frames)));
+        sb.append(String.format(Locale.ROOT, "\n  slow renderLevels (over %.1f ms): %d, ms each by section:", SLOW_NS / 1e6, slowFrames));
+        SECTIONS.forEach((k, t) -> { if (t[2] / 1e6 / Math.max(1, slowFrames) >= 0.05) sb.append(String.format(Locale.ROOT, " %s %.3f;", k, t[2] / 1e6 / Math.max(1, slowFrames))); });
         sb.append(String.format(Locale.ROOT, "\n  immediate draws %.1f, vertices %.0f, uploaded %.0f KiB", d / (double) frames, v / (double) frames, b / 1024.0 / frames));
         List<Map.Entry<String, long[]>> ts = new ArrayList<>(TYPES.entrySet());
         ts.sort((x, y) -> Long.compare(y.getValue()[1], x.getValue()[1]));
