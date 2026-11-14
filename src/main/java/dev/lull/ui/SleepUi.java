@@ -205,13 +205,14 @@ public final class SleepUi {
     private static final String SHOT_WORLD = System.getProperty("sleep.ui.shotWorld");
     private static long worldAt;
     private static int worldStep;
+    private static final int SHOT_DELAY = Integer.getInteger("sleep.ui.shotDelay", 0);
 
     private static void worldShots() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || mc.player == null) return;
         long now = System.nanoTime();
         if (worldAt == 0) worldAt = now;
-        double t = (now - worldAt) / 1e9;
+        double t = (now - worldAt) / 1e9 - SHOT_DELAY;   // -Dsleep.ui.shotDelay=<s>: the steps begin later (a large pack loads its terrain first)
         if (worldStep == 0 && t > 8) {
             mc.setScreen(new SleepScreen(null, 0));
             worldStep = 1;

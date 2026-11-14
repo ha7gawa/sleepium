@@ -259,7 +259,7 @@ public final class LabRuntime extends AbstractExecutorService {
 
         private int prio = Integer.MIN_VALUE;
 
-        /** the OS priority for the work about to run: the tick one for TICK work, else the base one (a call on change only) */
+        /** the OS priority for the work about to run: the tick one for TICK and CHUNK work, the base one for BACKGROUND (a call on change only) */
         private void priority(boolean tick) {
             int tp = tickPriority;
             int p = tick && tp != Integer.MIN_VALUE ? tp : cfg.osPriority;
@@ -282,7 +282,7 @@ public final class LabRuntime extends AbstractExecutorService {
                 }
                 lastLane = -1;
                 Runnable t = find();
-                if (t != null) priority(lastLane == 0);
+                if (t != null && lastLane >= 0) priority(lastLane < 2);   // (own deque or a steal: the priority stays)
                 if (t != null) {
                     if (spinning) {
                         spinning = false;

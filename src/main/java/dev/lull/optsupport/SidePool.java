@@ -15,7 +15,8 @@ import java.util.concurrent.TimeUnit;
 public final class SidePool extends AbstractExecutorService {
     @Override
     public void execute(Runnable task) {
-        (Sides.server() ? ServerReactor.pool() : FrameReactor.pool()).execute(task, LabRuntime.Lane.CHUNK);
+        // the BACKGROUND lane: below normal, as Worker-Main was; the pools' own work (CHUNK, TICK) keeps its priority
+        (Sides.server() ? ServerReactor.pool() : FrameReactor.pool()).execute(task, LabRuntime.Lane.BACKGROUND);
     }
 
     @Override public void shutdown() {}
