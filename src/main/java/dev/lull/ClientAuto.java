@@ -118,6 +118,24 @@ public final class ClientAuto {
     private static final int SCENE_MIN_S = Integer.getInteger("sleep.clientAuto.sceneWait", 0);
     /** -Dsleep.clientAuto.framehash=true: freeze, then hash the frame's pixels and save it as a PNG (render exactness) */
     private static final boolean FRAMEHASH = Boolean.getBoolean("sleep.clientAuto.framehash");
+    /** -Dsleep.clientAuto.spin=<degrees a second>: the camera turns smoothly every frame (a fast look around: new sections in view every frame) */
+    private static final double SPIN = Double.parseDouble(System.getProperty("sleep.clientAuto.spin", "0"));
+    private static long spinAt;
+
+    private static void spin() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null || mc.screen != null) {
+            spinAt = 0;
+            return;
+        }
+        long now = System.nanoTime();
+        if (spinAt != 0) {
+            float d = (float) (SPIN * (now - spinAt) / 1e9);
+            mc.player.setYRot(mc.player.getYRot() + d);
+            mc.player.yRotO = mc.player.getYRot();
+        }
+        spinAt = now;
+    }
     private static int hashAt = -1, idleTicks, sceneAt;
     /** -Dsleep.clientAuto.shot=S: a screenshot S seconds into the measured window, nothing frozen (moving scenes) */
     private static final double SHOT_S = Double.parseDouble(System.getProperty("sleep.clientAuto.shot", "-1"));   // seconds, fractions allowed
@@ -413,6 +431,9 @@ public final class ClientAuto {
     static void register(IEventBus bus) {
         bus.addListener(EventPriority.NORMAL, false, TickEvent.ClientTickEvent.class, e -> {
             if (e.phase == TickEvent.Phase.END) tick();   // 1.21.1: ClientTickEvent.Post
+        });
+        if (SPIN != 0) bus.addListener(EventPriority.NORMAL, false, TickEvent.RenderTickEvent.class, e -> {
+            if (e.phase == TickEvent.Phase.START) spin();   // 1.21.1: RenderFrameEvent.Pre
         });
         log("enabled, label '" + LABEL + "'");
         // -Dsleep.clientAuto.asPlayers=true: vanilla's development-only paths off, as in a player's game (e.g. the

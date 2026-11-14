@@ -43,6 +43,6 @@ public abstract class SectionListsMixin {
 
     @Inject(method = "addRecentlyCompiledChunk", at = @At("HEAD"))
     private void sleep$compiled(ChunkRenderDispatcher.RenderChunk section, CallbackInfo ci) {
-        SectionLists.changed();
+        SectionLists.changed(section);
     }
 }

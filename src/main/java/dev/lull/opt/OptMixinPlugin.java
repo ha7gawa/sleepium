@@ -114,6 +114,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.VertexSortRadixMixin");
         if (simple.equals("SectionListsMixin") || simple.equals("LevelRendererVisibleAccessor"))   // needs the multi-draw entry slots
             on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SectionListsMixin")) && Boolean.getBoolean("lab.opt.ChunkMultiDrawMixin");
+        if (simple.equals("FrustumRegionAccessor") || simple.equals("RenderChunkInfoAccessor") || simple.equals("SectionSetMixin") || simple.equals("SectionOriginEpochMixin"))   // part of the flat frustum walk
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.FrustumRegionMixin");
         if (simple.equals("ClientChunkCacheBiomeMixin"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ClientBiomeMemoMixin");
         if (simple.equals("SamplerUnitDedupeMixin"))

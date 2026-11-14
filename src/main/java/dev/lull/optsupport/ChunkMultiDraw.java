@@ -515,7 +515,7 @@ public final class ChunkMultiDraw {
         e.arena = a;
         if (OcclusionCull.ON && e.id < 0) e.id = OcclusionCull.newId();
         ((ChunkEntries) section).sleep$md()[slot(a)] = e;
-        SectionLists.changed();
+        SectionLists.changed(section);
     }
 
     // ------------------------------------------------------------------ packed vertices (16 bytes, bit-exact)
@@ -646,7 +646,7 @@ public final class ChunkMultiDraw {
                 OcclusionCull.freeId(e.id);
                 e.id = -1;
                 md[k] = null;
-                SectionLists.changed();
+                SectionLists.changed(section);
             }
         }
     }

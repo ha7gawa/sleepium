@@ -59,11 +59,17 @@ public abstract class ChunkSectionMixin implements ChunkMultiDraw.ChunkEntries {
     private void sleep$dirty(boolean playerChanged, CallbackInfo ci) {
         sleep$epoch++;
         // (1.21.1 also told LightBoxes here when part batching's lit boxes are on: they come with PartBatch's port)
+    }
+
+    /** after the field is set: SectionLists' "maybe dirty" never lags the chunk (setDirty can come from another thread) */
+    @Inject(method = "setDirty", at = @At("RETURN"))
+    private void sleep$dirtied(boolean playerChanged, CallbackInfo ci) {
         dev.lull.optsupport.SectionLists.dirtied((ChunkRenderDispatcher.RenderChunk) (Object) this);
     }
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void sleep$tag(CallbackInfo ci) {
+        dev.lull.optsupport.SectionLists.born((ChunkRenderDispatcher.RenderChunk) (Object) this);
         if (((ChunkRenderDispatcher.RenderChunk) (Object) this).index < 0) return;   // not the level's (Sable's ship sections: local origins)
         for (var e : buffers.entrySet()) ((ChunkBufferTag) e.getValue()).sleep$tag((ChunkRenderDispatcher.RenderChunk) (Object) this, e.getKey());
     }
@@ -71,8 +77,13 @@ public abstract class ChunkSectionMixin implements ChunkMultiDraw.ChunkEntries {
     @Inject(method = "reset", at = @At("HEAD"))
     private void sleep$reset(CallbackInfo ci) {
         sleep$epoch++;
-        dev.lull.optsupport.SectionLists.changed();
-        dev.lull.optsupport.SectionLists.dirtied((ChunkRenderDispatcher.RenderChunk) (Object) this);   // reset sets dirty
         ChunkMultiDraw.release((ChunkRenderDispatcher.RenderChunk) (Object) this);
+    }
+
+    /** reset set the chunk uncompiled and dirty */
+    @Inject(method = "reset", at = @At("RETURN"))
+    private void sleep$wasReset(CallbackInfo ci) {
+        dev.lull.optsupport.SectionLists.changed((ChunkRenderDispatcher.RenderChunk) (Object) this);
+        dev.lull.optsupport.SectionLists.dirtied((ChunkRenderDispatcher.RenderChunk) (Object) this);
     }
 }
