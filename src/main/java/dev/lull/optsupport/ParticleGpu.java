@@ -302,9 +302,9 @@ public final class ParticleGpu {
             GL33C.glVertexAttribDivisor(3, 1);
         }
         GL15C.glBindBuffer(GL15C.GL_ARRAY_BUFFER, recBuf);
-        GL15C.nglBufferData(GL15C.GL_ARRAY_BUFFER, (long) n * REC, MemoryUtil.memAddress(rec), GL15C.GL_STREAM_DRAW);
+        GrowBuffer.upload(GL15C.GL_ARRAY_BUFFER, recBuf, (long) n * REC, MemoryUtil.memAddress(rec));
         GL15C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, cornerBuf);
-        GL15C.nglBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, (long) nRot * 64, MemoryUtil.memAddress(corners), GL15C.GL_STREAM_DRAW);
+        GrowBuffer.upload(GL43C.GL_SHADER_STORAGE_BUFFER, cornerBuf, (long) nRot * 64, MemoryUtil.memAddress(corners));
         GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 2, recBuf);
         GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 3, cornerBuf);
         GL30C.glBindVertexArray(vao);
@@ -362,9 +362,9 @@ public final class ParticleGpu {
             GL33C.glVertexAttribDivisor(14, 1);
         }
         GL15C.glBindBuffer(GL15C.GL_ARRAY_BUFFER, recBuf);
-        GL15C.nglBufferData(GL15C.GL_ARRAY_BUFFER, (long) n * REC, MemoryUtil.memAddress(rec), GL15C.GL_STREAM_DRAW);
+        GrowBuffer.upload(GL15C.GL_ARRAY_BUFFER, recBuf, (long) n * REC, MemoryUtil.memAddress(rec));
         GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, cornerBuf);
-        GL15C.nglBufferData(GL31C.GL_TEXTURE_BUFFER, (long) nRot * 64, MemoryUtil.memAddress(corners), GL15C.GL_STREAM_DRAW);
+        GrowBuffer.upload(GL31C.GL_TEXTURE_BUFFER, cornerBuf, (long) nRot * 64, MemoryUtil.memAddress(corners));
         GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, 0);
         int prevUnit = com.mojang.blaze3d.platform.GlStateManager._getActiveTexture();
         com.mojang.blaze3d.platform.GlStateManager._activeTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + CORNER_UNIT);

@@ -19,6 +19,22 @@ public final class SidePool extends AbstractExecutorService {
         (Sides.server() ? ServerReactor.pool() : FrameReactor.pool()).execute(task, LabRuntime.Lane.BACKGROUND);
     }
 
+    /** a pool shared by several of vanilla's executors: their shutdown does not stop it (the process owns it) */
+    public static final class Shared extends AbstractExecutorService {
+        private final LabRuntime rt;
+
+        public Shared(LabRuntime rt) {
+            this.rt = rt;
+        }
+
+        @Override public void execute(Runnable task) { rt.execute(task, LabRuntime.Lane.CHUNK); }
+        @Override public void shutdown() {}
+        @Override public List<Runnable> shutdownNow() { return List.of(); }
+        @Override public boolean isShutdown() { return false; }
+        @Override public boolean isTerminated() { return false; }
+        @Override public boolean awaitTermination(long timeout, TimeUnit unit) { return true; }
+    }
+
     @Override public void shutdown() {}
     @Override public List<Runnable> shutdownNow() { return List.of(); }
     @Override public boolean isShutdown() { return false; }

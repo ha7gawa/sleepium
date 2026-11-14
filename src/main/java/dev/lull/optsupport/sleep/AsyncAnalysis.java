@@ -17,12 +17,15 @@ import java.util.function.Function;
 final class AsyncAnalysis {
     private AsyncAnalysis() {}
 
-    private static final ExecutorService EXEC = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "sleep-sleep-analysis");
-        t.setDaemon(true);
-        t.setPriority(Thread.MIN_PRIORITY);
-        return t;
-    });
+    /** OnePool: a strand on the server's pool, BACKGROUND lane (one at a time, no thread of its own); else a thread */
+    private static final ExecutorService EXEC = Boolean.getBoolean("lab.opt.OnePool")
+            ? new dev.lab.runtime.Strand("sleep-analysis", r -> dev.lull.optsupport.ServerReactor.pool().execute(r, dev.lab.runtime.LabRuntime.Lane.BACKGROUND))
+            : Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "sleep-sleep-analysis");
+                t.setDaemon(true);
+                t.setPriority(Thread.MIN_PRIORITY);
+                return t;
+            });
     private static final Set<Object> PENDING = ConcurrentHashMap.newKeySet(), FAILED = ConcurrentHashMap.newKeySet();
 
     /** the result for key if there is one; else its computation is started (once) in the background and null returned */

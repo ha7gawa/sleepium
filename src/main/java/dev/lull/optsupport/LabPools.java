@@ -42,8 +42,21 @@ public final class LabPools {
         return rt;
     }
 
+    /** OnePool: one group of IO workers for every vanilla IO pool (IO-Worker, Download): blocking work, regulated by the OS */
+    private static LabRuntime sharedIo;
+
     public static ExecutorService io(String name, boolean daemon, Thread.UncaughtExceptionHandler handler) {
         String base = name.endsWith("-") ? name.substring(0, name.length() - 1) : name;
+        if (Boolean.getBoolean("lab.opt.OnePool")) {
+            synchronized (LabPools.class) {
+                if (sharedIo == null) {
+                    sharedIo = new LabRuntime(LabRuntime.Config.of("IO-Worker", IO).withPriority(OsThreads.ABOVE_NORMAL).withDaemon(true).withHandler(handler));
+                    System.out.println("[sleep/opt] one pool: one IO group (" + IO + " workers) for vanilla's IO pools");
+                }
+                System.out.println("[sleep/opt] one pool: '" + base + "' -> the IO group");
+                return new SidePool.Shared(sharedIo);
+            }
+        }
         int n = base.startsWith("Download") ? 2 : IO;
         LabRuntime rt = new LabRuntime(LabRuntime.Config.of(base, n)
                 .withPriority(OsThreads.ABOVE_NORMAL).withDaemon(daemon).withHandler(handler));

@@ -702,18 +702,50 @@ public final class ClientAuto {
         var mx = ManagementFactory.getThreadMXBean();
         TreeMap<String, int[]> g = new TreeMap<>();
         Pattern p = Pattern.compile("^(.*?)[-# ]?(\\d+)$");
-        for (Thread t : Thread.getAllStackTraces().keySet()) {
+        java.util.Map<String, String> owner = new java.util.HashMap<>();   // thread group -> the jar its code comes from
+        java.util.Map<String, long[]> cpu = new java.util.HashMap<>();
+        for (var e : Thread.getAllStackTraces().entrySet()) {
+            Thread t = e.getKey();
             Matcher m = p.matcher(t.getName());
             String key = m.matches() ? m.group(1) : t.getName();
             int idx = m.matches() ? Integer.parseInt(m.group(2)) : 0;
             int[] v = g.computeIfAbsent(key, k -> new int[2]);
             v[0]++;
             v[1] = Math.max(v[1], idx);
+            long c = mx.getThreadCpuTime(t.threadId());
+            if (c > 0) cpu.computeIfAbsent(key, k -> new long[1])[0] += c;
+            if (!owner.containsKey(key)) {
+                String o = ownerOf(e.getValue());
+                if (o != null) owner.put(key, o);
+            }
         }
         StringBuilder sb = new StringBuilder(String.format(Locale.ROOT, "threads: live %d, peak %d, total started since JVM start %d%n",
                 mx.getThreadCount(), mx.getPeakThreadCount(), mx.getTotalStartedThreadCount()));
-        g.forEach((k, v) -> sb.append(String.format(Locale.ROOT, "  %-44s live %3d   highest index %4d%n", k, v[0], v[1])));
+        g.forEach((k, v) -> sb.append(String.format(Locale.ROOT, "  %-44s live %3d   highest index %4d   cpu %7.1f s   %s%n", k, v[0], v[1],
+                cpu.getOrDefault(k, new long[1])[0] / 1e9, owner.getOrDefault(k, ""))));
         return sb.toString();
+    }
+
+    /** the jar of the first frame on a thread's stack that is not the JDK's, a pool library's or the loader's: whose thread */
+    private static String ownerOf(StackTraceElement[] st) {
+        for (int i = st.length - 1; i >= 0; i--) {   // from the bottom: the code the thread was made to run
+            String c = st[i].getClassName();
+            if (c.startsWith("java.") || c.startsWith("jdk.") || c.startsWith("sun.") || c.startsWith("com.sun.") || c.startsWith("io.netty.")
+                    || c.startsWith("cpw.") || c.startsWith("net.neoforged.fml") || c.startsWith("org.lwjgl") || c.startsWith("com.google.")
+                    || c.startsWith("it.unimi") || c.startsWith("dev.lab.runtime")) continue;
+            try {
+                Class<?> k = Class.forName(c, false, Thread.currentThread().getContextClassLoader());
+                var src = k.getProtectionDomain() == null ? null : k.getProtectionDomain().getCodeSource();
+                String loc = src == null || src.getLocation() == null ? k.getModule().getName() : src.getLocation().toString();
+                if (loc == null) continue;
+                loc = loc.replace((char) 92, '/');
+                int cut = loc.lastIndexOf('/', loc.endsWith("/") ? loc.length() - 2 : loc.length());
+                return (cut >= 0 ? loc.substring(cut + 1) : loc).replaceAll("[!/]+$", "") + " (" + c.substring(c.lastIndexOf('.') + 1) + ")";
+            } catch (Throwable ex) {
+                return c;
+            }
+        }
+        return null;
     }
 
     private static void deleteTree(Path dir) {
