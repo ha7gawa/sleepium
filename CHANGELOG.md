@@ -4,6 +4,19 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.2.4 - 2026-11-14
+
+A fix for servers with Krypton.
+
+- **Fix: players were disconnected from a server with Krypton** ("sleep coalesce: a frame cut inside a container",
+  since 1.2.3; GitHub issue #7). Krypton writes a packet's length and its body separately; Sleepium's packet batching
+  on the server could close a batch between them, and the 1.2.3 client found the packet cut in two. The server now
+  closes a batch only between whole packets, and the client keeps a cut packet until its rest arrives - so a 1.2.4
+  client also plays on a 1.2.3 server with Krypton. Checked with Krypton FNP on 1.21.1, both sides, old and new
+  versions mixed. (1.20.1 with Krypton Reno was not affected - it writes a packet in one piece - and works the same.)
+- If you cannot update the server yet: `lab.opt.NetCoalesce=false` in its `config/sleepium.properties` turns off only
+  the packet batching.
+
 ## 1.2.3 - 2026-11-13
 
 Tools for modpack makers, server owners and players: see what Sleepium does to each mod, what each mod costs and where
