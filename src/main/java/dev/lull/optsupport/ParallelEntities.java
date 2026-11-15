@@ -67,7 +67,7 @@ public final class ParallelEntities {
         long t0 = System.nanoTime();
         boolean serial = ALTERNATE && (walks & 1) == 0;
         try {
-            if (TickAsync.ON && !serial && asyncSplit(consumer)) return;
+            if (TickAsync.ON && !serial) asyncSplit(consumer);   // (the left-out ones out of all[]; the rest walks as usual below)
             if (serial) {
                 for (int k = 0; k < n; k++) consumer.accept(all[k]);
                 return;
@@ -364,31 +364,38 @@ public final class ParallelEntities {
      * The walk with TickAsync: entities drawn from tick poses left out (kept at the front of all[], in the walk's order,
      * each with its spare pair), every other one ticked here in its slot. False: none left out - the usual walk.
      */
+    private static Entity[] asyncAll = new Entity[256];
+
     private static boolean asyncSplit(Consumer<Entity> consumer) {
-        int cand = 0;
-        for (int k = 0; k < n; k++) if (mayTickApart(all[k]) && TickAsync.eligible(all[k])) cand++;
-        if (cand == 0) return false;
         if (asyncPairs.length < n) asyncPairs = new TickPoses.Pair[Math.max(n, asyncPairs.length * 2)];
-        int m = 0;
+        if (asyncAll.length < n) asyncAll = new Entity[Math.max(n, asyncAll.length * 2)];
+        int m = 0, r = 0;
         for (int k = 0; k < n; k++) {
             Entity e = all[k];
             if (mayTickApart(e) && TickAsync.eligible(e)) {
                 asyncPairs[m] = TickPoses.spare(e);
-                all[m++] = e;   // (m <= k: that slot is done with)
+                asyncAll[m++] = e;
                 TickAsync.WALKING.put(e, Boolean.TRUE);
-            } else consumer.accept(e);
+            } else all[r++] = e;   // (r <= k: that slot is done with)
         }
-        java.util.Arrays.fill(all, m, n, null);
-        n = 0;   // (the finally clears nothing: the left-out ones stay for startAsync)
+        if (m == 0) return false;
+        java.util.Arrays.fill(all, r, n, null);
+        n = r;   // the rest walks as usual (its runs on the pool, the others in their slots)
         asyncM = m;
-        tick = consumer;
+        asyncTick = consumer;
         return true;
     }
+
+    private static Consumer<Entity> asyncTick;
 
     /** Minecraft.tick returned: the left-out entities on the pool, each ticked then captured; the render thread goes on */
     static void startAsync() {
         int m = asyncM;
         if (m == 0 || asyncRunning) return;
+        if (all.length < m) all = java.util.Arrays.copyOf(all, Math.max(m, all.length * 2));
+        System.arraycopy(asyncAll, 0, all, 0, m);   // (the walk is over: all[] is free; the hooks index it)
+        java.util.Arrays.fill(asyncAll, 0, m, null);
+        tick = asyncTick;
         tail0 = 0;
         end = m;
         if (movedCb.length < m) {
