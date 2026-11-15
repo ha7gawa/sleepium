@@ -83,6 +83,13 @@ public final class UploadRing {
     public static String fifWhy = FIF_FIXED > 0 ? "fixed by the flag" : AUTO ? "watching the queue" : "off";
 
     /** a look at a fence (no flush, no wait): glGetSynci(GL_SYNC_STATUS) cost the host's NVIDIA driver 45 % of its frames */
+    /** per measured frame: the frames still queued at its start (the frame log's queue column; -1 none) */
+    public static final byte[] DEPTH = new byte[1 << 16];
+
+    static {
+        java.util.Arrays.fill(DEPTH, (byte) -1);
+    }
+
     private static boolean done(long fence) {
         int r = GL32C.glClientWaitSync(fence, 0, 0);
         return r == GL32C.GL_ALREADY_SIGNALED || r == GL32C.GL_CONDITION_SATISFIED;
@@ -136,6 +143,16 @@ public final class UploadRing {
             if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
             FRAME_FENCES[i] = GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
             if (!limiting) watchQueue();
+            if (dev.lull.ClientMeter.measuring()) {   // the queue: frames sent whose fence is not done (looks without the flush bit)
+                int d = 0;
+                for (int b = 1; b < 16 && b <= frameNo; b++) {
+                    long fb = FRAME_FENCES[(frameNo - b) & 15];
+                    if (fb == 0 || done(fb)) break;
+                    d++;
+                }
+                int fi = dev.lull.ClientMeter.frameIndex();
+                if (fi >= 0 && fi < DEPTH.length) DEPTH[fi] = (byte) d;
+            }
             int k = fifDeep ? DEEP_K : FIF;
             long old = limiting && fifEnabled && frameNo >= k ? FRAME_FENCES[(frameNo - k) & 15] : 0;
             if (old != 0) {

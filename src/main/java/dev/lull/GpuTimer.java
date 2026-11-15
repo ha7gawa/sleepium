@@ -24,6 +24,18 @@ public final class GpuTimer {
     /** each frame's end on the GPU clock (ns; 0: not read) - the frame log's gpu_gap_ms: the interval the GPU finished frames at */
     private static final long[] END_AT = new long[1 << 16];
 
+    /**
+     * the GPU clock when the CPU began a frame's rendering (glGetInteger64(GL_TIMESTAMP): the GPU's time now) and the
+     * frame's latency - from there to its end on the GPU (ms): how far the CPU runs ahead (the queue the driver keeps)
+     */
+    private static final long[] CPU_AT = new long[RING];
+    private static final boolean LAT_ON = Boolean.getBoolean("sleep.drawStats.lat");
+    private static final float[] LAT = new float[1 << 16];
+
+    public static float latMs(int i) {
+        return i >= 0 && i < LAT.length ? LAT[i] : Float.NaN;
+    }
+
     /** the GPU's interval between the end of frame i-1 and of frame i (ms), NaN when either was not read */
     public static float gapMs(int i) {
         if (i <= 0 || i >= END_AT.length || END_AT[i] == 0 || END_AT[i - 1] == 0) return Float.NaN;
@@ -84,6 +96,7 @@ public final class GpuTimer {
         java.util.Arrays.fill(SC, 0);
         java.util.Arrays.fill(PER_FRAME, Float.NaN);
         java.util.Arrays.fill(END_AT, 0L);
+        java.util.Arrays.fill(LAT, Float.NaN);
         notReady = 0;
         written = 0;
         slot = 0;
@@ -96,6 +109,8 @@ public final class GpuTimer {
             GL15C.glGenQueries(END);
         }
         GL33C.glQueryCounter(BEGIN[slot], GL33C.GL_TIMESTAMP);
+        // (-Dsleep.drawStats.lat: the GPU's time now - on the N100 the query itself synchronised the CPU with the GPU, 11-15)
+        if (LAT_ON) CPU_AT[slot] = org.lwjgl.opengl.GL32C.glGetInteger64(GL33C.GL_TIMESTAMP);
         SC[slot] = 0;
     }
 
@@ -123,6 +138,7 @@ public final class GpuTimer {
                 if (fno < PER_FRAME.length) {
                     PER_FRAME[fno] = (e - b) / 1e6f;
                     END_AT[fno] = e;
+                    if (LAT_ON) LAT[fno] = (e - CPU_AT[i]) / 1e6f;
                 }
                 int n = SC[i];   // the sections: from each timestamp to the next (the last to the frame's end)
                 long prev = b;

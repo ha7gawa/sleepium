@@ -310,7 +310,7 @@ public final class ClientMeter {
             // other_ms: the frame's time outside the ticks and GameRenderer.render - queued tasks (packets), sound, swap, waits
             StringBuilder fl = new StringBuilder("frame_ms,game_time,ticks,tick_ms,render_ms,other_ms,particle_ms,alloc_kib,gc_ms,sounds,entities_added,server_ms");
             if (FLS != null) for (String p : testmods.meter.TickSplit.PARTS) fl.append(",t_").append(p).append("_ms");
-            if (DrawStats.ON) fl.append(",gpu_ms,gpu_gap_ms");
+            if (DrawStats.ON) fl.append(",gpu_ms,gpu_gap_ms,lat_ms,queue");
             fl.append('\n');
             for (int i = 0; i < n; i++) {
                 fl.append(String.format(Locale.ROOT, "%.3f,%d,%d,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%.3f", frames[i] / 1e6, frameGameTime[i], FL[0][i], frameTick[i] / 1e6,
@@ -318,7 +318,8 @@ public final class ClientMeter {
                 if (FLS != null) for (long[] col : FLS) fl.append(String.format(Locale.ROOT, ",%.3f", col[i] / 1e6));
                 // (GpuTimer counts one frame more than this log: its record i + 1 is this row's frame - 11-15, a tick's delay
                 // showed in the next row's GPU interval)
-                if (DrawStats.ON) fl.append(String.format(Locale.ROOT, ",%.3f,%.3f", GpuTimer.frameMs(i + 1), GpuTimer.gapMs(i + 1)));
+                if (DrawStats.ON) fl.append(String.format(Locale.ROOT, ",%.3f,%.3f,%.3f,%d", GpuTimer.frameMs(i + 1), GpuTimer.gapMs(i + 1), GpuTimer.latMs(i + 1),
+                        i < dev.lull.optsupport.UploadRing.DEPTH.length ? dev.lull.optsupport.UploadRing.DEPTH[i] : -1));
                 fl.append('\n');
             }
             try {
