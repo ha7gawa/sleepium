@@ -60,7 +60,13 @@ public final class GpuAnim {
     private static final Map<SpriteContents, Integer> SHEETS = new IdentityHashMap<>();
     /** an interpolated sprite's staging texture (its size, every mip level): the ring uploads there, a GPU copy takes it on
      *  into the atlas - an upload from a buffer straight into the atlas made the N100's (Intel) drawing from it slower (1.20.1: 104 -> 40 fps) */
-    private static final Map<SpriteContents, Integer> STAGING = new IdentityHashMap<>();
+    /**
+     * per sprite: its staging textures, -Dlab.gpuAnim.stages (default 1) of them taken in turn by tick (tried 11-15: 3 made the
+     * N100 worse - the ring part 0.73 -> 1.25 ms a tick: the wait is not the last copy of the same texture)
+     */
+    private static final Map<SpriteContents, int[]> STAGING = new IdentityHashMap<>();
+    private static final int STAGES = Math.max(1, Integer.getInteger("lab.gpuAnim.stages", 1));
+    private static int stageTick;
     public static long copies, sheetsMade, verified, mismatches, copyNs, ticks, tickNs, interpolated, emptyAtlasTicks;
     public static long uploadT0, interpUploadNs, interpUploads;
 
@@ -149,6 +155,7 @@ public final class GpuAnim {
         if (pbo == 0) return;
         seg = (seg + 1) % NSEG;
         segUsed = 0;
+        stageTick++;
         if (FENCES[seg] != 0) {
             if (org.lwjgl.opengl.GL32C.glClientWaitSync(FENCES[seg], 0, 0) == org.lwjgl.opengl.GL32C.GL_TIMEOUT_EXPIRED) ringWaits++;   // not read yet: counted
             org.lwjgl.opengl.GL32C.glClientWaitSync(FENCES[seg], org.lwjgl.opengl.GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 1_000_000_000L);   // the fence sent to the GPU, else the wait runs to its timeout
@@ -194,12 +201,17 @@ public final class GpuAnim {
         GlStateManager._pixelStore(GL11C.GL_UNPACK_SKIP_PIXELS, 0);
         GlStateManager._pixelStore(GL11C.GL_UNPACK_SKIP_ROWS, 0);
         GlStateManager._pixelStore(GL11C.GL_UNPACK_ALIGNMENT, 4);
-        Integer stage = STAGING.get(c);
-        if (stage == null) {
-            stage = TextureUtil.generateTextureId();
+        int[] stages = STAGING.get(c);
+        if (stages == null) {
+            stages = new int[STAGES];
+            STAGING.put(c, stages);
+        }
+        int si = Math.floorMod(stageTick, STAGES);
+        int stage = stages[si];
+        if (stage == 0) {
+            stage = stages[si] = TextureUtil.generateTextureId();
             TextureUtil.prepareImage(stage, levels - 1, w, h);
             GlStateManager._bindTexture(atlas);
-            STAGING.put(c, stage);
         }
         for (int k = 0; k < levels; k++) {
             NativeImage img = data[k];
@@ -759,7 +771,7 @@ public final class GpuAnim {
     public static void release(SpriteContents c) {
         Integer sheet = SHEETS.remove(c);
         if (sheet != null) TextureUtil.releaseTextureId(sheet);
-        Integer stage = STAGING.remove(c);
-        if (stage != null) TextureUtil.releaseTextureId(stage);
+        int[] stages = STAGING.remove(c);
+        if (stages != null) for (int st : stages) if (st != 0) TextureUtil.releaseTextureId(st);
     }
 }
