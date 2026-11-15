@@ -487,6 +487,11 @@ public final class TickPoses {
     }
 
     private static final ThreadLocal<Interp> INTERP = ThreadLocal.withInitial(Interp::new);
+
+    /** 1.20.1: records made without the view rotation turned by a frame's base pose (Interp.view) */
+    static void view(org.joml.Matrix4f base, long mem, int n) {
+        INTERP.get().view(base, mem, n);
+    }
     private static final Matrix3f IDENTITY3 = new Matrix3f();
 
     /** the pair's task: its three keys as mode-8 records; false (the CPU way) for anything but vanilla model parts */

@@ -673,6 +673,19 @@ public final class RenderCache {
     }
 
     /** ParallelRender: recorded camera-relative output appended as it is (no transform). */
+    /** TickAsync: a snapshot job's output replayed under a pose (the anchor's offset to the frame's camera) */
+    static void appendPosed(Rec rec, MultiBufferSource buffers, PoseStack pose) {
+        noResident = true;
+        try {
+            replay(rec, buffers, pose);
+        } finally {
+            noResident = false;
+        }
+    }
+
+    /** render thread: the record is a job's, reused - its vertices must not go to the resident arena (copied once there) */
+    private static boolean noResident;
+
     static void append(Rec rec, MultiBufferSource buffers) {
         Ctx ctx = CTX.get();
         ctx.m.identity();
@@ -736,7 +749,7 @@ public final class RenderCache {
             long src = rec.mem + rec.offs[i];
             int n = rec.counts[i];
             // (1.20.1: the pose has the camera rotation in it - no identity normal matrix: the record turns the normals)
-            boolean resident = !asIs && rec != PROBE && n % 4 == 0 && PartBatch.residentOk(t, vc, buffers);
+            boolean resident = !asIs && !noResident && rec != PROBE && n % 4 == 0 && PartBatch.residentOk(t, vc, buffers);
             long tc = TIME ? System.nanoTime() : 0;
             if (TIME) tResidentOk += tc - tb;
             if (resident) {
