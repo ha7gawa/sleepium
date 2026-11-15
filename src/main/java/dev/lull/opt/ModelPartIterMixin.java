@@ -15,7 +15,8 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * exp/modelpart-quat (client): ModelPart.render's loop over its children and compile's loop over its cubes use one
  * reusable array iterator per part instead of a new iterator per call (the map's values iterator, the list iterator).
  * Same elements, same order: the arrays are taken from the map / list (and taken again if their size changes). A part
- * never renders itself recursively and is used by one thread at a time, so its iterator is never shared.
+ * never renders itself recursively and is used by one thread at a time, so its iterator is never shared - except
+ * PartBatch's geometry compile of a worker's part on the render thread (a job's journal), which takes a fresh one.
  * (1.20.1: the render overload with the colour as four floats.)
  */
 @Mixin(ModelPart.class)
@@ -37,6 +38,8 @@ public abstract class ModelPartIterMixin {
 
     @Redirect(method = "compile", at = @At(value = "INVOKE", target = "Ljava/util/List;iterator()Ljava/util/Iterator;"))
     private Iterator<?> sleep$cubes(List<?> list) {
+        Thread g = dev.lull.optsupport.PartBatch.GEO_THREAD;
+        if (g != null && g == Thread.currentThread()) return list.iterator();   // (a geometry compile from a job's journal: the part may be rendering on a worker)
         Object[] a = sleep$cubes;
         if (a == null || a.length != cubes.size()) sleep$cubes = a = cubes.toArray();
         return sleep$cubeIter.reset(a);

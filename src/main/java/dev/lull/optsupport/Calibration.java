@@ -119,7 +119,8 @@ public final class Calibration {
                 : ParallelRender.CacheTune.last.startsWith("the cache") || ParallelRender.CacheTune.last.startsWith("cache") ? "cache" : "?";
         String pt = ParallelRender.PartsTune.result.startsWith("in the jobs") ? "GPU" : ParallelRender.PartsTune.result.startsWith("the CPU") ? "CPU" : "?";
         String ch = ChunkMultiDraw.pathChoice.startsWith("indirect") ? "indirect" : ChunkMultiDraw.pathChoice.startsWith("direct") ? "direct" : "?";
-        return "blend " + i + " · entities " + c + " · parts " + pt + " · chunks " + ch;
+        String pi = PartBatch.InstTune.result.startsWith("instanced") ? " inst" : PartBatch.InstTune.result.startsWith("a command") ? " cmd" : "";
+        return "blend " + i + " · entities " + c + " · parts " + pt + pi + " · chunks " + ch;
     }
 
     /** forget everything measured (the settings' Recalibrate): the choices are measured again */
@@ -132,6 +133,7 @@ public final class Calibration {
         }
         GpuAnim.recalibrate();
         ParallelRender.recalibrate();
+        PartBatch.InstTune.recalibrate();
         ChunkMultiDraw.recalibrate();
     }
 }

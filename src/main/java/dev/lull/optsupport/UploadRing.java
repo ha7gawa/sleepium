@@ -55,21 +55,70 @@ public final class UploadRing {
      * (the ring's segments were still busy 8 frames later): K bounds that queue - the input reaches the screen sooner and
      * the ring's NSEG > K segments are always free. Works with the ring off too (its fences are made either way).
      */
-    private static final int FIF = Integer.getInteger("lab.gpu.framesInFlight", 0);
+    private static final int FIF_FIXED = Integer.getInteger("lab.gpu.framesInFlight", 0);
+    /**
+     * -Dlab.gpu.framesInFlight.auto=true: the limit (K = 3) only where the driver queues frames deeper than a sane driver
+     * does - the frame DEEP frames back still not done at a frame's start in a quarter of a window's frames (the N100's
+     * Intel driver: 8 and more; NVIDIA keeps at most 3 queued and blocks in the swap itself). Once seen it stays on and is
+     * remembered for the machine (Calibration "fif"); the host's 4.5 % cost of the wait is not paid where it is not needed.
+     */
+    private static final boolean AUTO = FIF_FIXED == 0 && Boolean.getBoolean("lab.gpu.framesInFlight.auto");
+    private static final int FIF = FIF_FIXED > 0 ? FIF_FIXED : AUTO ? 3 : 0;
+    private static final int DEEP = Integer.getInteger("lab.gpu.framesInFlight.deep", 6), AUTO_WINDOW = 240;
     private static final long[] FRAME_FENCES = new long[16];
     private static int frameNo;
-    public static long fifWaits, fifWaitNs, frames;
+    public static long fifWaits, fifWaitNs, frames, deepFrames;
     /** off: no waiting (the fences still made) - ClientAuto's in-window flip switches it */
     public static boolean fifEnabled = true;
+    /** the limit applies: fixed by the flag, or the automatic one decided (see AUTO) */
+    private static boolean limiting = FIF_FIXED > 0;
+    private static boolean autoChecked;
+    private static int autoFrames, autoDeep;
+    public static String fifWhy = FIF_FIXED > 0 ? "fixed by the flag" : AUTO ? "watching the queue" : "off";
+
+    private static boolean done(long fence) {
+        return GL32C.glGetSynci(fence, GL32C.GL_SYNC_STATUS, null) == GL32C.GL_SIGNALED;
+    }
+
+    /** the automatic limit: a look at the frame DEEP back (never a wait) */
+    private static void watchQueue() {
+        if (!autoChecked) {
+            autoChecked = true;
+            if ("true".equals(Calibration.get("fif"))) {
+                limiting = true;
+                fifWhy = "on (calibrated earlier: " + Calibration.get("fif.why") + ")";
+                System.out.println("[sleep/opt] frames in flight: " + fifWhy);
+                return;
+            }
+        }
+        if (frameNo < DEEP) return;
+        long f = FRAME_FENCES[(frameNo - DEEP) & 15];
+        if (f == 0) return;
+        boolean deep = !done(f);
+        if (deep) {
+            autoDeep++;
+            deepFrames++;
+        }
+        if (++autoFrames < AUTO_WINDOW) return;
+        if (autoDeep * 4 >= autoFrames) {
+            limiting = true;
+            fifWhy = String.format(java.util.Locale.ROOT, "on: the frame %d back not done at %d of %d frames' starts", DEEP, autoDeep, autoFrames);
+            System.out.println("[sleep/opt] frames in flight: " + fifWhy);
+            Calibration.put("fif", "true", fifWhy);
+        }
+        autoFrames = 0;
+        autoDeep = 0;
+    }
 
     /** Minecraft.runTick HEAD (UploadRingMixin): the last frame gets its fence, the next segment is taken if the GPU is done with it */
     public static void frameBegin() {
-        if (FIF > 0 && fifEnabled) {
+        if (FIF > 0) {
             // a fence for every frame, the oldest one we keep waited for: at most FIF frames queued ahead of the GPU
             int i = frameNo & 15;
             if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
             FRAME_FENCES[i] = GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-            long old = frameNo >= FIF ? FRAME_FENCES[(frameNo - FIF) & 15] : 0;
+            if (!limiting) watchQueue();
+            long old = limiting && fifEnabled && frameNo >= FIF ? FRAME_FENCES[(frameNo - FIF) & 15] : 0;
             if (old != 0) {
                 int r = GL32C.glClientWaitSync(old, GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 0);
                 if (r == GL32C.GL_TIMEOUT_EXPIRED) {
@@ -182,7 +231,7 @@ public final class UploadRing {
     }
 
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "upload ring: %d copies, %.1f MB; fallbacks: segment busy %d, full %d; records in the ring %.1f MB (fallbacks %d); frames %d, frames-in-flight %d: waited %d times, %.2f ms a frame",
-                copies, bytes / 1e6, fallbackBusy, fallbackFull, recordBytes / 1e6, recordFallbacks, frames, FIF, fifWaits, frames == 0 ? 0 : fifWaitNs / 1e6 / frames);
+        return String.format(java.util.Locale.ROOT, "upload ring: %d copies, %.1f MB; fallbacks: segment busy %d, full %d; records in the ring %.1f MB (fallbacks %d); frames %d, frames-in-flight %d (%s; deep frames %d): waited %d times, %.2f ms a frame",
+                copies, bytes / 1e6, fallbackBusy, fallbackFull, recordBytes / 1e6, recordFallbacks, frames, FIF, fifWhy, deepFrames, fifWaits, frames == 0 ? 0 : fifWaitNs / 1e6 / frames);
     }
 }
