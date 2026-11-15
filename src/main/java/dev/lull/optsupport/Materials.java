@@ -57,9 +57,9 @@ public final class Materials {
         // own position: a coat stays where it lies on the body however it moves), from the part's record
         String coat = "    probeCoat = 0;\n    probeCoat2 = 0;\n    probeDmg = 0;\n    probeCoatH = 0.0;\n"
                 + "    if (ProbePartMode == 1 || ProbePartMode == 3) {\n"
-                + "        probeCoat = int(probeParts[gl_DrawIDARB].n0.w + 0.5);\n"
-                + "        probeCoat2 = int(probeParts[gl_DrawIDARB].n1.w + 0.5);\n"
-                + "        int probeW2 = int(probeParts[gl_DrawIDARB].n2.w + 0.5);\n"   // the height (tenths, 8 bits) and the blows' marks
+                + "        probeCoat = int(probeParts[(gl_BaseInstanceARB + gl_InstanceID)].n0.w + 0.5);\n"
+                + "        probeCoat2 = int(probeParts[(gl_BaseInstanceARB + gl_InstanceID)].n1.w + 0.5);\n"
+                + "        int probeW2 = int(probeParts[(gl_BaseInstanceARB + gl_InstanceID)].n2.w + 0.5);\n"   // the height (tenths, 8 bits) and the blows' marks
                 + "        probeDmg = probeW2 >> 8;\n"
                 + "        if (probeW2 != 0) probeCoatH = Position.y / max(float(probeW2 & 255) / 10.0, 0.1);\n"
                 + "    }\n";

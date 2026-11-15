@@ -177,7 +177,7 @@ public final class ItemGpu {
         if (!ASKED.add(model)) return;
         List<?>[] copy = lists.clone();
         ItemStack st = stack.copy();
-        ParallelRender.journal(() -> {
+        ParallelRender.prepare(() -> {
             ASKED.remove(model);
             Geo[] gs = GEOS.get(model);
             if (gs != null && (gs.length >= MAX_VARIANTS || find(gs, copy, st, ic) != null)) return;

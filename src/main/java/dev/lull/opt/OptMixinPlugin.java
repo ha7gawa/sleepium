@@ -122,7 +122,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.RenderPriorityMixin");
         if (simple.equals("GrowVertexBufferMixin")) on = Boolean.getBoolean("lab.gpu.growOnly") || Boolean.getBoolean("lab.gpu.uploadRing");
         if (simple.startsWith("StallProbe")) on = Boolean.getBoolean("lab.stallProbe");
-        if (simple.equals("UploadRingMixin")) on = Boolean.getBoolean("lab.gpu.uploadRing") || Boolean.getBoolean("lab.gpu.ringRecords") || Integer.getInteger("lab.gpu.framesInFlight", 0) > 0;
+        if (simple.equals("UploadRingMixin")) on = Boolean.getBoolean("lab.gpu.uploadRing") || Boolean.getBoolean("lab.gpu.ringRecords") || Integer.getInteger("lab.gpu.framesInFlight", 0) > 0 || Boolean.getBoolean("lab.gpu.framesInFlight.auto");
         if (simple.equals("NoFrameYieldMixin")) on = Boolean.getBoolean("lab.opt.NoFrameYield");
         if (simple.equals("TaskBudgetMixin") || simple.equals("TaskQueueAccessor")) on = Boolean.getBoolean("lab.opt.TaskBudget");
         if (simple.equals("GlInboxMixin")) on = Boolean.getBoolean("lab.opt.GlInbox");

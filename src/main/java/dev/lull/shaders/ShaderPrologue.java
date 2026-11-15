@@ -79,7 +79,7 @@ final class ShaderPrologue {
             globals.append("layout(std430, binding = 9) buffer SlVertexData { uint sl_vdata[]; };\n")
                     .append("vec3 sl_vpos(int v) { int b = v * ").append(stride).append(" + ").append(pos)
                     .append("; vec3 p = vec3(uintBitsToFloat(sl_vdata[b]), uintBitsToFloat(sl_vdata[b + 1]), uintBitsToFloat(sl_vdata[b + 2]));")
-                    .append(parts ? " if (ProbePartMode == 2) p = (probeParts[gl_DrawIDARB].pose * vec4(p, 1.0)).xyz;" : "").append(" return p; }\n")
+                    .append(parts ? " if (ProbePartMode == 2) p = (probeParts[(gl_BaseInstanceARB + gl_InstanceID)].pose * vec4(p, 1.0)).xyz;" : "").append(" return p; }\n")
                     .append("vec2 sl_vuv(int v) { int b = v * ").append(stride).append(" + ").append(uv)
                     .append("; return vec2(uintBitsToFloat(sl_vdata[b]), uintBitsToFloat(sl_vdata[b + 1])); }\n");
             if (nrm >= 0)
@@ -89,7 +89,7 @@ final class ShaderPrologue {
         }
         StringBuilder pro = new StringBuilder("void main() {\n");
         if (multi) pro.append("    sl_chunkOffset = ProbeMultiDraw != 0 ? ProbeOffsets[" + dev.lull.optsupport.ChunkMultiDraw.drawIndex() + "].xyz : ChunkOffset;\n");
-        if (parts) pro.append("    vaPosition = ProbePartMode == 2 ? (probeParts[gl_DrawIDARB].pose * vec4(sl_rawPosition, 1.0)).xyz : sl_rawPosition;\n");
+        if (parts) pro.append("    vaPosition = ProbePartMode == 2 ? (probeParts[(gl_BaseInstanceARB + gl_InstanceID)].pose * vec4(sl_rawPosition, 1.0)).xyz : sl_rawPosition;\n");
         if (raw[1]) pro.append("    vaUV1 = sl_rawUV1 & 255;\n");
         if (raw[2]) pro.append("    vaUV2 = sl_rawUV2 & 255;\n");
         pro.append("    int sl_hi1 = (sl_rawUV1.x >> 8 & 255) | (sl_rawUV1.y >> 8 & 255) << 8;\n");

@@ -74,6 +74,18 @@ public final class ParallelRender {
      * Per-job state for a mod's globals (GeckoLib's Molang actor and variables): empty at the start of each job, so the
      * result does not depend on which worker ran what before. Null outside jobs (the globals then as they are).
      */
+    /**
+     * As journal, for an idempotent preparation (a render type learnt, a part's geometry compiled for VRAM): run on the
+     * render thread at the merge like the job's other calls; a TickPoses capture keeps them apart (they run on the render
+     * thread when the pair is next looked at - the capture's own side effects, if any, make the entity per frame).
+     */
+    public static boolean prepare(com.mojang.blaze3d.pipeline.RenderCall call) {
+        Job j = CURRENT.get();
+        if (j == null) return false;
+        (j.rendererOnly ? j.prep : j.calls).add(call);
+        return true;
+    }
+
     public static java.util.IdentityHashMap<Object, Object> jobLocals() {
         Job j = CURRENT.get();
         return j == null ? null : j.locals;
@@ -123,6 +135,22 @@ public final class ParallelRender {
 
     // ------------------------------------------------------------------ per-worker renderer sets
 
+    private static int setsEpoch = Integer.MIN_VALUE;
+
+    /** a set back from a job or a pair: kept if it is of the current epoch */
+    static void backHome(Set s) {
+        if (s != null && s.epoch == epoch) SETS.offer(s);
+    }
+
+    /** TickPoses: a renderer set for a pair's renders (null: none free), given back with giveSet */
+    static Set takeSet() {
+        return SETS.poll();
+    }
+
+    static void giveSet(Set s) {
+        backHome(s);
+    }
+
     static final class Set {
         final int epoch;
         final PoseStack pose = new PoseStack();
@@ -159,13 +187,15 @@ public final class ParallelRender {
     /** THREADS sets, built on the render thread (a mod renderer's constructor may touch GL). */
     private static void ensureSets() {
         int e = epoch;
-        Set any = SETS.peek();
-        if (any != null && any.epoch == e && SETS.size() == THREADS + 1) return;
+        // built once per epoch (a resource reload makes a new one); sets of an older epoch out in jobs or TickPoses' pairs
+        // are dropped when they come back (backHome) - a set may be out across frames (a pair renders past the drain)
+        if (setsEpoch == e) return;
         SETS.clear();
+        setsEpoch = e;
         long t0 = System.nanoTime();
         buildingSets = true;
         try {
-            for (int i = 0; i < THREADS + 1; i++) SETS.add(new Set(e));   // one more: the render thread helps
+            for (int i = 0; i < THREADS + (TickPoses.ON ? 2 : 1); i++) SETS.add(new Set(e));   // one more: the render thread helps (and one for TickPoses' pairs)
         } finally {
             buildingSets = false;
         }
@@ -175,6 +205,12 @@ public final class ParallelRender {
     // ------------------------------------------------------------------ the frame queue
 
     static final class Job implements Runnable {
+        /** TickPoses: the renderer alone (no flame, no shadow), camera at the entity's anchor */
+        boolean rendererOnly;
+        /** TickPoses: this frame the entity is drawn from its tick's pair */
+        TickPoses.Pair tick;
+        /** TickPoses: a pair's renders all with one renderer set (a part's geometry is keyed by the set's own model objects) */
+        Set forcedSet;
         Entity entity;
         double camX, camY, camZ;
         float pt;
@@ -189,6 +225,8 @@ public final class ParallelRender {
         final org.joml.Matrix3f innerNormal = new org.joml.Matrix3f();
         final RenderCache.Rec out = new RenderCache.Rec();
         final List<com.mojang.blaze3d.pipeline.RenderCall> calls = new ArrayList<>();
+        /** TickPoses captures: preparations (prepare), run by the render thread */
+        final List<com.mojang.blaze3d.pipeline.RenderCall> prep = new ArrayList<>();
         /** records of model parts drawn from VRAM (GeckoLib bones), queued at the merge */
         final PartBatch.JobParts parts = new PartBatch.JobParts();
         final java.util.IdentityHashMap<Object, Object> locals = new java.util.IdentityHashMap<>();
@@ -201,9 +239,24 @@ public final class ParallelRender {
         @Override
         public void run() {
             if (!claimed.compareAndSet(false, true)) return;   // the render thread took it while waiting
+            if (tick != null) {   // TickPoses: the tick's pair interpolated at this frame's partial tick
+                try {
+                    parts.clear();
+                    ok = TickPoses.frameParts(tick, this);
+                } catch (Throwable t) {
+                    ok = false;
+                    if (failed++ < 5) System.out.println("[sleep/opt] tick poses: " + t);
+                } finally {
+                    done = true;
+                    synchronized (this) {
+                        notifyAll();
+                    }
+                }
+                return;
+            }
             if (PIN_WORKERS != null && !PINNED.get() && !com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()) pinWorker();   // (the render thread helping keeps its own CPU)
             if (CPU_STATS) countCpu(CPU_WORKER);
-            Set s = SETS.poll();
+            Set s = forcedSet != null ? forcedSet : SETS.poll();
             calls.clear();
             locals.clear();
             parts.clear();
@@ -232,7 +285,7 @@ public final class ParallelRender {
                     calls.clear();
                     parts.clear();
                 }
-                if (s != null) SETS.add(s);
+                if (forcedSet == null) backHome(s);
                 done = true;
                 synchronized (this) {
                     notifyAll();
@@ -361,6 +414,15 @@ public final class ParallelRender {
         j.done = false;
         j.ok = false;
         j.parallel = eligible(e, buffers);
+        j.rendererOnly = false;
+        j.tick = null;
+        if (TickPoses.ON && j.parallel && !INNER) {
+            if (!setsChecked) {
+                ensureSets();
+                setsChecked = true;
+            }
+            j.tick = TickPoses.pairFor(e, pool());   // (the job then interpolates the pair instead of rendering)
+        }
         j.claimed.set(!j.parallel);   // set last: a stale pool entry of this reused job may run it only when it is a complete parallel job
         jobs++;
         if (size == 1) frameEntitiesAt = System.nanoTime();   // (the job just queued is the frame's first)
@@ -743,17 +805,17 @@ public final class ParallelRender {
             if (!ON || phase == 3) return;
             if (!calibChecked) {
                 calibChecked = true;
-                String c = Calibration.get("parts");
+                String c = Calibration.get(key());
                 if ("true".equals(c) || "false".equals(c)) {   // measured on this machine before: no measuring
                     PartBatch.partsInJobs = "true".equals(c);
                     phase = 3;
-                    result = ("true".equals(c) ? "in the jobs" : "the CPU way in the jobs") + " (calibrated earlier: " + Calibration.get("parts.why") + ")";
+                    result = ("true".equals(c) ? "in the jobs" : "the CPU way in the jobs") + " (calibrated earlier: " + Calibration.get(key() + ".why") + ")";
                     System.out.println("[sleep/opt] model parts on the render workers: " + result);
                     return;
                 }
                 // until measured: Intel's integrated graphics walk a multi-draw-indirect of many small commands slowly
                 String vendor = org.lwjgl.opengl.GL11C.glGetString(org.lwjgl.opengl.GL11C.GL_VENDOR);
-                if (vendor != null && vendor.toLowerCase(java.util.Locale.ROOT).contains("intel") && PartBatch.full()) PartBatch.partsInJobs = false;
+                if (vendor != null && vendor.toLowerCase(java.util.Locale.ROOT).contains("intel") && PartBatch.full() && !PartBatch.instanced) PartBatch.partsInJobs = false;
             }
             if (CacheTune.ON && CacheTune.phase != 4) return;   // (after the cache's choice: the two do not measure each other)
             if (GpuAnim.measuring()) {   // (nor the blend's)
@@ -814,14 +876,27 @@ public final class ParallelRender {
                             keep ? "in the jobs" : "the CPU way in the jobs", with / 1e6, without / 1e6, n);
                     System.out.println("[sleep/opt] model parts on the render workers: " + result);
                     phase = 3;
-                    Calibration.put("parts", keep ? "true" : "false", result);
+                    Calibration.put(key(), keep ? "true" : "false", result);
                 }
                 default -> { }
             }
         }
 
+        /**
+         * The calibration's key: the instanced parts (one command per geometry group, 11-15) measured on their own - a
+         * choice made against the old one-command-per-part path (the N100: "the CPU way") does not hold for them.
+         */
+        private static String key() {
+            return PartBatch.instanced ? "partsInst" : "parts";
+        }
+
         static boolean measuring() {
             return ON && (phase == 1 || phase == 2);
+        }
+
+        /** decided (or not measuring at all): PartBatch.InstTune measures after it */
+        static boolean settled() {
+            return !ON || phase == 3;
         }
 
         /** with nothing measured: the flag's value */
@@ -993,6 +1068,21 @@ public final class ParallelRender {
         for (int i = 0; i < size; i++) {
             Job j = QUEUE.get(i);
             boolean clean = j.pose.clear();   // (PoseStack.clear: only the base pose left)
+            if (j.tick != null) {
+                j.run();   // (not taken by a worker yet: here)
+                j.await();
+                j.tick = null;
+                if (j.ok && PartBatch.mergeJob(j.parts, j.buffers)) {
+                    shadow(j);
+                    parallel++;
+                    if (clean) leakCheck(j);
+                    j.entity = null;
+                    continue;
+                }
+                j.parts.clear();
+                j.ok = false;
+                j.parallel = false;   // the usual way, on this thread
+            }
             if (j.parallel) {
                 // helping instead of waiting: the queued jobs from here on that no worker has taken yet
                 for (int k = i; !j.done && k < size; k++) {
@@ -1046,6 +1136,26 @@ public final class ParallelRender {
         }
         if (size > 0) CacheTune.frame(System.nanoTime() - frameEntitiesAt, size);
         size = 0;
+        if (TickPoses.ON) TickPoses.endFrame();
+    }
+
+    /** TickPoses: the dispatcher's shadow for an entity drawn from its pair (vanilla draws it after the renderer, at the entity's position) */
+    private static void shadow(Job j) {
+        Entity e = j.entity;
+        EntityRenderDispatcher d = Minecraft.getInstance().getEntityRenderDispatcher();
+        if (!d.options.entityShadows().get() || !((EntityRenderDispatcherInvoker) d).sleep$shouldRenderShadow() || e.isInvisible()) return;
+        EntityRenderer<? super Entity> r = d.getRenderer(e);
+        float f = ((dev.lull.opt.EntityRendererAccessor) r).sleep$shadowRadius(e);
+        if (f <= 0.0F) return;
+        double d1 = d.distanceToSqr(e.getX(), e.getY(), e.getZ());
+        float f1 = (float) ((1.0 - d1 / 256.0) * (double) ((dev.lull.opt.EntityRendererAccessor) r).sleep$shadowStrength());
+        if (f1 <= 0.0F) return;
+        float pt = j.pt;
+        PoseStack ps = j.pose;
+        ps.pushPose();
+        ps.translate(Mth.lerp((double) pt, e.xOld, e.getX()) - j.camX, Mth.lerp((double) pt, e.yOld, e.getY()) - j.camY, Mth.lerp((double) pt, e.zOld, e.getZ()) - j.camZ);
+        EntityRenderDispatcherInvoker.sleep$renderShadow(ps, j.buffers, e, f1, pt, e.level(), Math.min(f, 32.0F));
+        ps.popPose();
     }
 
     /** entity types whose rendering left a pose pushed (each named once) */
@@ -1144,7 +1254,7 @@ public final class ParallelRender {
         Vec3 off = r.getRenderOffset(e, pt);
         pose.pushPose();
         pose.translate(x + off.x(), y + off.y(), z + off.z());
-        if (INNER) {   // the renderer alone: the dispatcher's flame and shadow are drawn by the dispatcher at the merge
+        if (INNER || j.rendererOnly) {   // the renderer alone: the dispatcher's flame and shadow are drawn by the dispatcher at the merge
             j.yaw = yaw;
             j.light = light;
             j.innerPose.set(pose.last().pose());
@@ -1184,6 +1294,7 @@ public final class ParallelRender {
             System.out.println(w);
         }
         return String.format(java.util.Locale.ROOT, "parallel render: %d workers, jobs %d, on workers %d (render thread helped %d), on the render thread %d, failed %d, refused %d, journaled calls %d, part records merged in %.0f ms%s", THREADS, jobs, parallel,
-                helped, sequential, failed, refused, journaled, mergeNanos / 1e6, (CPU_STATS ? cpuReport() : "") + (WORKER_REFUSED.isEmpty() ? "" : ", kept on the render thread " + WORKER_REFUSED) + (CHECK ? ", checked in place " + checked + (checkMismatches > 0 ? " (differed " + checkMismatches + ")" : "") : "") + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches + (MISMATCH_TYPES.isEmpty() ? "" : " " + MISMATCH_TYPES) : ""));
+                helped, sequential, failed, refused, journaled, mergeNanos / 1e6, (CPU_STATS ? cpuReport() : "") + (WORKER_REFUSED.isEmpty() ? "" : ", kept on the render thread " + WORKER_REFUSED) + (CHECK ? ", checked in place " + checked + (checkMismatches > 0 ? " (differed " + checkMismatches + ")" : "") : "") + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches + (MISMATCH_TYPES.isEmpty() ? "" : " " + MISMATCH_TYPES) : ""))
+                + (TickPoses.ON ? "; " + TickPoses.report() : "");
     }
 }

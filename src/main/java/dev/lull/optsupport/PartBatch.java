@@ -103,6 +103,12 @@ public final class PartBatch {
      * kept): main() starts with local copies of those inputs, filled from the storage buffer in part mode, and uses
      * the copies. Anything else is returned unchanged.
      */
+    /**
+     * The record a vertex reads: base instance + instance. Every command of ours carries its first record's index as its
+     * base instance (one instance: as gl_DrawIDARB was; a group of k instances of one geometry: k records in a row).
+     */
+    public static final String PROBE_I = "(gl_BaseInstanceARB + gl_InstanceID)";
+
     public static String patch(String name, String src) {
         if (!src.startsWith("#version 150") || !src.contains("void main() {")) return src;
         // the path decided before the first patch (tbo: a shader patched before it was set got the storage-buffer
@@ -156,10 +162,10 @@ public final class PartBatch {
         if (uv2 != null) pre.append("    ivec2 probe_UV2 = UV2;\n");
         if (uv0) pre.append("    vec2 probe_UV0 = UV0;\n");
         pre.append("    if (ProbePartMode == 2) {\n");
-        pre.append("        probe_Position = (probeParts[gl_DrawIDARB].pose * vec4(Position, 1.0)).xyz;\n");
+        pre.append("        probe_Position = (probeParts[" + PROBE_I + "].pose * vec4(Position, 1.0)).xyz;\n");
         pre.append("    } else if (ProbePartMode != 0) {\n");
         if (EXTRA) {
-            pre.append("        int probe_i = ProbePartMode == 5 ? gl_BaseInstanceARB : gl_DrawIDARB;\n");
+            pre.append("        int probe_i = " + PROBE_I + ";\n");   // (mode 5: one instance, the persistent record as base instance)
             pre.append("        ProbePart probe_d = probeParts[probe_i];\n");
             pre.append("        vec3 probe_p = Position, probe_nin = Normal;\n");
             // Create's angle: ((time x speed x 3 / 10 + offset) % 360) degrees (Java's %: truncated), about the block's centre
@@ -189,7 +195,7 @@ public final class PartBatch {
             pre.append("        if (ProbePartMode == 5) probe_Position += ProbeCam;\n");
             pre.append("        vec3 probe_n = mat3(probe_d.n0.xyz, probe_d.n1.xyz, probe_d.n2.xyz) * probe_nin;\n");
         } else {
-            pre.append("        ProbePart probe_d = probeParts[gl_DrawIDARB];\n");
+            pre.append("        ProbePart probe_d = probeParts[" + PROBE_I + "];\n");
             pre.append("        probe_Position = (probe_d.pose * vec4(Position, 1.0)).xyz;\n");
             pre.append("        vec3 probe_n = mat3(probe_d.n0.xyz, probe_d.n1.xyz, probe_d.n2.xyz) * Normal;\n");
         }
@@ -221,7 +227,7 @@ public final class PartBatch {
             if (EXTRA) pre.append("        if (ProbePartMode >= 4) probe_UV2 = max(UV2, probe_d.lo.xy);\n");
             if (LIT_ON) {   // mode 6: the level's light where catnip looks it up - the vertex pulled 1/16 toward its block's centre, by the light transform
                 pre.append("        if (ProbePartMode == 6) {\n");
-                pre.append("            ProbeSpin probe_lt = probeSpins[gl_DrawIDARB];\n");
+                pre.append("            ProbeSpin probe_lt = probeSpins[" + PROBE_I + "];\n");
                 pre.append("            vec3 probe_q = (Position - 0.5) * 15.0 / 16.0 + 0.5;\n");
                 pre.append("            vec3 probe_w = vec3(dot(probe_lt.turn.xyz, probe_q) + probe_lt.turn.w, dot(probe_lt.sprites.xyz, probe_q) + probe_lt.sprites.w,"
                         + " dot(probe_lt.scroll.xyz, probe_q) + probe_lt.scroll.w);\n");
@@ -250,7 +256,7 @@ public final class PartBatch {
                         + "    p.pose = mat4(texelFetch(ProbePartTex, b), texelFetch(ProbePartTex, b + 1), texelFetch(ProbePartTex, b + 2), texelFetch(ProbePartTex, b + 3));\n"
                         + "    p.n0 = texelFetch(ProbePartTex, b + 4);\n    p.n1 = texelFetch(ProbePartTex, b + 5);\n    p.n2 = texelFetch(ProbePartTex, b + 6);\n"
                         + "    p.color = texelFetch(ProbePartTex, b + 7);\n    p.lo = texelFetch(ProbePartInts, b + 8);\n    return p;\n}\n");
-        return s.replace("probeParts[gl_DrawIDARB]", "probeFetch(ProbeRecordBase + gl_InstanceID)");
+        return s.replace("probeParts[" + PROBE_I + "]", "probeFetch(ProbeRecordBase + gl_InstanceID)");
     }
 
     // ------------------------------------------------------------------ geometry arena (position 3f, uv 2f, normal 3b+flags, colour 4b, light 2s: 32 bytes)
@@ -372,9 +378,19 @@ public final class PartBatch {
         int[] g = GEOMETRY.get(key);
         if (g != null) return g;
         GEOM.reset();
-        compiler.sleep$geometry(IDENTITY.last(), GEOM);
+        // (the render thread compiling a worker's part - a job's journal: the part's own iterators may be in use by the
+        // worker now rendering with the same renderer set; ModelPartIterMixin gives this thread fresh ones - 11-15, a crash)
+        GEO_THREAD = Thread.currentThread();
+        try {
+            compiler.sleep$geometry(IDENTITY.last(), GEOM);
+        } finally {
+            GEO_THREAD = null;
+        }
         return upload(key);
     }
+
+    /** the thread compiling a part's geometry for the arena (ModelPartIterMixin: no shared iterator on it) */
+    public static volatile Thread GEO_THREAD;
 
     /**
      * As capture, with the geometry under another key than the part: a part whose cubes are swapped (Entity Model
@@ -504,7 +520,7 @@ public final class PartBatch {
         // items): after a refusal none for a while (itemBackoff), then tried again
         if (frame - itemRefusedFrame < itemBackoff) return false;
         if (itemTypes.contains(t)) return true;
-        if (ASKED_ITEM.add(t)) ParallelRender.journal(() -> {
+        if (ASKED_ITEM.add(t)) ParallelRender.prepare(() -> {
             ASKED_ITEM.remove(t);
             if (itemTypeOk(t) && !itemTypes.contains(t)) {
                 java.util.Set<RenderType> s = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
@@ -1247,6 +1263,35 @@ public final class PartBatch {
             return n;
         }
 
+        /** TickPoses: the same records' layout as {@code src} (types, geometry, kinds), the record bytes left to the caller */
+        void copyShape(JobParts src) {
+            if (cap < src.n) {
+                cap = Math.max(src.n, cap * 2);
+                types = java.util.Arrays.copyOf(types, cap);
+                first = java.util.Arrays.copyOf(first, cap);
+                quads = java.util.Arrays.copyOf(quads, cap);
+                kind = java.util.Arrays.copyOf(kind, cap);
+                mem = MemoryUtil.nmemRealloc(mem, 144L * cap);
+            }
+            System.arraycopy(src.types, 0, types, 0, src.n);
+            System.arraycopy(src.first, 0, first, 0, src.n);
+            System.arraycopy(src.quads, 0, quads, 0, src.n);
+            System.arraycopy(src.kind, 0, kind, 0, src.n);
+            n = src.n;
+        }
+
+        /** TickPoses: a pair's job dropped (its entity gone) */
+        void free() {
+            if (mem != 0) MemoryUtil.nmemFree(mem);
+            mem = MemoryUtil.nmemAlloc(144L * 64);
+            cap = 64;
+            n = 0;
+            types = new RenderType[64];
+            first = new int[64];
+            quads = new int[64];
+            kind = new byte[64];
+        }
+
         long next(RenderType t, int[] g) {
             return next(t, g[0], g[1], (byte) 0);
         }
@@ -1290,12 +1335,12 @@ public final class PartBatch {
      */
     public static boolean captureGeoInJob(Object key, GeometrySource src, Object a, Object b, PoseStack.Pose pose, RenderType type, JobParts parts, int light, int overlay, int color) {
         if (!workerTypes.contains(type)) {
-            if (ASKED.add(type)) ParallelRender.journal(() -> learnType(type));
+            if (ASKED.add(type)) ParallelRender.prepare(() -> learnType(type));
             return false;
         }
         int[] g = geoSnapshot.get(key);
         if (g == null) {
-            if (ASKED_GEO.add(key)) ParallelRender.journal(() -> {
+            if (ASKED_GEO.add(key)) ParallelRender.prepare(() -> {
                 ASKED_GEO.remove(key);
                 if (GEOMETRY.get(key) == null) {
                     GEOM.reset();
@@ -1328,12 +1373,12 @@ public final class PartBatch {
      */
     private static boolean captureInJob(ModelPart part, PartCompiler compiler, PoseStack.Pose pose, RenderType type, JobParts jp, int light, int overlay, int color) {
         if (!workerTypes.contains(type)) {
-            if (ASKED.add(type)) ParallelRender.journal(() -> learnType(type));
+            if (ASKED.add(type)) ParallelRender.prepare(() -> learnType(type));
             return false;
         }
         int[] g = geoSnapshot.get(part);
         if (g == null) {
-            if (ASKED_GEO.add(part)) ParallelRender.journal(() -> {
+            if (ASKED_GEO.add(part)) ParallelRender.prepare(() -> {
                 ASKED_GEO.remove(part);
                 geometry(part, compiler);
                 publishGeo(part);
@@ -1611,7 +1656,143 @@ public final class PartBatch {
         }
     }
 
+    /**
+     * -Dlab.partbatch.noInstancing=true: one command per record as before (ClientAuto's in-window flip switches it).
+     * Instanced (default): the model parts' records grouped by geometry, one command per group (k instances) - on the
+     * N100's Intel driver the per-command cost was the parts' whole loss (11-15: 171 -> 228 fps).
+     */
+    public static boolean instanced = !Boolean.getBoolean("lab.partbatch.noInstancing");
+    /** the groups as direct instanced draws (default) or one instanced multi-draw (-Dlab.partbatch.instancedMdi=true); flippable */
+    public static boolean direct = !Boolean.getBoolean("lab.partbatch.instancedMdi");
+    public static long instGroups, instRecords;
+    private static long gMem, gCounts, gBases;
+    private static int gCap;
+    private static int[] gId = new int[0], hTab = new int[0], hCnt = new int[0], hSlot = new int[0];
+    private static long[] hKey = new long[0];
+    private static long ssboAlign;
+
+    private static long ssboAlign() {
+        if (ssboAlign == 0) ssboAlign = Math.max(16, GL11C.glGetInteger(GL43C.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT));
+        return ssboAlign;
+    }
+
+    /**
+     * Instancing measured per machine (11-15: the N100's Intel graphics 156 -> 224 fps with it, the host's NVIDIA
+     * 1950 -> 1806 without a clear cause yet): windows with and without in turn over whole frames once 200+ part records a
+     * frame go through the storage-buffer path, after the other entity choices; kept in Calibration ("partsInstanced").
+     * -Dlab.partbatch.instTune=false: the flag's value (instanced on unless lab.partbatch.noInstancing).
+     */
+    static final class InstTune {
+        private static final boolean ON = !"false".equals(System.getProperty("lab.partbatch.instTune")) && !Boolean.getBoolean("lab.partbatch.noInstancing");
+        private static final int WINDOW = 240, SETTLE = 20, ROUNDS = 3, MIN_RECORDS = 200;
+        private static int phase, frames, window;
+        private static long last, recAt;
+        private static final double[] WITH = new double[ROUNDS], WITHOUT = new double[ROUNDS];
+        private static final Samples S = new Samples(WINDOW);
+        private static boolean calibChecked;
+        static String result = "not measured";
+
+        static void endFrame() {
+            long now = System.nanoTime(), dt = last == 0 ? 0 : now - last;
+            last = now;
+            long rec = DQ_REC[0] + DQ_REC[1], n = rec - recAt;
+            recAt = rec;
+            if (!ON || phase == 3) return;
+            if (!calibChecked) {
+                calibChecked = true;
+                String c = Calibration.get("partsInstanced");
+                if ("true".equals(c) || "false".equals(c)) {
+                    instanced = "true".equals(c);
+                    phase = 3;
+                    result = (instanced ? "instanced" : "a command a part") + " (calibrated earlier: " + Calibration.get("partsInstanced.why") + ")";
+                    System.out.println("[sleep/opt] model parts: " + result);
+                    return;
+                }
+            }
+            if (!ParallelRender.PartsTune.settled() || ParallelRender.measuring() || GpuAnim.measuring() || n < MIN_RECORDS || net.minecraft.client.Minecraft.getInstance().screen != null) {
+                if (phase == 2) {   // (a window broken: measured again)
+                    phase = 1;
+                    frames = 0;
+                }
+                return;
+            }
+            switch (phase) {
+                case 0 -> {
+                    window = 0;
+                    instanced = true;
+                    phase = 1;
+                    frames = 0;
+                    System.out.println("[sleep/opt] model parts: measuring instancing (" + n + " records a frame)");
+                }
+                case 1 -> {
+                    if (++frames < SETTLE) return;
+                    phase = 2;
+                    frames = 0;
+                    S.clear();
+                }
+                case 2 -> {
+                    S.add(dt);
+                    if (++frames < WINDOW) return;
+                    double per = S.trimmed();
+                    if (window % 2 == 0) WITH[window / 2] = per; else WITHOUT[window / 2] = per;
+                    window++;
+                    if (window < 2 * ROUNDS) {
+                        instanced = window % 2 == 0;
+                        phase = 1;
+                        frames = 0;
+                        return;
+                    }
+                    double with = 0, without = 0;
+                    for (int r = 0; r < ROUNDS; r++) {
+                        with += WITH[r];
+                        without += WITHOUT[r];
+                    }
+                    with /= ROUNDS;
+                    without /= ROUNDS;
+                    instanced = with <= without;
+                    result = String.format(java.util.Locale.ROOT, "%s (a frame %.3f ms instanced, %.3f a command a part; %d records a frame)",
+                            instanced ? "instanced" : "a command a part", with / 1e6, without / 1e6, n);
+                    System.out.println("[sleep/opt] model parts: " + result);
+                    phase = 3;
+                    Calibration.put("partsInstanced", instanced ? "true" : "false", result);
+                }
+                default -> { }
+            }
+        }
+
+        static void recalibrate() {
+            if (!ON) return;
+            phase = 0;
+            frames = 0;
+            window = 0;
+            calibChecked = true;
+            S.clear();
+            instanced = true;
+            result = "not measured";
+        }
+
+        static boolean measuring() {
+            return ON && (phase == 1 || phase == 2);
+        }
+    }
+
+    /** CPU time in drawQueue (SSBO path) by the instancing switch: [off, on] nanoseconds, records, calls */
+    public static final long[] DQ_NS = new long[2], DQ_REC = new long[2], DQ_CALLS = new long[2];
+
     private static void drawQueue(ShaderInstance shader, Queue q, int mode) {
+        if (tbo) {
+            drawQueueTexels(shader, q, mode);
+            return;
+        }
+        long t0 = System.nanoTime();
+        int side = instanced ? 1 : 0, n0 = q.n;
+        drawQueueFull(shader, q, mode);
+        DQ_NS[side] += System.nanoTime() - t0;
+        DQ_REC[side] += n0;
+        DQ_CALLS[side]++;
+    }
+
+    private static void drawQueueFull(ShaderInstance shader, Queue q, int mode) {
         if (tbo) {
             drawQueueTexels(shader, q, mode);
             return;
@@ -1624,10 +1805,95 @@ public final class PartBatch {
             return;
         }
         if (ssbo == 0) ssbo = GL15C.glGenBuffers();
-        GL15C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, ssbo);
         long bytes = 144L * q.n;
-        GrowBuffer.upload(GL43C.GL_SHADER_STORAGE_BUFFER, ssbo, bytes, q.mem);
-        GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, SSBO_BINDING, ssbo);
+        // instancing (modes 1, 3, 7): the records grouped by geometry - sorted when the type's order does not matter, else
+        // only runs already next to each other (the order kept)
+        boolean grouped = instanced && (mode == 1 || mode == 3 || mode == 7) && q.n > 1;
+        long src = q.mem;
+        if (grouped) {
+            boolean sort = current != null && EntityBatch.commutes(current);
+            int n = q.n;
+            if (gCap < n) {
+                if (gMem != 0) {
+                    MemoryUtil.nmemFree(gMem);
+                    MemoryUtil.nmemFree(gCounts);
+                    MemoryUtil.nmemFree(gBases);
+                }
+                gCap = Math.max(n, gCap * 2);
+                gMem = MemoryUtil.nmemAlloc(144L * gCap);
+                gCounts = MemoryUtil.nmemAlloc(4L * gCap);
+                gBases = MemoryUtil.nmemAlloc(4L * gCap);
+            }
+            // the records in that order: into the ring's mapped memory when it has room (no upload), else a staging copy
+            long ringOff = UploadRing.RECORDS ? UploadRing.alloc(bytes, ssboAlign()) : -1;
+            long dst = ringOff >= 0 ? UploadRing.address(ringOff) : gMem;
+            if (sort) {
+                // grouped in one pass (a sort cost 37 ns a record on the host, 11-15): each geometry's group in the order
+                // of its first record, the records of a group in their order; a hash table of the geometries met
+                if (gId.length < n) gId = new int[Math.max(n, gId.length * 2)];
+                if (hTab.length < 2 * n) {
+                    int sz = Integer.highestOneBit(Math.max(256, 2 * n) - 1) << 1;
+                    hTab = new int[sz];
+                    hKey = new long[sz / 2];
+                    hCnt = new int[sz / 2];
+                    hSlot = new int[sz / 2];
+                }
+                int mask = hTab.length - 1, groups = 0;
+                for (int i = 0; i < n; i++) {
+                    long key = (long) MemoryUtil.memGetInt(q.bases + 4L * i) << 32 | (MemoryUtil.memGetInt(q.counts + 4L * i) & 0xFFFFFFFFL);
+                    int h = (int) (key * 0x9E3779B97F4A7C15L >>> 40) & mask;
+                    int g;
+                    while (true) {
+                        g = hTab[h];
+                        if (g == 0) {
+                            hKey[groups] = key;
+                            hCnt[groups] = 0;
+                            hSlot[groups] = h;
+                            g = ++groups;
+                            hTab[h] = g;
+                            break;
+                        }
+                        if (hKey[g - 1] == key) break;
+                        h = (h + 1) & mask;
+                    }
+                    gId[i] = g - 1;
+                    hCnt[g - 1]++;
+                }
+                for (int g = 0, at = 0; g < groups; g++) {
+                    int c = hCnt[g];
+                    hCnt[g] = at;   // (now the group's next position)
+                    at += c;
+                    hTab[hSlot[g]] = 0;   // (the table empty again for the next call)
+                }
+                for (int i = 0; i < n; i++) {
+                    int pos = hCnt[gId[i]]++;
+                    long key = hKey[gId[i]];
+                    MemoryUtil.memCopy(q.mem + 144L * i, dst + 144L * pos, 144);
+                    MemoryUtil.memPutInt(gCounts + 4L * pos, (int) key);
+                    MemoryUtil.memPutInt(gBases + 4L * pos, (int) (key >>> 32));
+                }
+            } else {
+                MemoryUtil.memCopy(q.counts, gCounts, 4L * n);
+                MemoryUtil.memCopy(q.bases, gBases, 4L * n);
+                MemoryUtil.memCopy(q.mem, dst, bytes);
+            }
+            if (ringOff >= 0) {
+                GL30C.glBindBufferRange(GL43C.GL_SHADER_STORAGE_BUFFER, SSBO_BINDING, UploadRing.buffer(), ringOff, bytes);
+                src = 0;
+            } else src = gMem;
+        } else if (UploadRing.RECORDS && instanced) {
+            long ringOff = UploadRing.alloc(bytes, ssboAlign());
+            if (ringOff >= 0) {
+                MemoryUtil.memCopy(q.mem, UploadRing.address(ringOff), bytes);
+                GL30C.glBindBufferRange(GL43C.GL_SHADER_STORAGE_BUFFER, SSBO_BINDING, UploadRing.buffer(), ringOff, bytes);
+                src = 0;
+            }
+        }
+        if (src != 0) {
+            GL15C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, ssbo);
+            GrowBuffer.upload(GL43C.GL_SHADER_STORAGE_BUFFER, ssbo, bytes, src);
+            GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, SSBO_BINDING, ssbo);
+        }
         if (mode == 6) {   // level-lit SuperByteBuffers: their light transforms (spin binding) and the light boxes
             if (st[6] == GL31C.GL_INVALID_INDEX) {
                 fallbacks += q.n;
@@ -1672,20 +1938,51 @@ public final class PartBatch {
             cmdCap = Math.max(bytes20, cmdCap * 2);
             cmdMem = MemoryUtil.nmemAlloc(cmdCap);
         }
-        for (int i = 0; i < q.n; i++) {
-            long c = cmdMem + 20L * i;
-            MemoryUtil.memPutInt(c, MemoryUtil.memGetInt(q.counts + 4L * i));
-            MemoryUtil.memPutInt(c + 4, 1);
-            MemoryUtil.memPutInt(c + 8, 0);
-            MemoryUtil.memPutInt(c + 12, MemoryUtil.memGetInt(q.bases + 4L * i));
-            MemoryUtil.memPutInt(c + 16, 0);
+        int cmds = 0;
+        if (grouped) {
+            // one command per run of one geometry: count, k instances, base vertex, the run's first record as base instance
+            for (int k = 0; k < q.n; ) {
+                int count = MemoryUtil.memGetInt(gCounts + 4L * k), base = MemoryUtil.memGetInt(gBases + 4L * k);
+                int e = k + 1;
+                while (e < q.n && MemoryUtil.memGetInt(gCounts + 4L * e) == count && MemoryUtil.memGetInt(gBases + 4L * e) == base) e++;
+                long c = cmdMem + 20L * cmds++;
+                MemoryUtil.memPutInt(c, count);
+                MemoryUtil.memPutInt(c + 4, e - k);
+                MemoryUtil.memPutInt(c + 8, 0);
+                MemoryUtil.memPutInt(c + 12, base);
+                MemoryUtil.memPutInt(c + 16, k);
+                k = e;
+            }
+            instGroups += cmds;
+            instRecords += q.n;
+        } else {
+            for (int i = 0; i < q.n; i++) {
+                long c = cmdMem + 20L * i;
+                MemoryUtil.memPutInt(c, MemoryUtil.memGetInt(q.counts + 4L * i));
+                MemoryUtil.memPutInt(c + 4, 1);
+                MemoryUtil.memPutInt(c + 8, 0);
+                MemoryUtil.memPutInt(c + 12, MemoryUtil.memGetInt(q.bases + 4L * i));
+                MemoryUtil.memPutInt(c + 16, i);   // the record (PROBE_I)
+            }
+            cmds = q.n;
         }
-        long cmdAt = COMMANDS.upload(cmdMem, bytes20);
         boolean mat = mode != 2 && mode != 7 && Materials.begin(shader, current);   // a material mask beside the type's texture
-        GL43C.glMultiDrawElementsIndirect(GL11C.GL_TRIANGLES, seq.type().asGLType, cmdAt, q.n, 20);
-        if (IndirectDiag.ON) IndirectDiag.after("parts " + mode, seq.type().asGLType, cmdAt, q.n, 20);
+        if (grouped && direct) {
+            // the groups as direct instanced draws: the instanced multi-draw cost the host's NVIDIA driver ~50 us a frame on
+            // the CPU (11-15: -9.5 % fps for the same commands; the texture-buffer path's direct draws won there)
+            int type = seq.type().asGLType;
+            for (int c = 0; c < cmds; c++) {
+                long cm = cmdMem + 20L * c;
+                org.lwjgl.opengl.GL42C.glDrawElementsInstancedBaseVertexBaseInstance(GL11C.GL_TRIANGLES, MemoryUtil.memGetInt(cm), type, 0L,
+                        MemoryUtil.memGetInt(cm + 4), MemoryUtil.memGetInt(cm + 12), MemoryUtil.memGetInt(cm + 16));
+            }
+        } else {
+            long cmdAt = COMMANDS.upload(cmdMem, 20L * cmds);
+            GL43C.glMultiDrawElementsIndirect(GL11C.GL_TRIANGLES, seq.type().asGLType, cmdAt, cmds, 20);
+            if (IndirectDiag.ON) IndirectDiag.after("parts " + mode, seq.type().asGLType, cmdAt, cmds, 20);
+            GL15C.glBindBuffer(org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER, 0);
+        }
         if (mat) Materials.end(shader);
-        GL15C.glBindBuffer(org.lwjgl.opengl.GL40C.GL_DRAW_INDIRECT_BUFFER, 0);
         GL20C.glUniform1i(flag, 0);
         draws++;
         q.n = 0;
@@ -1858,6 +2155,7 @@ public final class PartBatch {
         frame++;
         ParallelRender.CacheTune.endFrame();   // (the cache or the workers: by whole frames too)
         ParallelRender.PartsTune.endFrame();   // (whether parts in worker jobs pay here: measured by whole frames)
+        InstTune.endFrame();
         ASKED.clear();   // a request journaled by a job that then failed was dropped: asked again next frame
         ASKED_GEO.clear();
         ASKED_ITEM.clear();
@@ -1884,9 +2182,9 @@ public final class PartBatch {
 
     public static String report() {
         SbbRecorder rcd = sbbRecorder;
-        return (rcd != null ? rcd.report() + "; " : "") + ItemGpu.report() + "; " + QuadGpu.report() + " (" + PartsPrograms.report() + "); " + String.format(java.util.Locale.ROOT, "part batch: SuperByteBuffer calls %d, parts %d (not taken %d %s %s %s, UV shift %d, level light %d); shaders patched %s, parts %d (EMF %d), GeckoLib bones %d (from workers %d, jobs refused at merge %d), model parts from workers %d, multi-draws %d, geometries %d (%.1f MB), lost %d; resident draws %d, uploads %d (arena %.1f MB); persistent records %d, draws %d, uploads %d; level-lit parts %d (refused %d); %s",
+        return (rcd != null ? rcd.report() + "; " : "") + ItemGpu.report() + "; " + QuadGpu.report() + " (" + PartsPrograms.report() + "); " + String.format(java.util.Locale.ROOT, "part batch: SuperByteBuffer calls %d, parts %d (not taken %d %s %s %s, UV shift %d, level light %d); shaders patched %s, parts %d (EMF %d), GeckoLib bones %d (from workers %d, jobs refused at merge %d), model parts from workers %d, multi-draws %d, geometries %d (%.1f MB), lost %d; resident draws %d, uploads %d (arena %.1f MB); persistent records %d, draws %d, uploads %d; level-lit parts %d (refused %d); instanced %s: %d records in %d groups (drawQueue CPU off/on: %.0f / %.0f ns a record, %d / %d records, %d / %d calls); %s",
                 sbbCalls, sbbParts, sbbRefused, java.util.Arrays.toString(SBB_WHY), SBB_CONSUMERS, SBB_TYPES, sbbShift, sbbLevelLight, PATCHED, parts, emfParts, geoParts, jobMerged, jobRefused, jobParts, draws, geometries, (double) used * STRIDE / 1048576.0, fallbacks, residentDraws, residentUploads,
-                (double) RES_ARENA.capacity * RES_ARENA.stride / 1048576.0, pUsed - pFreeN, persistDraws, persistUploads, litParts, litRefused,
+                (double) RES_ARENA.capacity * RES_ARENA.stride / 1048576.0, pUsed - pFreeN, persistDraws, persistUploads, litParts, litRefused, instanced, instRecords, instGroups, DQ_REC[0] == 0 ? 0.0 : (double) DQ_NS[0] / DQ_REC[0], DQ_REC[1] == 0 ? 0.0 : (double) DQ_NS[1] / DQ_REC[1], DQ_REC[0], DQ_REC[1], DQ_CALLS[0], DQ_CALLS[1],
                 LightBoxes.report()) + (RESIDENT_WHY ? System.lineSeparator() + residentWhyReport() : "");
     }
 }
