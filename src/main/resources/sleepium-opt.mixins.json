@@ -165,6 +165,8 @@
     "FrameThreadLevelMixin",
     "FrameThreadParticlesMixin",
     "FrameThreadDirtyInvoker",
+    "FrameThreadCallsMixin",
+    "FrameThreadLightCallMixin",
     "GlWorkerFrameMixin",
     "GlWorkerFlipMixin",
     "GlWorkerLayerMixin",

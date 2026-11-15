@@ -137,7 +137,7 @@ public final class ClientLightAsync {
             long p = marks[i];
             if (level != null) level.getChunkSource().onLightUpdate(LAYERS[layers[i]], SectionPos.of(p));
             else if (LightVolumes.ON) LightVolumes.lightChanged(SectionPos.x(p), SectionPos.y(p), SectionPos.z(p));
-            else lr.setSectionDirty(SectionPos.x(p), SectionPos.y(p), SectionPos.z(p));
+            else FrameThread.sectionDirty(lr, SectionPos.x(p), SectionPos.y(p), SectionPos.z(p));
         }
         replayed += marks.length;
         if (pendingAny) {   // the replayed marks make their sections' records stale from here on: no longer pending

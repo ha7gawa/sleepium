@@ -1,81 +1,85 @@
 package dev.lull.opt;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.Window;
 import dev.lull.optsupport.FrameThread;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.FogRenderer;
 import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** -Dlab.opt.FrameThreadMixin: runTick's render half recorded on the main thread and run on the frame thread (FrameThread). */
+/**
+ * -Dlab.opt.FrameThreadMixin: runTick's render half recorded on the main thread and run on the frame thread (FrameThread).
+ * Each call is wrapped (not redirected): the frame thread runs the recorded Operation - the whole chain of other mods'
+ * wrappers and argument changes on the same call (Xaero's World Map changes render's arguments) - with its arguments.
+ */
 @Mixin(Minecraft.class)
 public abstract class FrameThreadMixin {
-    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;clear(IZ)V"))
-    private void sleep$clear(int mask, boolean checkError) {
-        if (FrameThread.recording()) FrameThread.op(FrameThread.CLEAR, mask, 0, checkError);
-        else com.mojang.blaze3d.systems.RenderSystem.clear(mask, checkError);
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;clear(IZ)V"))
+    private void sleep$clear(int mask, boolean checkError, Operation<Void> op) {
+        if (FrameThread.recording()) FrameThread.record(op, mask, checkError);
+        else op.call(mask, checkError);
     }
 
-    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;bindWrite(Z)V"))
-    private void sleep$bindWrite(RenderTarget t, boolean viewport) {
-        if (FrameThread.recording()) FrameThread.op(FrameThread.BIND_WRITE, 0, 0, viewport);
-        else t.bindWrite(viewport);
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;bindWrite(Z)V"))
+    private void sleep$bindWrite(RenderTarget t, boolean viewport, Operation<Void> op) {
+        if (FrameThread.recording()) FrameThread.record(op, t, viewport);
+        else op.call(t, viewport);
     }
 
-    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/FogRenderer;setupNoFog()V"))
-    private void sleep$noFog() {
-        if (FrameThread.recording()) FrameThread.op(FrameThread.SETUP_NO_FOG);
-        else FogRenderer.setupNoFog();
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/FogRenderer;setupNoFog()V"))
+    private void sleep$noFog(Operation<Void> op) {
+        if (FrameThread.recording()) FrameThread.record(op);
+        else op.call();
     }
 
-    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;enableCull()V"))
-    private void sleep$cull() {
-        if (FrameThread.recording()) FrameThread.op(FrameThread.ENABLE_CULL);
-        else com.mojang.blaze3d.systems.RenderSystem.enableCull();
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;enableCull()V"))
+    private void sleep$cull(Operation<Void> op) {
+        if (FrameThread.recording()) FrameThread.record(op);
+        else op.call();
     }
 
-    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/neoforged/neoforge/client/ClientHooks;fireRenderFramePre(Lnet/minecraft/client/DeltaTracker;)V", remap = false))
-    private void sleep$framePre(DeltaTracker t) {
-        if (FrameThread.recording()) FrameThread.op(FrameThread.FRAME_PRE);
-        else net.neoforged.neoforge.client.ClientHooks.fireRenderFramePre(t);
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/neoforged/neoforge/client/ClientHooks;fireRenderFramePre(Lnet/minecraft/client/DeltaTracker;)V", remap = false))
+    private void sleep$framePre(DeltaTracker t, Operation<Void> op) {
+        if (FrameThread.recording()) FrameThread.record(op, t);
+        else op.call(t);
     }
 
-    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;render(Lnet/minecraft/client/DeltaTracker;Z)V"))
-    private void sleep$render(GameRenderer gr, DeltaTracker t, boolean renderLevel) {
-        if (FrameThread.recording()) FrameThread.op(FrameThread.RENDER, 0, 0, renderLevel);
-        else gr.render(t, renderLevel);
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;render(Lnet/minecraft/client/DeltaTracker;Z)V"))
+    private void sleep$render(GameRenderer gr, DeltaTracker t, boolean renderLevel, Operation<Void> op) {
+        if (FrameThread.recording()) FrameThread.record(op, gr, t, renderLevel);
+        else op.call(gr, t, renderLevel);
     }
 
-    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/neoforged/neoforge/client/ClientHooks;fireRenderFramePost(Lnet/minecraft/client/DeltaTracker;)V", remap = false))
-    private void sleep$framePost(DeltaTracker t) {
-        if (FrameThread.recording()) FrameThread.op(FrameThread.FRAME_POST);
-        else net.neoforged.neoforge.client.ClientHooks.fireRenderFramePost(t);
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/neoforged/neoforge/client/ClientHooks;fireRenderFramePost(Lnet/minecraft/client/DeltaTracker;)V", remap = false))
+    private void sleep$framePost(DeltaTracker t, Operation<Void> op) {
+        if (FrameThread.recording()) FrameThread.record(op, t);
+        else op.call(t);
     }
 
-    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;unbindWrite()V"))
-    private void sleep$unbind(RenderTarget t) {
-        if (FrameThread.recording()) FrameThread.op(FrameThread.UNBIND_WRITE);
-        else t.unbindWrite();
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;unbindWrite()V"))
+    private void sleep$unbind(RenderTarget t, Operation<Void> op) {
+        if (FrameThread.recording()) FrameThread.record(op, t);
+        else op.call(t);
     }
 
-    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;blitToScreen(II)V"))
-    private void sleep$blit(RenderTarget t, int w, int h) {
-        if (FrameThread.recording()) FrameThread.op(FrameThread.BLIT, w, h, false);
-        else t.blitToScreen(w, h);
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;blitToScreen(II)V"))
+    private void sleep$blit(RenderTarget t, int w, int h, Operation<Void> op) {
+        if (FrameThread.recording()) FrameThread.record(op, t, w, h);
+        else op.call(t, w, h);
     }
 
-    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V"))
-    private void sleep$present(Window w) {
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V"))
+    private void sleep$present(Window w, Operation<Void> op) {
         if (FrameThread.recording()) {
-            FrameThread.op(FrameThread.UPDATE_DISPLAY);
+            FrameThread.record(op, w);
             FrameThread.present();
-        } else w.updateDisplay();
+        } else op.call(w);
     }
 
     /** the event loop's thread as each thread sees it: the frame thread counts as Minecraft's own while it draws */

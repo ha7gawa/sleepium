@@ -3836,7 +3836,7 @@ public final class VoxelStream {
         int r = mc.options.getEffectiveRenderDistance() + 1, ccx = net.minecraft.util.Mth.floor(cam.x) >> 4, ccz = net.minecraft.util.Mth.floor(cam.z) >> 4;
         for (int x = ccx - r; x <= ccx + r; x++)
             for (int z = ccz - r; z <= ccz + r; z++)
-                for (int sy = level.getMinSection(); sy < level.getMaxSection(); sy++) mc.levelRenderer.setSectionDirty(x, sy, z);
+                for (int sy = level.getMinSection(); sy < level.getMaxSection(); sy++) FrameThread.sectionDirty(mc.levelRenderer, x, sy, z);
     }
 
     public static String report() {

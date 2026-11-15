@@ -74,9 +74,12 @@ public final class FrameThread {
         thread = new Thread(FrameThread::loop, "Sleepium frame");
         thread.setDaemon(true);
         thread.setPriority(Thread.MAX_PRIORITY);
-        // the context goes to the frame thread (it takes it at its first job)
+        // the context goes to the frame thread (it takes it at its first job); the main thread keeps a side context of
+        // its own, shared with it: other mods' raw GL calls from the main thread (Sodium's fence in runTick) land there
+        // instead of aborting the JVM with no context current (their textures and buffers are shared objects)
         org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(0L);
         org.lwjgl.opengl.GL.setCapabilities(null);
+        sideOn();
         setRenderThread(thread);
         active = true;
         thread.start();
@@ -133,6 +136,40 @@ public final class FrameThread {
         return true;
     }
 
+    /** calls into the renderer the main thread made while a frame drew: their Operations and arguments, made after it */
+    private static final java.util.ArrayList<com.llamalad7.mixinextras.injector.wrapoperation.Operation<?>> CALLS = new java.util.ArrayList<>();
+    private static final java.util.ArrayList<Object[]> CALL_ARGS = new java.util.ArrayList<>();
+    public static long deferredCalls;
+
+    /** the calls handed over with a frame: made by the frame thread at its job's start, before it draws */
+    private static final java.util.ArrayList<com.llamalad7.mixinextras.injector.wrapoperation.Operation<?>> JOB_CALLS = new java.util.ArrayList<>();
+    private static final java.util.ArrayList<Object[]> JOB_CALL_ARGS = new java.util.ArrayList<>();
+
+    /**
+     * FrameThreadCallsMixin: a call of the main thread into the level renderer, queued (true) - it is made on the frame
+     * thread at the start of the next frame, before that frame draws (vanilla made it before the frame too): the
+     * renderer's side - vanilla's, Sodium's (its RenderAsserts want the render thread) - only ever runs there
+     */
+    public static boolean deferCall(com.llamalad7.mixinextras.injector.wrapoperation.Operation<?> op, Object... args) {
+        if (!active || Thread.currentThread() != mainThread || mainHolds) return false;
+        for (int i = 0; i < args.length; i++)   // (a caller may reuse its mutable position after the call)
+            if (args[i] instanceof net.minecraft.core.BlockPos bp) args[i] = bp.immutable();
+        CALLS.add(op);
+        CALL_ARGS.add(args);
+        deferredCalls++;
+        return true;
+    }
+
+    private static final com.llamalad7.mixinextras.injector.wrapoperation.Operation<Void> SECTION_DIRTY = a -> {
+        ((net.minecraft.client.renderer.LevelRenderer) a[0]).setSectionDirty((Integer) a[1], (Integer) a[2], (Integer) a[3]);
+        return null;
+    };
+
+    /** the engine's own section marks (light volumes, async light, voxel stream): through the frame thread's queue when it runs */
+    public static void sectionDirty(net.minecraft.client.renderer.LevelRenderer lr, int x, int y, int z) {
+        if (!deferCall(SECTION_DIRTY, lr, x, y, z)) lr.setSectionDirty(x, y, z);
+    }
+
     private static Thread mainThread() {
         return mainThread;
     }
@@ -142,6 +179,11 @@ public final class FrameThread {
         if (!pending) return;
         long t0 = System.nanoTime();
         waitPumping(() -> jobDone);
+        long w = System.nanoTime() - doneAt;
+        if (w >= 0 && w < 100_000_000L) {
+            mainWakeNs += w;
+            mainWakes++;
+        }
         pending = false;
         overlapWaitNs += System.nanoTime() - t0;
         if (nDirty > 0) {   // the marks queued meanwhile, now (the frame done: nothing reads the dirty sets)
@@ -170,6 +212,18 @@ public final class FrameThread {
         awaitLast();
         nOps = 0;
         fresh = false;
+    }
+
+    /** the recorded calls as the wrapped Operations (other mods' wrappers included) and their arguments */
+    @SuppressWarnings("rawtypes")
+    private static final com.llamalad7.mixinextras.injector.wrapoperation.Operation[] OPERATIONS = new com.llamalad7.mixinextras.injector.wrapoperation.Operation[32];
+    private static final Object[][] ARGS = new Object[32][];
+
+    public static void record(com.llamalad7.mixinextras.injector.wrapoperation.Operation<?> operation, Object... args) {
+        if (fresh) begin();
+        OPERATIONS[nOps] = operation;
+        ARGS[nOps] = args;
+        OPS[nOps++] = 0;
     }
 
     public static void op(int code) {
@@ -205,6 +259,12 @@ public final class FrameThread {
     public static void present() {
         org.lwjgl.glfw.GLFW.glfwPollEvents();
         if (mainHolds) giveBack();
+        sideFence();
+        FrameRandom.install(mc.level);   // (the level's random per thread: render code may draw from it)
+        JOB_CALLS.addAll(CALLS);
+        JOB_CALL_ARGS.addAll(CALL_ARGS);
+        CALLS.clear();
+        CALL_ARGS.clear();
         long t0 = System.nanoTime();
         fresh = true;
         if (OVERLAP) {   // the world's lists the frame walks, as they are now (the main thread changes them meanwhile)
@@ -214,7 +274,7 @@ public final class FrameThread {
             for (var en : ((dev.lull.opt.ParticleEngineAccessor) mc.particleEngine).sleep$particles().entrySet())
                 HELD_PARTICLES.put(en.getKey(), new java.util.ArrayDeque<>(en.getValue()));
             heldValid = mc.level != null;
-            if (mc.level != null) {   // renderLevel's light point, here (packets and the tick may change the light engine while the frame draws)
+            if (mc.level != null && mc.getConnection() != null && mc.getConnection().getLevel() == mc.level) {   // renderLevel's light point, here (packets and the tick may change the light engine while the frame draws)
                 if (lightPoint != null) lightPoint.accept(mc.level);
                 else {
                     mc.level.pollLightUpdates();
@@ -222,6 +282,7 @@ public final class FrameThread {
                 }
             }
         } else heldValid = false;
+        handAt = System.nanoTime();
         jobDone = false;
         LockSupport.unpark(thread);
         if (OVERLAP) {   // (A2 test) the frame draws while the main thread goes on; the next frame's first op waits
@@ -251,12 +312,15 @@ public final class FrameThread {
         long t0 = System.nanoTime();
         if (BORROW_LOG) {
             StackTraceElement[] st = new Throwable().getStackTrace();
-            String site = st.length > 3 ? st[2] + " <- " + st[3] : "?";
+            StringBuilder sb = new StringBuilder();
+            for (int i = 3; i < Math.min(st.length, 11); i++) sb.append(i > 3 ? " <- " : "").append(st[i].getClassName().substring(st[i].getClassName().lastIndexOf('.') + 1)).append('.').append(st[i].getMethodName()).append(':').append(st[i].getLineNumber());
+            String site = sb.toString();
             BORROW_SITES.computeIfAbsent(site, k -> new long[1])[0]++;
         }
         borrowAsked = true;
         LockSupport.unpark(thread);
         waitPumping(() -> !frameHolds && jobDone);
+        org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(0L);   // (the side context released)
         org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(window);
         org.lwjgl.opengl.GL.setCapabilities(caps);
         setRenderThread(mainThread);
@@ -267,15 +331,72 @@ public final class FrameThread {
 
     private static final boolean BORROW_LOG = !"false".equals(System.getProperty("lab.frameThread.borrowLog"));
 
+    // ------------------------------------------------------------------ the main thread's side context
+
+    private static long side;
+    private static org.lwjgl.opengl.GLCapabilities sideCaps;
+    private static boolean sideBroken;
+    /** the side context's fence at a hand-over: the frame waits for it on the GPU (what the main thread uploaded there) */
+    private static volatile long sideFence;
+    public static long sideFences;
+
+    /** the main thread: the side context current (made on first use; GlWorker's way: a hidden 1x1 window, shared) */
+    private static void sideOn() {
+        if (sideBroken) return;
+        if (side == 0) {
+            try {
+                org.lwjgl.glfw.GLFW.glfwDefaultWindowHints();
+                org.lwjgl.glfw.GLFW.glfwWindowHint(org.lwjgl.glfw.GLFW.GLFW_VISIBLE, org.lwjgl.glfw.GLFW.GLFW_FALSE);
+                org.lwjgl.glfw.GLFW.glfwWindowHint(org.lwjgl.glfw.GLFW.GLFW_CLIENT_API, org.lwjgl.glfw.GLFW.GLFW_OPENGL_API);
+                org.lwjgl.glfw.GLFW.glfwWindowHint(org.lwjgl.glfw.GLFW.GLFW_CONTEXT_CREATION_API, org.lwjgl.glfw.GLFW.GLFW_NATIVE_CONTEXT_API);
+                org.lwjgl.glfw.GLFW.glfwWindowHint(org.lwjgl.glfw.GLFW.GLFW_CONTEXT_VERSION_MAJOR, 3);
+                org.lwjgl.glfw.GLFW.glfwWindowHint(org.lwjgl.glfw.GLFW.GLFW_CONTEXT_VERSION_MINOR, 2);
+                org.lwjgl.glfw.GLFW.glfwWindowHint(org.lwjgl.glfw.GLFW.GLFW_OPENGL_PROFILE, org.lwjgl.glfw.GLFW.GLFW_OPENGL_CORE_PROFILE);
+                org.lwjgl.glfw.GLFW.glfwWindowHint(org.lwjgl.glfw.GLFW.GLFW_OPENGL_FORWARD_COMPAT, org.lwjgl.glfw.GLFW.GLFW_TRUE);
+                side = org.lwjgl.glfw.GLFW.glfwCreateWindow(1, 1, "sleepium main side", 0L, window);
+                org.lwjgl.glfw.GLFW.glfwDefaultWindowHints();
+            } catch (Throwable t) {
+                side = 0;
+            }
+            if (side == 0) {
+                sideBroken = true;
+                LOG.warn("[sleep/opt] frame thread: no side context for the main thread (other mods' raw GL there would abort)");
+                return;
+            }
+            org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(side);
+            sideCaps = org.lwjgl.opengl.GL.createCapabilities();
+            return;
+        }
+        org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(side);
+        org.lwjgl.opengl.GL.setCapabilities(sideCaps);
+    }
+
+    /** the main thread, handing a frame over: a fence after whatever it sent on the side context (the frame waits on it) */
+    private static void sideFence() {
+        if (side == 0 || mainHolds) return;
+        long f = org.lwjgl.opengl.GL32C.glFenceSync(org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        org.lwjgl.opengl.GL11C.glFlush();
+        long old = sideFence;
+        sideFence = f;
+        sideFences++;
+        if (old != 0) org.lwjgl.opengl.GL32C.glDeleteSync(old);   // (the frame before waited on it already: present waits for that frame first)
+    }
+
     private static void giveBack() {
         org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(0L);
         org.lwjgl.opengl.GL.setCapabilities(null);
+        sideOn();
         setRenderThread(thread);
         mainHolds = false;
         borrowAsked = false;
     }
 
     private static final boolean WINDOWS = org.lwjgl.system.Platform.get() == org.lwjgl.system.Platform.WINDOWS;
+    /** -Dlab.frameThread.spinUs (0; tried 100 on the host: no gain - wake-ups are 6-15 us): how long either side spins before it parks, waiting for the other */
+    private static final long SPIN_NS = Long.getLong("lab.frameThread.spinUs", 0) * 1000L;
+    /** the hand-over's cost: the frame thread's wake-up after a job is handed over, the main thread's after a frame */
+    private static volatile long handAt, doneAt;
+    public static long wakeNs, mainWakeNs, mainWakes;
     private static org.lwjgl.system.windows.MSG msg;
 
     private static void waitPumping(java.util.function.BooleanSupplier until) {
@@ -284,12 +405,21 @@ public final class FrameThread {
             return;
         }
         if (msg == null) msg = org.lwjgl.system.windows.MSG.calloc();
-        long spinUntil = System.nanoTime() + 20_000;
+        // a bounded spin first (the hand-over's wake-up is the cost at high frame rates), the window's sent messages
+        // looked at every ~50 us and before each park - never a spin without end
+        long now = System.nanoTime(), spinUntil = now + SPIN_NS, peekAt = now;
         while (!until.getAsBoolean()) {
-            org.lwjgl.system.windows.User32.PeekMessage(msg, 0L, 0, 0, org.lwjgl.system.windows.User32.PM_NOREMOVE | 0x00400000 /* PM_QS_SENDMESSAGE */);
-            if (until.getAsBoolean()) break;
-            if (System.nanoTime() < spinUntil) Thread.onSpinWait();
-            else LockSupport.parkNanos(100_000L);
+            now = System.nanoTime();
+            if (now >= peekAt) {
+                org.lwjgl.system.windows.User32.PeekMessage(msg, 0L, 0, 0, org.lwjgl.system.windows.User32.PM_NOREMOVE | 0x00400000 /* PM_QS_SENDMESSAGE */);
+                peekAt = now + 50_000;
+                if (until.getAsBoolean()) break;
+            }
+            if (now < spinUntil) Thread.onSpinWait();
+            else {
+                LockSupport.parkNanos(100_000L);
+                peekAt = 0;
+            }
         }
     }
 
@@ -297,7 +427,12 @@ public final class FrameThread {
 
     private static void loop() {
         while (true) {
-            while (jobDone && !borrowAsked) LockSupport.park();
+            long spinUntil = System.nanoTime() + SPIN_NS;   // (bounded: the main thread's next frame usually comes soon)
+            while (jobDone && !borrowAsked) {
+                if (System.nanoTime() < spinUntil) Thread.onSpinWait();
+                else LockSupport.park();
+            }
+            if (!jobDone) wakeNs += System.nanoTime() - handAt;
             if (jobDone && borrowAsked) {   // a borrow: release, wait until handed back (the next job)
                 if (frameHolds) {
                     org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(0L);
@@ -318,8 +453,13 @@ public final class FrameThread {
                 try {
                     // the main thread's queued GL work first (vanilla's atlas tick queues itself when not on the render
                     // thread): before the frame, where vanilla's tick had it - flipFrame's replay would be a frame late
+                    long sf = sideFence;
+                    if (sf != 0) org.lwjgl.opengl.GL32C.glWaitSync(sf, 0, org.lwjgl.opengl.GL32C.GL_TIMEOUT_IGNORED);
                     UploadRing.frameBegin();   // (runTick HEAD's on the main thread: GL - the frames-in-flight fence and wait)
                     com.mojang.blaze3d.systems.RenderSystem.replayQueue();
+                    for (int i = 0; i < JOB_CALLS.size(); i++) JOB_CALLS.get(i).call(JOB_CALL_ARGS.get(i));   // the main thread's renderer calls, in order
+                    JOB_CALLS.clear();
+                    JOB_CALL_ARGS.clear();
                     runOps();
                 } finally {
                     drawing = false;
@@ -327,6 +467,7 @@ public final class FrameThread {
             } catch (Throwable t) {
                 failure = t;
             }
+            doneAt = System.nanoTime();
             jobDone = true;
             LockSupport.unpark(mainThread);
         }
@@ -335,6 +476,12 @@ public final class FrameThread {
     private static void runOps() {
         Minecraft m = mc;
         for (int k = 0; k < nOps; k++) {
+            if (OPS[k] == 0) {   // a wrapped call: its Operation with the recorded arguments
+                OPERATIONS[k].call(ARGS[k]);
+                OPERATIONS[k] = null;
+                ARGS[k] = null;
+                continue;
+            }
             switch (OPS[k]) {
                 case CLEAR -> com.mojang.blaze3d.systems.RenderSystem.clear(ARG_I[k], ARG_Z[k]);
                 case BIND_WRITE -> m.getMainRenderTarget().bindWrite(ARG_Z[k]);
@@ -353,8 +500,9 @@ public final class FrameThread {
 
     public static String report() {
         if (!ON) return "";
-        StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT, "; frame thread: frames %d (%.3f ms a frame waited), overlapped %d (%.3f ms waited before the next), borrows %d (%.3f ms each), failures %d",
-                frames, waitNs / 1e6 / Math.max(1, frames), overlapFrames, overlapWaitNs / 1e6 / Math.max(1, overlapFrames), borrows, borrowWaitNs / 1e6 / Math.max(1, borrows), failures));
+        StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT, "; frame thread: frames %d (%.3f ms a frame waited), overlapped %d (%.3f ms waited before the next), hand-over wake-ups: the frame thread %.1f us, the main thread %.1f us, borrows %d (%.3f ms each), failures %d",
+                frames, waitNs / 1e6 / Math.max(1, frames), overlapFrames, overlapWaitNs / 1e6 / Math.max(1, overlapFrames), wakeNs / 1e3 / Math.max(1, frames),
+                mainWakeNs / 1e3 / Math.max(1, mainWakes), borrows, borrowWaitNs / 1e6 / Math.max(1, borrows), failures));
         BORROW_SITES.entrySet().stream().sorted((x, y) -> Long.compare(y.getValue()[0], x.getValue()[0])).limit(8)
                 .forEach(e -> b.append("; borrow ").append(e.getValue()[0]).append(" x ").append(e.getKey()));
         return b.toString();

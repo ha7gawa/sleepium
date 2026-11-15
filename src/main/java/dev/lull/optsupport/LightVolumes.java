@@ -431,7 +431,7 @@ public final class LightVolumes {
         if (seen != 0 && System.nanoTime() - seen > SETTLE_NANOS && LIGHT_COUNT.addTo(k, 1) + 1 >= DYNAMIC_AFTER && DYNAMIC.size() < MAX_VOLUMES)
             DYNAMIC.add(k);
         rebuildsAsked++;
-        net.minecraft.client.Minecraft.getInstance().levelRenderer.setSectionDirty(x, y, z);
+        FrameThread.sectionDirty(net.minecraft.client.Minecraft.getInstance().levelRenderer, x, y, z);
     }
 
     /** -Dlab.shaderlight.syncFill=true: refills on the render thread (as first built) */
