@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class GlInboxMixin {
     @Redirect(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/texture/TextureManager;tick()V"))
     private void sleep$deferTextures(TextureManager tm) {
-        GlInbox.textureTick();
+        GlInbox.textureTick(tm);
     }
 
     @Inject(method = "runTick", at = @At("RETURN"))

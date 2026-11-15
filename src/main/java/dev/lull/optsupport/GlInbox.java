@@ -18,8 +18,15 @@ public final class GlInbox {
     private static int textureTicks;
     public static long deferred, run, frames;
 
+    /** off: the texture tick runs in the client tick as vanilla's (ClientAuto's in-window flip switches it) */
+    public static boolean enabled = true;
+
     /** Minecraft.tick's textureManager.tick(): owed to the next frame's end */
-    public static void textureTick() {
+    public static void textureTick(net.minecraft.client.renderer.texture.TextureManager tm) {
+        if (!enabled) {
+            tm.tick();
+            return;
+        }
         textureTicks++;
         deferred++;
     }
