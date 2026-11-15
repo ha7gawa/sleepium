@@ -40,7 +40,7 @@ public final class TickAsync {
 
     /** render thread, the walk: not drawn in the last frames */
     static boolean unseenEligible(Entity e) {
-        return enabled && UNSEEN && !(e instanceof net.minecraft.world.entity.player.Player) && !ParallelRender.drawnLately(e);
+        return enabled && UNSEEN && e.tickCount > 2 && !(e instanceof net.minecraft.world.entity.player.Player) && !ParallelRender.drawnLately(e);   // (a new one is about to be drawn)
     }
     public static long walks, entities, holdFrames, skipped, joinWaitNs, joins;
 
