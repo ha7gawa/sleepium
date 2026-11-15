@@ -20,6 +20,15 @@ public final class GpuTimer {
     public static float frameMs(int i) {
         return i >= 0 && i < PER_FRAME.length ? PER_FRAME[i] : Float.NaN;
     }
+
+    /** each frame's end on the GPU clock (ns; 0: not read) - the frame log's gpu_gap_ms: the interval the GPU finished frames at */
+    private static final long[] END_AT = new long[1 << 16];
+
+    /** the GPU's interval between the end of frame i-1 and of frame i (ms), NaN when either was not read */
+    public static float gapMs(int i) {
+        if (i <= 0 || i >= END_AT.length || END_AT[i] == 0 || END_AT[i - 1] == 0) return Float.NaN;
+        return (END_AT[i] - END_AT[i - 1]) / 1e6f;
+    }
     /** per frame slot: timestamps at renderLevel's section changes (DrawStats.section) and the sections' names */
     private static final int MAXS = 40;
     private static final int[][] SQ = new int[RING][];
@@ -74,6 +83,7 @@ public final class GpuTimer {
         STAT_SECTIONS.clear();
         java.util.Arrays.fill(SC, 0);
         java.util.Arrays.fill(PER_FRAME, Float.NaN);
+        java.util.Arrays.fill(END_AT, 0L);
         notReady = 0;
         written = 0;
         slot = 0;
@@ -110,7 +120,10 @@ public final class GpuTimer {
                 gpuNanos += e - b;
                 frames++;
                 int fno = SLOT_FRAME[i];
-                if (fno < PER_FRAME.length) PER_FRAME[fno] = (e - b) / 1e6f;
+                if (fno < PER_FRAME.length) {
+                    PER_FRAME[fno] = (e - b) / 1e6f;
+                    END_AT[fno] = e;
+                }
                 int n = SC[i];   // the sections: from each timestamp to the next (the last to the frame's end)
                 long prev = b;
                 String prevName = "(before renderLevel)";
