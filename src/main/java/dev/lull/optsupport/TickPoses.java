@@ -33,9 +33,10 @@ public final class TickPoses {
 
     /**
      * 1.20.1: an entity's pose holds the frame's view rotation (the level's pose stack is turned with the camera) - the
-     * tick's records are made without it and need it applied per frame; until that is done, off whatever the flag says.
+     * tick's records are made without it (base pose identity); a frame turns them by its own: the shader (mode 8,
+     * ProbeView) or Interp.view on the CPU path.
      */
-    public static final boolean ON = Boolean.getBoolean("lab.prender.tickPoses") && Boolean.getBoolean("lab.prender.tickPoses.viewReady");
+    public static final boolean ON = Boolean.getBoolean("lab.prender.tickPoses");
     /** ClientAuto's in-window flip */
     public static boolean enabled = true;
     static final double TOLERANCE = Double.parseDouble(System.getProperty("lab.prender.tickPoses.tolerance", "0.04"));
@@ -388,14 +389,11 @@ public final class TickPoses {
             return true;
         }
         j.gpuTick = false;
-        if (Boolean.TRUE) {   // 1.20.1: the CPU interpolation would need the frame's view rotation applied to each record - not yet
-            FALLBACKS.incrementAndGet();
-            return false;
-        }
         long t0 = System.nanoTime();
         PartBatch.JobParts out = j.parts;
         out.copyShape(p.jobs[0].parts);
         sample(p, j.pt, out.mem, (float) (p.ax - j.camX), (float) (p.ay - j.camY), (float) (p.az - j.camZ));
+        INTERP.get().view(j.basePose, out.mem, out.n);   // 1.20.1: the frame's view rotation, as the level pose carries it
         INTERP_NS.addAndGet(System.nanoTime() - t0);
         INTERP_REC.addAndGet(out.n);
         MERGED.incrementAndGet();
@@ -403,6 +401,7 @@ public final class TickPoses {
     }
 
     private static final ThreadLocal<Interp> INTERP = ThreadLocal.withInitial(Interp::new);
+    private static final Matrix3f IDENTITY3 = new Matrix3f();
 
     /** the pair's task: its three keys as mode-8 records; false (the CPU way) for anything but vanilla model parts */
     private static boolean buildGpu(Pair p) {
@@ -522,6 +521,30 @@ public final class TickPoses {
             A.m10 *= s1; A.m11 *= s1; A.m12 *= s1;
             A.m20 *= s2; A.m21 *= s2; A.m22 *= s2;
             write3(o, A);
+        }
+
+        private final Matrix3f V = new Matrix3f(), M = new Matrix3f();
+
+        /**
+         * 1.20.1: n records turned by the frame's view rotation (the 3x3 of the level pose): pose columns, translation and
+         * the normal matrix - what the pose stack held when the renderer drew them in the frame.
+         */
+        void view(org.joml.Matrix4f base, long mem, int n) {
+            V.set(base);
+            if (V.equals(IDENTITY3)) return;
+            for (int i = 0; i < n; i++) {
+                long r = mem + 144L * i;
+                read3(r, M);
+                V.mul(M, M);
+                write3(r, M);
+                float x = MemoryUtil.memGetFloat(r + 48), y = MemoryUtil.memGetFloat(r + 52), z = MemoryUtil.memGetFloat(r + 56);
+                MemoryUtil.memPutFloat(r + 48, V.m00 * x + V.m10 * y + V.m20 * z);
+                MemoryUtil.memPutFloat(r + 52, V.m01 * x + V.m11 * y + V.m21 * z);
+                MemoryUtil.memPutFloat(r + 56, V.m02 * x + V.m12 * y + V.m22 * z);
+                read3(r + 64, M);
+                V.mul(M, M);
+                write3(r + 64, M);
+            }
         }
 
         /** a record's pose as a mode-8 key at o (48 bytes): rotation (quaternion), scale xyz + translation x, translation y z */
