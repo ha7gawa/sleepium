@@ -23,12 +23,41 @@ public final class TickAsync {
     /** ClientAuto's in-window flip */
     public static boolean enabled = true;
     /** the entities ticking on the pool now (render thread only) */
-    static final IdentityHashMap<Entity, Boolean> WALKING = new IdentityHashMap<>();
+    /** value: Boolean.TRUE (drawn from its tick pair) or the snapshot job (drawn from its pre-tick snapshot) */
+    static final IdentityHashMap<Entity, Object> WALKING = new IdentityHashMap<>();
+    /**
+     * -Dlab.tickAsync.snap (default on): stage 2 - entities without tick poses that the last frames drew on a worker:
+     * the worker renders a snapshot at partial tick 1 (camera at the entity: parts, vertices, flame, shadow) before it
+     * ticks the entity; frames meanwhile draw the snapshot moved to their camera.
+     */
+    static final boolean SNAP = !"false".equals(System.getProperty("lab.tickAsync.snap"));
+    public static long snapshots, snapFrames, unseen;
+    /**
+     * -Dlab.tickAsync.unseen (default on): entities no frame drew in the last two - nothing to hold for them; one that
+     * comes into view while the walk runs misses that frame (counted in skipped) instead of being read mid-tick
+     */
+    static final boolean UNSEEN = !"false".equals(System.getProperty("lab.tickAsync.unseen"));
+
+    /** render thread, the walk: not drawn in the last frames */
+    static boolean unseenEligible(Entity e) {
+        return enabled && UNSEEN && !(e instanceof net.minecraft.world.entity.player.Player) && !ParallelRender.drawnLately(e);
+    }
     public static long walks, entities, holdFrames, skipped, joinWaitNs, joins;
 
     /** render thread, the walk: whether this entity ticks on the pool after the client tick */
     static boolean eligible(Entity e) {
         return enabled && TickPoses.ON && !(e instanceof net.minecraft.world.entity.player.Player) && TickPoses.asyncReady(e);
+    }
+
+    /** render thread, the walk: drawn on a worker in the last frames - a pre-tick snapshot can stand in for it */
+    static boolean snapEligible(Entity e) {
+        return enabled && SNAP && !(e instanceof net.minecraft.world.entity.player.Player) && ParallelRender.drewOnWorker(e);
+    }
+
+    /** render thread: the walking entity's snapshot job (null: drawn from a pair, or not walking) */
+    public static ParallelRender.Job snapshotOf(Entity e) {
+        Object v = WALKING.isEmpty() ? null : WALKING.get(e);
+        return v instanceof ParallelRender.Job j ? j : null;
     }
 
     /** render thread: the entity is ticking on the pool - frames draw it only from its held pair */
@@ -51,7 +80,7 @@ public final class TickAsync {
     }
 
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "tick async: walks %d, entities %d, frames holding %d, skipped %d, joins %d (%.3f ms a join)",
-                walks, entities, holdFrames, skipped, joins, joins == 0 ? 0.0 : joinWaitNs / 1e6 / joins);
+        return String.format(java.util.Locale.ROOT, "tick async: walks %d, entities %d (snapshots %d, unseen %d), frames holding %d (from snapshots %d), skipped %d, joins %d (%.3f ms a join)",
+                walks, entities, snapshots, unseen, holdFrames, snapFrames, skipped, joins, joins == 0 ? 0.0 : joinWaitNs / 1e6 / joins);
     }
 }

@@ -213,6 +213,10 @@ public final class ParallelRender {
         boolean gpuTick;
         /** TickAsync: the entity is ticking on the pool - drawn from its held pair only, never the usual way */
         boolean hold;
+        /** TickAsync: this frame the entity is drawn from that pre-tick snapshot job */
+        Job snap;
+        /** a snapshot job: its side effects run once (the first frame drawing it) */
+        boolean callsRun;
         /** TickPoses: a pair's renders all with one renderer set (a part's geometry is keyed by the set's own model objects) */
         Set forcedSet;
         Entity entity;
@@ -401,10 +405,13 @@ public final class ParallelRender {
     /** LevelRenderer's entity loop, per entity (in place of renderEntity). */
     public static void enqueue(LevelRenderer lr, Entity e, double camX, double camY, double camZ, float pt, PoseStack pose, MultiBufferSource buffers) {
         if (TEST_SKIP_ON && TEST_SKIP.contains(e.getClass().getSimpleName())) return;
+        if (TickAsync.ON) DRAWN.put(e, drainFrame);
         TickPoses.Pair held = null;
-        if (TickAsync.ON && TickAsync.holding(e)) {   // ticking on the pool right now: only its held pair may be drawn
-            held = TickPoses.held(e);
-            if (held == null) {
+        Job snap = null;
+        if (TickAsync.ON && TickAsync.holding(e)) {   // ticking on the pool right now: only its held pair or snapshot may be drawn
+            snap = TickAsync.snapshotOf(e);
+            if (snap == null) held = TickPoses.held(e);
+            if (held == null && snap == null) {
                 TickAsync.skipped++;
                 return;
             }
@@ -437,7 +444,12 @@ public final class ParallelRender {
         j.rendererOnly = false;
         j.tick = null;
         j.hold = false;
-        if (held != null) {   // TickAsync: the pair at its last key (the state the tick started from), no capture
+        j.snap = snap;
+        if (snap != null) {   // TickAsync: drawn from the pre-tick snapshot at the drain (no job of its own)
+            j.parallel = false;
+            j.hold = true;
+            TickAsync.holdFrames++;
+        } else if (held != null) {   // TickAsync: the pair at its last key (the state the tick started from), no capture
             if (!setsChecked) {
                 ensureSets();
                 setsChecked = true;
@@ -1099,6 +1111,15 @@ public final class ParallelRender {
         for (int i = 0; i < size; i++) {
             Job j = QUEUE.get(i);
             boolean clean = j.pose.clear();   // (PoseStack.clear: only the base pose left)
+            if (j.snap != null) {   // TickAsync: the pre-tick snapshot moved to this frame's camera, or nothing
+                Job sj = j.snap;
+                j.snap = null;
+                j.hold = false;
+                if (!drawSnapshot(sj, j)) TickAsync.skipped++;
+                if (clean) leakCheck(j);
+                j.entity = null;
+                continue;
+            }
             if (j.tick != null) {
                 TickPoses.Pair tp = j.tick;
                 j.run();   // (not taken by a worker yet: here)
@@ -1163,6 +1184,7 @@ public final class ParallelRender {
                     j.calls.clear();
                     RenderCache.append(j.out, j.buffers);
                     parallel++;
+                    if (TickAsync.ON) ON_WORKER.put(j.entity, drainFrame);
                     if (clean) leakCheck(j);
                     j.entity = null;
                     continue;
@@ -1175,6 +1197,10 @@ public final class ParallelRender {
         }
         if (size > 0) CacheTune.frame(System.nanoTime() - frameEntitiesAt, size);
         size = 0;
+        if (TickAsync.ON && (++drainFrame & 1023) == 0) {   // (gone entities forgotten now and then)
+            ON_WORKER.clear();
+            DRAWN.clear();
+        }
         if (TickPoses.ON) TickPoses.endFrame();
     }
 
@@ -1286,6 +1312,86 @@ public final class ParallelRender {
     }
 
     /** renderEntity + EntityRenderDispatcher.render (without hitboxes), with a worker's renderers. */
+    // ------------------------------------------------------------------ TickAsync's snapshots
+
+    /** render thread: entities a worker drew (the usual job path, merged fine) and the drain they were last drawn in */
+    private static final java.util.IdentityHashMap<Entity, Long> ON_WORKER = new java.util.IdentityHashMap<>();
+    private static long drainFrame;
+
+    /** render thread: every entity a frame queued, and the drain it was queued in */
+    private static final java.util.IdentityHashMap<Entity, Long> DRAWN = new java.util.IdentityHashMap<>();
+
+    static boolean drawnLately(Entity e) {
+        Long f = DRAWN.get(e);
+        return f != null && drainFrame - f <= 2;
+    }
+
+    static boolean drewOnWorker(Entity e) {
+        Long f = ON_WORKER.get(e);
+        return f != null && drainFrame - f <= 2 && !INNER;
+    }
+
+    /** render thread, the walk: a snapshot job for e - the whole render at partial tick 1, the camera at the entity */
+    static void snapshotJob(Job j, Entity e) {
+        j.entity = e;
+        j.camX = e.getX();
+        j.camY = e.getY();
+        j.camZ = e.getZ();
+        j.pt = 1f;
+        j.rendererOnly = false;
+        j.tick = null;
+        j.hold = false;
+        j.snap = null;
+        j.forcedSet = null;
+        j.callsRun = false;
+        j.done = false;
+        j.ok = false;
+        j.claimed.set(false);
+    }
+
+    /** render thread, the join: the snapshot job let go */
+    static void snapshotDone(Job j) {
+        if (!j.callsRun) j.calls.clear();
+        j.parts.clear();
+        j.entity = null;
+    }
+
+    /** the snapshot (taken here if no worker has yet) moved by the anchor's offset to this frame's camera */
+    private static boolean drawSnapshot(Job sj, Job j) {
+        sj.run();
+        sj.await();
+        if (!sj.ok) return false;
+        float dx = (float) (sj.camX - j.camX), dy = (float) (sj.camY - j.camY), dz = (float) (sj.camZ - j.camZ);
+        if (sj.parts.size() > 0) {
+            j.parts.copyShape(sj.parts);
+            org.lwjgl.system.MemoryUtil.memCopy(sj.parts.mem, j.parts.mem, 144L * sj.parts.n);
+            for (int i = 0; i < j.parts.n; i++) {
+                long r = j.parts.mem + 144L * i;
+                org.lwjgl.system.MemoryUtil.memPutFloat(r + 48, org.lwjgl.system.MemoryUtil.memGetFloat(r + 48) + dx);
+                org.lwjgl.system.MemoryUtil.memPutFloat(r + 52, org.lwjgl.system.MemoryUtil.memGetFloat(r + 52) + dy);
+                org.lwjgl.system.MemoryUtil.memPutFloat(r + 56, org.lwjgl.system.MemoryUtil.memGetFloat(r + 56) + dz);
+            }
+            if (!PartBatch.mergeJob(j.parts, j.buffers)) {
+                j.parts.clear();
+                return false;
+            }
+        }
+        if (!sj.callsRun) {   // (its side effects once: as the frame that drew it in vanilla)
+            sj.callsRun = true;
+            for (int c = 0; c < sj.calls.size(); c++) sj.calls.get(c).execute();
+            journaled += sj.calls.size();
+            sj.calls.clear();
+        }
+        PoseStack ps = j.pose;
+        ps.pushPose();
+        ps.translate(dx, dy, dz);
+        RenderCache.appendPosed(sj.out, j.buffers, ps);
+        ps.popPose();
+        TickAsync.snapFrames++;
+        parallel++;
+        return true;
+    }
+
     /** TickPoses' frame job: the dispatcher's flame (burning) and shadow into the job's output, as render() draws them */
     private static boolean extras(Set s, Job j) {
         Entity e = j.entity;

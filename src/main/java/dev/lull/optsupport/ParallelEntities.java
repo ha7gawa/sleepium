@@ -365,17 +365,37 @@ public final class ParallelEntities {
      * each with its spare pair), every other one ticked here in its slot. False: none left out - the usual walk.
      */
     private static Entity[] asyncAll = new Entity[256];
+    private static ParallelRender.Job[] asyncSnaps = new ParallelRender.Job[256];
+    /** snapshot jobs, reused (render thread hands them out at the split) */
+    private static final java.util.ArrayList<ParallelRender.Job> SNAP_POOL = new java.util.ArrayList<>();
 
     private static boolean asyncSplit(Consumer<Entity> consumer) {
         if (asyncPairs.length < n) asyncPairs = new TickPoses.Pair[Math.max(n, asyncPairs.length * 2)];
         if (asyncAll.length < n) asyncAll = new Entity[Math.max(n, asyncAll.length * 2)];
-        int m = 0, r = 0;
+        if (asyncSnaps.length < n) asyncSnaps = new ParallelRender.Job[Math.max(n, asyncSnaps.length * 2)];
+        int m = 0, r = 0, snaps = 0;
         for (int k = 0; k < n; k++) {
             Entity e = all[k];
             if (mayTickApart(e) && TickAsync.eligible(e)) {
                 asyncPairs[m] = TickPoses.spare(e);
+                asyncSnaps[m] = null;
                 asyncAll[m++] = e;
                 TickAsync.WALKING.put(e, Boolean.TRUE);
+            } else if (mayTickApart(e) && TickAsync.snapEligible(e)) {
+                if (SNAP_POOL.size() <= snaps) SNAP_POOL.add(new ParallelRender.Job());
+                ParallelRender.Job sj = SNAP_POOL.get(snaps++);
+                ParallelRender.snapshotJob(sj, e);
+                asyncPairs[m] = null;
+                asyncSnaps[m] = sj;
+                asyncAll[m++] = e;
+                TickAsync.WALKING.put(e, sj);
+                TickAsync.snapshots++;
+            } else if (mayTickApart(e) && TickAsync.unseenEligible(e)) {
+                asyncPairs[m] = null;
+                asyncSnaps[m] = null;
+                asyncAll[m++] = e;
+                TickAsync.WALKING.put(e, Boolean.FALSE);   // (nothing to draw it from: a frame that meets it leaves it out)
+                TickAsync.unseen++;
             } else all[r++] = e;   // (r <= k: that slot is done with)
         }
         if (m == 0) return false;
@@ -437,6 +457,11 @@ public final class ParallelEntities {
         for (long r; (r = LabRuntime.claim(NEXT, end, CHUNK, parts)) >= 0; ) {
             int s0 = (int) (r >>> 32), e0 = (int) r;
             for (int j = s0; j < e0; j++) {
+                ParallelRender.Job sj = asyncSnaps[j];
+                if (sj != null) {   // the snapshot before the tick (a frame may have taken it: then wait for it)
+                    sj.run();
+                    sj.await();
+                }
                 cur[0] = j;
                 try {
                     tick.accept(all[j]);
@@ -491,6 +516,10 @@ public final class ParallelEntities {
         for (int i = 0; i < m; i++) {
             TickPoses.install(all[i], asyncPairs[i]);
             asyncPairs[i] = null;
+            if (asyncSnaps[i] != null) {
+                ParallelRender.snapshotDone(asyncSnaps[i]);
+                asyncSnaps[i] = null;
+            }
         }
         java.util.Arrays.fill(all, 0, m, null);
         asyncM = 0;
