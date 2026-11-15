@@ -43,6 +43,7 @@ public final class ClientCounters {
                 + (GlInbox.ON ? "; " + GlInbox.report() : "")
                 + (TaskBudget.ON ? "; " + TaskBudget.report() : "")
                 + (StallProbe.ON ? "; " + StallProbe.report() : "")
+                + (ClientTickProfile.ON ? "; " + ClientTickProfile.report() : "")
                 + (UploadRing.ON || UploadRing.RECORDS || Integer.getInteger("lab.gpu.framesInFlight", 0) > 0 || Boolean.getBoolean("lab.gpu.framesInFlight.auto") ? "; " + UploadRing.report() : "")
                 + (Boolean.getBoolean("lab.opt.SectionListsMixin") ? "; " + SectionLists.report() : "")
                 + (Boolean.getBoolean("lab.opt.BlockMeshMemoMixin") ? "; " + BlockMeshMemo.report() : "")

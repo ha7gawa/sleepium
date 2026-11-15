@@ -29,7 +29,7 @@ import net.neoforged.neoforge.client.event.RenderFrameEvent;
  * and appends a row to {@code <gamedir>/probe/summary-client.csv}. Cross-thread task counters (render thread
  * event loop, "Section Renderer" mailbox = chunk mesh rebuilds) come from TaskStats.
  */
-final class ClientMeter {
+public final class ClientMeter {
     private static final int CAPACITY = 1 << 17;   // ~36 min at 60 fps
     private static final long[] frames = new long[CAPACITY];
     /** -Dsleep.meter.frameLog=true: per frame the level's game time and the client tick that ran in it (frames-<label>.csv) */

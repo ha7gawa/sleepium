@@ -76,9 +76,16 @@ public final class UploadRing {
     private static int autoFrames, autoDeep;
     public static String fifWhy = FIF_FIXED > 0 ? "fixed by the flag" : AUTO ? "watching the queue" : "off";
 
+    /** a look at a fence (no flush, no wait): glGetSynci(GL_SYNC_STATUS) cost the host's NVIDIA driver 45 % of its frames */
     private static boolean done(long fence) {
-        return GL32C.glGetSynci(fence, GL32C.GL_SYNC_STATUS, null) == GL32C.GL_SIGNALED;
+        int r = GL32C.glClientWaitSync(fence, 0, 0);
+        return r == GL32C.GL_ALREADY_SIGNALED || r == GL32C.GL_CONDITION_SATISFIED;
     }
+
+    /** windows in a row with a normal queue: after QUIET_WINDOWS the watch ends (no fences any more) */
+    private static int quietWindows;
+    private static boolean watching = true;
+    private static final int QUIET_WINDOWS = 30;
 
     /** the automatic limit: a look at the frame DEEP back (never a wait) */
     private static void watchQueue() {
@@ -91,7 +98,7 @@ public final class UploadRing {
                 return;
             }
         }
-        if (frameNo < DEEP) return;
+        if (frameNo < DEEP || (frameNo & 1) != 0) return;   // (every other frame: a sample)
         long f = FRAME_FENCES[(frameNo - DEEP) & 15];
         if (f == 0) return;
         boolean deep = !done(f);
@@ -101,10 +108,15 @@ public final class UploadRing {
         }
         if (++autoFrames < AUTO_WINDOW) return;
         if (autoDeep * 4 >= autoFrames) {
+            quietWindows = 0;
             limiting = true;
             fifWhy = String.format(java.util.Locale.ROOT, "on: the frame %d back not done at %d of %d frames' starts", DEEP, autoDeep, autoFrames);
             System.out.println("[sleep/opt] frames in flight: " + fifWhy);
             Calibration.put("fif", "true", fifWhy);
+        } else if (autoDeep == 0 && ++quietWindows >= QUIET_WINDOWS) {
+            watching = false;   // a driver that keeps a short queue: nothing more to watch (fences stop)
+            fifWhy = "off: the queue stayed short for " + QUIET_WINDOWS + " windows";
+            System.out.println("[sleep/opt] frames in flight: " + fifWhy);
         }
         autoFrames = 0;
         autoDeep = 0;
@@ -112,7 +124,7 @@ public final class UploadRing {
 
     /** Minecraft.runTick HEAD (UploadRingMixin): the last frame gets its fence, the next segment is taken if the GPU is done with it */
     public static void frameBegin() {
-        if (FIF > 0) {
+        if (FIF > 0 && (limiting || watching)) {
             // a fence for every frame, the oldest one we keep waited for: at most FIF frames queued ahead of the GPU
             int i = frameNo & 15;
             if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);

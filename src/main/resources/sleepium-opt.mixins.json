@@ -155,6 +155,7 @@
     "LightTimingMixin"
   ],
   "client": [
+    "ClientTickProfileMixin",
     "GrowVertexBufferMixin",
     "StallProbeMixin",
     "StallProbeGlMixin",
