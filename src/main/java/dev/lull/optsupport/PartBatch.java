@@ -372,9 +372,19 @@ public final class PartBatch {
         int[] g = GEOMETRY.get(key);
         if (g != null) return g;
         GEOM.reset();
-        compiler.sleep$geometry(IDENTITY.last(), GEOM);
+        // (the render thread compiling a worker's part - a job's journal: the part's own iterators may be in use by the
+        // worker now rendering with the same renderer set; ModelPartIterMixin gives this thread fresh ones - 11-15, a crash)
+        GEO_THREAD = Thread.currentThread();
+        try {
+            compiler.sleep$geometry(IDENTITY.last(), GEOM);
+        } finally {
+            GEO_THREAD = null;
+        }
         return upload(key);
     }
+
+    /** the thread compiling a part's geometry for the arena (ModelPartIterMixin: no shared iterator on it) */
+    public static volatile Thread GEO_THREAD;
 
     /**
      * As capture, with the geometry under another key than the part: a part whose cubes are swapped (Entity Model
