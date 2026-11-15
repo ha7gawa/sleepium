@@ -118,7 +118,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.FrustumRegionMixin");
         if (simple.startsWith("TickSlice") || simple.equals("MinecraftTimerAccessor")) on = Boolean.getBoolean("lab.opt.TickSlice");
         if (simple.equals("GlInboxMixin")) on = Boolean.getBoolean("lab.opt.GlInbox");
-        if (simple.equals("UploadRingMixin")) on = Boolean.getBoolean("lab.gpu.uploadRing") || Integer.getInteger("lab.gpu.framesInFlight", 0) > 0;
+        if (simple.equals("UploadRingMixin")) on = Boolean.getBoolean("lab.gpu.uploadRing") || Boolean.getBoolean("lab.gpu.ringRecords") || Integer.getInteger("lab.gpu.framesInFlight", 0) > 0;
         if (simple.equals("NoFrameYieldMixin")) on = Boolean.getBoolean("lab.opt.NoFrameYield");
         if (simple.equals("GrowVertexBufferMixin")) on = Boolean.getBoolean("lab.gpu.growOnly") || Boolean.getBoolean("lab.gpu.uploadRing");
         if (simple.equals("ClientChunkCacheBiomeMixin"))

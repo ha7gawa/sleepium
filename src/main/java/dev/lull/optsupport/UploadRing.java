@@ -101,6 +101,52 @@ public final class UploadRing {
      * {@code n} bytes at {@code src} into buffer {@code dst} at {@code dstOffset}, through the ring. False: not taken
      * (off, no GL 4.4, the frame's segment busy or full) - the caller uploads its own way. Leaves COPY_READ / COPY_WRITE bound.
      */
+    /**
+     * -Dlab.gpu.ringRecords=true: PartBatch's sorted part records written straight into the ring and read by the shader
+     * from there (glTexBufferRange) - no staging memory, no upload, no storage re-specified each frame.
+     */
+    public static final boolean RECORDS = Boolean.getBoolean("lab.gpu.ringRecords");
+    public static long recordFrames, recordBytes, recordFallbacks;
+
+    /**
+     * {@code n} bytes of this frame's segment, at an offset aligned to {@code align}: the offset in buffer(), or -1 (busy,
+     * full, no GL 4.4) - the caller writes the bytes at address(offset) before issuing the draw that reads them.
+     */
+    public static long alloc(long n, long align) {
+        if (!enabled || n <= 0 || !capable()) return -1;
+        ensure();
+        long at = (used + align - 1) / align * align;
+        if (!segFree || at + n > SEG) {
+            recordFallbacks++;
+            return -1;
+        }
+        used = at + n;
+        recordBytes += n;
+        return seg * SEG + at;
+    }
+
+    public static long address(long offset) {
+        return ptr + offset;
+    }
+
+    public static int buffer() {
+        return buffer;
+    }
+
+    private static void ensure() {
+        if (buffer == 0) {
+            buffer = GL15C.glGenBuffers();
+            GL15C.glBindBuffer(GL31C.GL_COPY_READ_BUFFER, buffer);
+            int flags = GL44C.GL_MAP_WRITE_BIT | GL44C.GL_MAP_PERSISTENT_BIT | GL44C.GL_MAP_COHERENT_BIT;
+            GL44C.glBufferStorage(GL31C.GL_COPY_READ_BUFFER, SEG * NSEG, flags);
+            ptr = MemoryUtil.memAddress(GL44C.glMapBufferRange(GL31C.GL_COPY_READ_BUFFER, 0, SEG * NSEG, flags));
+            seg = 0;
+            used = 0;
+            segFree = true;
+            System.out.println("[sleep/opt] upload ring: " + NSEG + " x " + (SEG >> 20) + " MiB, persistent coherent mapping");
+        }
+    }
+
     public static boolean copy(int dst, long dstOffset, long src, long n) {
         if (!ON || !enabled || n <= 0 || dst == 0 || !capable()) return false;
         if (buffer == 0) {
@@ -134,7 +180,7 @@ public final class UploadRing {
     }
 
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "upload ring: %d copies, %.1f MB; fallbacks: segment busy %d, full %d; frames %d, frames-in-flight %d: waited %d times, %.2f ms a frame",
-                copies, bytes / 1e6, fallbackBusy, fallbackFull, frames, FIF, fifWaits, frames == 0 ? 0 : fifWaitNs / 1e6 / frames);
+        return String.format(java.util.Locale.ROOT, "upload ring: %d copies, %.1f MB; fallbacks: segment busy %d, full %d; records in the ring %.1f MB (fallbacks %d); frames %d, frames-in-flight %d: waited %d times, %.2f ms a frame",
+                copies, bytes / 1e6, fallbackBusy, fallbackFull, recordBytes / 1e6, recordFallbacks, frames, FIF, fifWaits, frames == 0 ? 0 : fifWaitNs / 1e6 / frames);
     }
 }

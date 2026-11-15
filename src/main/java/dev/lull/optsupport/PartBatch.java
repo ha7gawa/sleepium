@@ -1726,6 +1726,14 @@ public final class PartBatch {
      * model - and uploaded in that order into the texture buffer; each group one glDrawElementsInstancedBaseVertex,
      * ProbeRecordBase at its first record. Other modes do not reach here (full()).
      */
+    private static long texelAlign;
+
+    /** GL_TEXTURE_BUFFER_OFFSET_ALIGNMENT, at least 16 */
+    private static long texelAlign() {
+        if (texelAlign == 0) texelAlign = Math.max(16, GL11C.glGetInteger(GL43C.GL_TEXTURE_BUFFER_OFFSET_ALIGNMENT));
+        return texelAlign;
+    }
+
     private static void drawQueueTexels(ShaderInstance shader, Queue q, int mode) {
         texelUnits(shader);   // (a program drawn only here - the terrain program's copy - never passed beforeDraw: its samplers' units)
         int n = q.n;
@@ -1743,27 +1751,36 @@ public final class PartBatch {
             keys[i] = ((long) (MemoryUtil.memGetInt(q.bases + 4L * i) & 0xFFFFFF) << 40) | ((long) (MemoryUtil.memGetInt(q.counts + 4L * i) & 0xFFFFF) << 20) | i;
         java.util.Arrays.sort(keys);
         long bytes = 144L * n;
-        if (texelCap < bytes) {
-            if (texelMem != 0) MemoryUtil.nmemFree(texelMem);
-            texelCap = Math.max(bytes, texelCap * 2);
-            texelMem = MemoryUtil.nmemAlloc(texelCap);
-        }
-        for (int k = 0; k < n; k++) MemoryUtil.memCopy(q.mem + 144L * (int) (keys[k] & 0xFFFFF), texelMem + 144L * k, 144);
         if (texelBuf == 0) {
             texelBuf = GL15C.glGenBuffers();
             texelTex = GL11C.glGenTextures();
             texelInts = GL11C.glGenTextures();
         }
-        GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, texelBuf);
-        GrowBuffer.upload(GL31C.GL_TEXTURE_BUFFER, texelBuf, bytes, texelMem);
-        GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, 0);
+        // UploadRing.RECORDS: the records sorted straight into the ring's mapped memory, the shader reads that range
+        long ringOff = UploadRing.RECORDS ? UploadRing.alloc(bytes, texelAlign()) : -1;
+        if (ringOff >= 0) {
+            long dst = UploadRing.address(ringOff);
+            for (int k = 0; k < n; k++) MemoryUtil.memCopy(q.mem + 144L * (int) (keys[k] & 0xFFFFF), dst + 144L * k, 144);
+        } else {
+            if (texelCap < bytes) {
+                if (texelMem != 0) MemoryUtil.nmemFree(texelMem);
+                texelCap = Math.max(bytes, texelCap * 2);
+                texelMem = MemoryUtil.nmemAlloc(texelCap);
+            }
+            for (int k = 0; k < n; k++) MemoryUtil.memCopy(q.mem + 144L * (int) (keys[k] & 0xFFFFF), texelMem + 144L * k, 144);
+            GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, texelBuf);
+            GrowBuffer.upload(GL31C.GL_TEXTURE_BUFFER, texelBuf, bytes, texelMem);
+            GL15C.glBindBuffer(GL31C.GL_TEXTURE_BUFFER, 0);
+        }
         int prevUnit = com.mojang.blaze3d.platform.GlStateManager._getActiveTexture();
         com.mojang.blaze3d.platform.GlStateManager._activeTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + TEXEL_UNIT);
         GL11C.glBindTexture(GL31C.GL_TEXTURE_BUFFER, texelTex);
-        GL31C.glTexBuffer(GL31C.GL_TEXTURE_BUFFER, GL30C.GL_RGBA32F, texelBuf);
+        if (ringOff >= 0) GL43C.glTexBufferRange(GL31C.GL_TEXTURE_BUFFER, GL30C.GL_RGBA32F, UploadRing.buffer(), ringOff, bytes);
+        else GL31C.glTexBuffer(GL31C.GL_TEXTURE_BUFFER, GL30C.GL_RGBA32F, texelBuf);
         com.mojang.blaze3d.platform.GlStateManager._activeTexture(org.lwjgl.opengl.GL13C.GL_TEXTURE0 + INT_UNIT);
         GL11C.glBindTexture(GL31C.GL_TEXTURE_BUFFER, texelInts);
-        GL31C.glTexBuffer(GL31C.GL_TEXTURE_BUFFER, GL30C.GL_RGBA32I, texelBuf);
+        if (ringOff >= 0) GL43C.glTexBufferRange(GL31C.GL_TEXTURE_BUFFER, GL30C.GL_RGBA32I, UploadRing.buffer(), ringOff, bytes);
+        else GL31C.glTexBuffer(GL31C.GL_TEXTURE_BUFFER, GL30C.GL_RGBA32I, texelBuf);
         com.mojang.blaze3d.platform.GlStateManager._activeTexture(prevUnit);
         GL20C.glUniform1i(st[1], TEXEL_UNIT);
         GL20C.glUniform1i(st[2], INT_UNIT);

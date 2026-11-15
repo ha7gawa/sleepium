@@ -43,7 +43,7 @@ public final class ClientCounters {
                 + (Boolean.getBoolean("lab.opt.SectionListsMixin") ? "; " + SectionLists.report() : "")
                 + (TickSlice.ON ? "; " + TickSlice.report() : "")
                 + (GlInbox.ON ? "; " + GlInbox.report() : "")
-                + (UploadRing.ON || Integer.getInteger("lab.gpu.framesInFlight", 0) > 0 ? "; " + UploadRing.report() : "")
+                + (UploadRing.ON || UploadRing.RECORDS || Integer.getInteger("lab.gpu.framesInFlight", 0) > 0 ? "; " + UploadRing.report() : "")
                 + (Boolean.getBoolean("lab.opt.FrustumRegionMixin") ? "; " + FrustumRegions.report() : "")
                 + (Boolean.getBoolean("lab.opt.ShaderLightMixin") ? "; " + LightVolumes.report() : "")
                 + (Boolean.getBoolean("lab.opt.ChunkTickMemoMixin") ? "; chunk tick memo: hits " + ChunkTickMemo.hits + ", misses " + ChunkTickMemo.misses + ", epoch " + ChunkTickMemo.epoch : "")
