@@ -169,6 +169,8 @@
     "FrameThreadLightCallMixin",
     "FrameThreadCameraMixin",
     "HalfCloudsMixin",
+    "LeafCullMixin",
+    "LeafCullDirtyMixin",
     "GlWorkerFrameMixin",
     "GlWorkerFlipMixin",
     "GlWorkerLayerMixin",

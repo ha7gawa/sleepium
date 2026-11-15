@@ -18,14 +18,14 @@ public final class GameDefaults {
      * -Dlab.decoupled=true (1.3.0 research, non-exact - the user's call 11-15): the decoupled mode in one switch - the
      * frame on its own thread drawing while the main thread ticks, extra frames during a long tick (the camera turning
      * with the cursor), entities ticked on the pool after the tick and drawn from tick-rate poses (held items and
-     * translucent / additive layers in any order, the pose check's tolerance 0.1 blocks), the clouds at half resolution. Each flag can still be given
+     * translucent / additive layers in any order, the pose check's tolerance 0.1 blocks), the clouds at half resolution, no leaf faces deep in canopies. Each flag can still be given
      * on its own (a given value wins).
      */
     private static void decoupledPreset() {
         if (!Boolean.getBoolean("lab.decoupled")) return;
         String[] set = {"lab.opt.FrameThreadMixin=true", "lab.frameThread.overlap=true", "lab.frameThread.extra=true", "lab.frameThread.extraTurn=true",
                 "lab.opt.TickAsyncMixin=true", "lab.prender.tickPoses=true", "lab.pentities.living=true", "lab.partbatch.itemsAnyOrder=true",
-                "lab.prender.tickPoses.tolerance=0.1", "lab.opt.OnePool=true", "lab.clouds.half=true"};
+                "lab.prender.tickPoses.tolerance=0.1", "lab.opt.OnePool=true", "lab.clouds.half=true", "lab.leaves.cull=2"};
         int n = 0;
         for (String kv : set) {
             int eq = kv.indexOf('=');

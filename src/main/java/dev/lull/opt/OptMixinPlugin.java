@@ -46,6 +46,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.RenderThreadMixin");
         if (simple.equals("RenderThreadModelDataMixin"))   // (shared with the frame thread)
             on = Boolean.getBoolean("lab.opt.RenderThreadMixin") || Boolean.getBoolean("lab.opt.FrameThreadMixin");
+        if (simple.startsWith("LeafCull"))   // no faces deep inside a canopy (LeafCull)
+            on = Integer.getInteger("lab.leaves.cull", 0) > 0;
         if (simple.equals("HalfCloudsMixin"))   // the clouds at half resolution (HalfClouds)
             on = Boolean.getBoolean("lab.clouds.half");
         if (simple.startsWith("FrameThread"))   // the frame thread's hooks (FrameThread)
