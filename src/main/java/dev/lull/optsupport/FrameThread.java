@@ -256,10 +256,16 @@ public final class FrameThread {
     // ------------------------------------------------------------------ the main thread
 
     /** Window.updateDisplay in runTick (recording): poll, hand the recorded frame over, wait (A1b), poll */
+    public static long tPoll, tFence, tHeld, tLight, tSideWait, tReplay, tCalls, tOps;
+
     public static void present() {
+        long p0 = System.nanoTime();
         org.lwjgl.glfw.GLFW.glfwPollEvents();
         if (mainHolds) giveBack();
+        long p1 = System.nanoTime();
+        tPoll += p1 - p0;
         sideFence();
+        tFence += System.nanoTime() - p1;
         FrameRandom.install(mc.level);   // (the level's random per thread: render code may draw from it)
         JOB_CALLS.addAll(CALLS);
         JOB_CALL_ARGS.addAll(CALL_ARGS);
@@ -267,6 +273,7 @@ public final class FrameThread {
         CALL_ARGS.clear();
         long t0 = System.nanoTime();
         fresh = true;
+        long h0 = System.nanoTime();
         if (OVERLAP) {   // the world's lists the frame walks, as they are now (the main thread changes them meanwhile)
             HELD.clear();
             if (mc.level != null) for (net.minecraft.world.entity.Entity e : mc.level.entitiesForRendering()) HELD.add(e);
@@ -282,6 +289,7 @@ public final class FrameThread {
                 }
             }
         } else heldValid = false;
+        tHeld += System.nanoTime() - h0;
         handAt = System.nanoTime();
         jobDone = false;
         LockSupport.unpark(thread);
@@ -341,8 +349,31 @@ public final class FrameThread {
     public static long sideFences;
 
     /** the main thread: the side context current (made on first use; GlWorker's way: a hidden 1x1 window, shared) */
+    /**
+     * -Dlab.frameThread.side=auto|true|false: the main thread's side context - auto: only with other mods loaded (vanilla
+     * makes no raw GL calls there; the context's fence and wait cost ~26-32 us a frame on the host)
+     */
+    private static final String SIDE = System.getProperty("lab.frameThread.side", "auto");
+    private static Boolean sideWanted;
+
+    private static boolean sideWanted() {
+        Boolean w = sideWanted;
+        if (w == null) {
+            int mods;
+            try {
+                mods = net.neoforged.fml.ModList.get().size();
+            } catch (Throwable t) {
+                mods = 99;
+            }
+            w = "true".equals(SIDE) || "auto".equals(SIDE) && mods > 3;   // (minecraft, neoforge, sleepium)
+            sideWanted = w;
+            LOG.info("[sleep/opt] frame thread: side context for the main thread {} ({} mods loaded)", w ? "on" : "off", mods);
+        }
+        return w;
+    }
+
     private static void sideOn() {
-        if (sideBroken) return;
+        if (sideBroken || !sideWanted()) return;
         if (side == 0) {
             try {
                 org.lwjgl.glfw.GLFW.glfwDefaultWindowHints();
@@ -453,14 +484,22 @@ public final class FrameThread {
                 try {
                     // the main thread's queued GL work first (vanilla's atlas tick queues itself when not on the render
                     // thread): before the frame, where vanilla's tick had it - flipFrame's replay would be a frame late
+                    long q0 = System.nanoTime();
                     long sf = sideFence;
                     if (sf != 0) org.lwjgl.opengl.GL32C.glWaitSync(sf, 0, org.lwjgl.opengl.GL32C.GL_TIMEOUT_IGNORED);
+                    long q1 = System.nanoTime();
+                    tSideWait += q1 - q0;
                     UploadRing.frameBegin();   // (runTick HEAD's on the main thread: GL - the frames-in-flight fence and wait)
                     com.mojang.blaze3d.systems.RenderSystem.replayQueue();
+                    long q2 = System.nanoTime();
+                    tReplay += q2 - q1;
                     for (int i = 0; i < JOB_CALLS.size(); i++) JOB_CALLS.get(i).call(JOB_CALL_ARGS.get(i));   // the main thread's renderer calls, in order
                     JOB_CALLS.clear();
                     JOB_CALL_ARGS.clear();
+                    long q3 = System.nanoTime();
+                    tCalls += q3 - q2;
                     runOps();
+                    tOps += System.nanoTime() - q3;
                 } finally {
                     drawing = false;
                 }
@@ -503,6 +542,9 @@ public final class FrameThread {
         StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT, "; frame thread: frames %d (%.3f ms a frame waited), overlapped %d (%.3f ms waited before the next), hand-over wake-ups: the frame thread %.1f us, the main thread %.1f us, borrows %d (%.3f ms each), failures %d",
                 frames, waitNs / 1e6 / Math.max(1, frames), overlapFrames, overlapWaitNs / 1e6 / Math.max(1, overlapFrames), wakeNs / 1e3 / Math.max(1, frames),
                 mainWakeNs / 1e3 / Math.max(1, mainWakes), borrows, borrowWaitNs / 1e6 / Math.max(1, borrows), failures));
+        long fr = Math.max(1, frames);
+        b.append(String.format(java.util.Locale.ROOT, "; per frame (us): main present: polls %.1f, side fence %.1f, held lists + light %.1f; frame thread: side wait %.1f, frameBegin + queue %.1f, calls %.1f, ops %.1f",
+                tPoll / 1e3 / fr, tFence / 1e3 / fr, tHeld / 1e3 / fr, tSideWait / 1e3 / fr, tReplay / 1e3 / fr, tCalls / 1e3 / fr, tOps / 1e3 / fr));
         BORROW_SITES.entrySet().stream().sorted((x, y) -> Long.compare(y.getValue()[0], x.getValue()[0])).limit(8)
                 .forEach(e -> b.append("; borrow ").append(e.getValue()[0]).append(" x ").append(e.getKey()));
         return b.toString();
