@@ -114,6 +114,10 @@ public final class PartBatch {
         // the path decided before the first patch (tbo: a shader patched before it was set got the storage-buffer
         // variant - on LTW six entity programs failed to compile, items drawn with them vanished, 11-12)
         if (!capable()) return src;
+        // the glowing eyes' program (spiders, endermen, phantoms) reads no Normal though its format carries one: declared
+        // here so model part records can draw it (the attribute is bound by the format's element names)
+        if (name.startsWith("rendertype_eyes") && !src.contains("in vec3 Normal;") && src.contains("in vec3 Position;"))
+            src = src.replace("in vec3 Position;", "in vec3 Position;\nin vec3 Normal;");
         Map<String, String> types = new HashMap<>();
         Matcher m = IN.matcher(src);
         while (m.find()) types.put(m.group(2), m.group(1));

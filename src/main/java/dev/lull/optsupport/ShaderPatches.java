@@ -58,7 +58,7 @@ public final class ShaderPatches {
                         && !"rendertype_translucent".equals(name)
                         && PartBatch.full()) src = PartBatch.patch(name, src);
             } else if (Boolean.getBoolean("lab.opt.PartBatchMixin") && (name.startsWith("rendertype_entity") || name.startsWith("rendertype_armor")
-                    || name.startsWith("rendertype_item_entity"))
+                    || name.startsWith("rendertype_item_entity") || name.startsWith("rendertype_eyes") && PartBatch.ITEMS_ANY_ORDER)
                     && PartBatch.capable()) {
                 src = PartBatch.patch(name, src);
                 src = Materials.patchVertex(name, src);

@@ -119,8 +119,15 @@ public final class TickPoses {
         SPARE.remove(e);
         if (old != null && old != p) SPARE.put(e, old);
         p.frameUsed = frame;
-        runPrep(p);
+        // the preparations are GL work (a type's program looked at, geometry uploaded): with the frame thread they run there,
+        // at its next job's start (the join runs on the main thread, which has no context: a native abort, 11-16)
+        if (!FrameThread.deferCall(RUN_PREP, p)) runPrep(p);
     }
+
+    private static final com.llamalad7.mixinextras.injector.wrapoperation.Operation<Void> RUN_PREP = a -> {
+        runPrep((Pair) a[0]);
+        return null;
+    };
 
     /** render thread: a walking entity's pair as frames hold it (null: none to draw from) */
     static Pair held(Entity e) {

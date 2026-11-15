@@ -29,6 +29,17 @@ public final class ClientCounters {
     private ClientCounters() {}
 
     public static String report() {
+        // the counters walk render-side state (EntityBatch's maps ...) the frame thread changes while it draws: no frame
+        // drawing while the report is made (FrameThread; nothing without it)
+        FrameThread.holdForMain();
+        try {
+            return report0();
+        } finally {
+            FrameThread.releaseForMain();
+        }
+    }
+
+    private static String report0() {
         return String.format(Locale.ROOT, "client opts: ambient biome lookups skipped %d, sampler locations from cache %d; collision memo hits %d, misses %d; " + CollisionMask.report() + "; " + CollideKernel.report() + "; " + ParticleStats.report() + "; " + ParallelParticles.report() + "; " + ParticleGpu.report() + "; " + ParticleLightMemo.report() + "; " + ParallelEntities.report() + "; %s",
                 biomeSkips, samplerHits, BlockCollisionMemo.hits, BlockCollisionMemo.misses, EventSites.report())
                 + (Boolean.getBoolean("lab.opt.ChunkMultiDrawMixin") ? "; " + (RegionDraw.on() ? RegionDraw.report() : ChunkMultiDraw.report()) : "")
