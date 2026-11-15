@@ -253,7 +253,7 @@ public final class ClientAuto {
         }
     }
     private static Boolean savedVsync;
-    private static Integer savedFps, savedDistance;
+    private static Integer savedFps, savedDistance, savedFov;
     private static net.minecraft.client.CloudStatus savedClouds;
 
     /**
@@ -595,6 +595,10 @@ public final class ClientAuto {
                     savedFps = mc.options.framerateLimit().get();
                     savedClouds = mc.options.cloudStatus().get();
                     savedDistance = mc.options.renderDistance().get();
+                    // the field of view fixed (-Dsleep.clientAuto.fov, 70 = the game's default): a player's 110 draws far
+                    // more of the world - runs on a client someone also plays on were not comparable (11-15 host)
+                    savedFov = mc.options.fov().get();
+                    mc.options.fov().set(Integer.getInteger("sleep.clientAuto.fov", 70));
                     mc.options.renderDistance().set(Integer.getInteger("sleep.clientAuto.distance", 12));   // (a phone: 6)
                     mc.options.pauseOnLostFocus = false;
                     if (FRAMEHASH) {   // nothing that moves by itself
@@ -730,6 +734,7 @@ public final class ClientAuto {
                         mc.options.framerateLimit().set(savedFps);
                         mc.options.cloudStatus().set(savedClouds);
                         mc.options.renderDistance().set(savedDistance);
+                        if (savedFov != null) mc.options.fov().set(savedFov);
                         mc.options.hideGui = false;
                         mc.options.save();
                     }
