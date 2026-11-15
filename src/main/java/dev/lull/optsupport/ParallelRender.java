@@ -1197,9 +1197,10 @@ public final class ParallelRender {
         }
         if (size > 0) CacheTune.frame(System.nanoTime() - frameEntitiesAt, size);
         size = 0;
-        if (TickAsync.ON && (++drainFrame & 1023) == 0) {   // (gone entities forgotten now and then)
-            ON_WORKER.clear();
-            DRAWN.clear();
+        if (TickAsync.ON && (++drainFrame & 1023) == 0) {   // gone entities forgotten now and then - only the old entries: a clear
+            long f = drainFrame;                                 // made every visible entity look unseen for two frames (skipped)
+            ON_WORKER.values().removeIf(v -> f - v > 64);
+            DRAWN.values().removeIf(v -> f - v > 64);
         }
         if (TickPoses.ON) TickPoses.endFrame();
     }
