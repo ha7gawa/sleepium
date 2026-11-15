@@ -4,6 +4,23 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.2.6 - 2026-11-15
+
+Three fixes.
+
+- **Fix: CustomNPCs could not register its script events.** CustomNPCs finds a private method of Forge's and
+  NeoForge's event bus by reflection to register its events. Sleepium's faster event bus did not have that method, so
+  registration failed (`NoSuchMethodException: dev.lull.optsupport.CompositeEventBus.register` in the log) and none of
+  those events reached CustomNPCs. Scripted NPCs did not react to clicks. Sleepium's event bus now has the same
+  registration methods as the loader's. This also fixes other mods that register events the same way. Checked with
+  CustomNPCs-Unofficial on 1.20.1 Forge and 1.21.1 NeoForge.
+- **Fix (1.20.1): event counting switched itself off on Forge 47.4.28 and newer**, with an error in the log (reported
+  with Blood Magic). Forge's newer event bus guards its listener cache with a different kind of lock; Sleepium now
+  handles both kinds.
+- **Fix: a rare crash while drawing animated mobs** (`ArrayIndexOutOfBoundsException` in `ModelPart.compile`). When
+  the render thread built a model part's geometry, it could share the part's reusable list with a worker thread drawing
+  the same mob type at that moment. The render thread now uses its own list.
+
 ## 1.2.5 - 2026-11-14
 
 Smooth camera turns at far view distances, and two fixes for the experimental GPU terrain.

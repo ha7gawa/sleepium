@@ -1,6 +1,7 @@
 {
   "homepage": "https://modrinth.com/mod/sleepium",
   "1.21.1": {
+    "1.2.6": "Fixes: CustomNPCs' script events were not registered (scripted NPCs did not react to clicks); a rare crash while drawing animated mobs.",
     "1.2.5": "No stutter when the camera turns at far view distances (32 chunks while turning: 167 -> 1 124 fps); GPU terrain: no cross of missing chunks from 31 chunks, no crash without OpenGL 4.5.",
     "1.2.4": "Fix: players were disconnected from a server with Krypton ('a frame cut inside a container', since 1.2.3).",
     "1.2.3": "See and choose what Sleepium does to each mod (Options -> Sleepium -> Mods), what each mod costs and where the server's time goes, a pack settings file for modpack makers, Find the cause, a HUD; fix: joining with Krypton.",
@@ -25,12 +26,13 @@
     "1.0.0": "The first public release."
   },
   "promos": {
-    "1.21.1-latest": "1.2.5",
-    "1.21.1-recommended": "1.2.5",
-    "1.20.1-latest": "1.2.5",
-    "1.20.1-recommended": "1.2.5"
+    "1.21.1-latest": "1.2.6",
+    "1.21.1-recommended": "1.2.6",
+    "1.20.1-latest": "1.2.6",
+    "1.20.1-recommended": "1.2.6"
   },
   "1.20.1": {
+    "1.2.6": "The same fixes as 1.21.1, plus event counting no longer switches itself off on Forge 47.4.28 and newer (Blood Magic).",
     "1.2.5": "No stutter when the camera turns at far view distances; GPU terrain: no cross of missing chunks from 31 chunks, no crash without OpenGL 4.5 (Android launchers).",
     "1.2.4": "The same network fix as 1.21.1 (Krypton Reno on 1.20.1 was not affected).",
     "1.2.3": "See and choose what Sleepium does to each mod (Options -> Sleepium -> Mods), what each mod costs and where the server's time goes, a pack settings file for modpack makers, Find the cause, a HUD; fix: joining with Krypton.",
