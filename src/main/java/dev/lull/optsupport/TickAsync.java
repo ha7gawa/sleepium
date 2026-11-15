@@ -90,9 +90,10 @@ public final class TickAsync {
         long t0 = System.nanoTime();
         // the frame thread (FrameThread) may be drawing from this walk's snapshots and pairs: the join waits until no frame
         // draws, and no extra frame starts until it is done
+        ParallelEntities.joinAsyncWorld();   // (the frame thread may draw meanwhile: nothing it reads changes here)
         FrameThread.holdForMain();
         try {
-            ParallelEntities.joinAsync();
+            ParallelEntities.joinAsyncRender();
         } finally {
             FrameThread.releaseForMain();
         }

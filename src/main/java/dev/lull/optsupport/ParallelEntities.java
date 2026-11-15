@@ -499,6 +499,15 @@ public final class ParallelEntities {
 
     /** render thread: the walk finished (helping first), its deferred moves and removals applied, the pairs swapped */
     static void joinAsync() {
+        joinAsyncWorld();
+        joinAsyncRender();
+    }
+
+    /**
+     * the join's first part, the main thread's own state: the walk finished (helping), the deferred section moves and
+     * removals applied - nothing a drawing frame reads (the frame thread draws meanwhile: FrameThread)
+     */
+    static void joinAsyncWorld() {
         try {
             asyncDrain(true);
             long spinUntil = System.nanoTime() + 20_000;
@@ -528,6 +537,11 @@ public final class ParallelEntities {
                 removedWhy[i] = null;
             }
         }
+    }
+
+    /** the join's second part, what frames read: the pairs swapped, the snapshot jobs let go, the walking set emptied */
+    static void joinAsyncRender() {
+        int m = asyncM;
         for (int i = 0; i < m; i++) {
             TickPoses.install(all[i], asyncPairs[i]);
             asyncPairs[i] = null;
