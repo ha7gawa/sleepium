@@ -34,6 +34,7 @@ public final class RenderThread {
 
     /** for an owning-thread check: the main thread while the render thread draws (stage A1: the main thread waits) */
     public static Thread ownerView() {
+        if (FrameThread.ON) return FrameThread.ownerView();
         Thread t = Thread.currentThread();
         if (drawing && t == thread) {
             ownerViews++;

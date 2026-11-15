@@ -11,6 +11,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class UploadRingMixin {
     @Inject(method = "runTick", at = @At("HEAD"))
     private void sleep$ringFrame(boolean renderLevel, CallbackInfo ci) {
-        dev.lull.optsupport.UploadRing.frameBegin();
+        if (!dev.lull.optsupport.FrameThread.active) dev.lull.optsupport.UploadRing.frameBegin();   // (the frame thread: at its job's start)
     }
 }

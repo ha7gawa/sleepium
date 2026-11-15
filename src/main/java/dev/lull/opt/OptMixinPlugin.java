@@ -44,6 +44,10 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.JobSiteIndex");
         if (simple.startsWith("RenderThread"))   // the render thread's hooks (RenderThread)
             on = Boolean.getBoolean("lab.opt.RenderThreadMixin");
+        if (simple.equals("RenderThreadModelDataMixin"))   // (shared with the frame thread)
+            on = Boolean.getBoolean("lab.opt.RenderThreadMixin") || Boolean.getBoolean("lab.opt.FrameThreadMixin");
+        if (simple.startsWith("FrameThread"))   // the frame thread's hooks (FrameThread)
+            on = Boolean.getBoolean("lab.opt.FrameThreadMixin");
         if (simple.startsWith("GlWorker"))   // the GL worker's hooks (GlWorker)
             on = Boolean.getBoolean("lab.glWorker");
         if (simple.equals("WriteBarrierMixin"))   // the write barrier of mob parts (WriteBarrier, WB)

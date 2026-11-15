@@ -160,6 +160,8 @@
     "TickThreadMixin",
     "RenderThreadMixin",
     "RenderThreadModelDataMixin",
+    "FrameThreadMixin",
+    "FrameThreadSystemMixin",
     "GlWorkerFrameMixin",
     "GlWorkerFlipMixin",
     "GlWorkerLayerMixin",
