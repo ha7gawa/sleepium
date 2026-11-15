@@ -46,6 +46,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.RenderThreadMixin");
         if (simple.equals("RenderThreadModelDataMixin"))   // (shared with the frame thread)
             on = Boolean.getBoolean("lab.opt.RenderThreadMixin") || Boolean.getBoolean("lab.opt.FrameThreadMixin");
+        if (simple.equals("HalfCloudsMixin"))   // the clouds at half resolution (HalfClouds)
+            on = Boolean.getBoolean("lab.clouds.half");
         if (simple.startsWith("FrameThread"))   // the frame thread's hooks (FrameThread)
             on = Boolean.getBoolean("lab.opt.FrameThreadMixin");
         if (simple.startsWith("GlWorker"))   // the GL worker's hooks (GlWorker)
