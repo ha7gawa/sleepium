@@ -65,6 +65,7 @@ public final class ParallelEntities {
         long t0 = System.nanoTime();
         boolean serial = ALTERNATE && (walks & 1) == 0;
         try {
+            if (TickAsync.ON && !serial && asyncSplit(consumer)) return;
             if (serial) {
                 for (int k = 0; k < n; k++) consumer.accept(all[k]);
                 return;
@@ -197,6 +198,149 @@ public final class ParallelEntities {
         }
         Throwable e = error;
         if (CHECK && e == null) ParallelEntitiesCheck.verify(all, t, runEnd, consumer, before);
+        if (e instanceof RuntimeException re) throw re;
+        if (e instanceof Error er) throw er;
+    }
+
+    // ------------------------------------------------------------------ TickAsync: the walk next to the frame
+
+    private static int asyncM;
+    private static volatile boolean asyncRunning;
+    private static TickPoses.Pair[] asyncPairs = new TickPoses.Pair[256];
+
+    static boolean asyncRunning() {
+        return asyncRunning;
+    }
+
+    /**
+     * The walk with TickAsync: entities drawn from tick poses left out (kept at the front of all[], in the walk's order,
+     * each with its spare pair), every other one ticked here in its slot. False: none left out - the usual walk.
+     */
+    private static boolean asyncSplit(Consumer<Entity> consumer) {
+        int cand = 0;
+        for (int k = 0; k < n; k++) if (mayTickApart(all[k]) && TickAsync.eligible(all[k])) cand++;
+        if (cand == 0) return false;
+        if (asyncPairs.length < n) asyncPairs = new TickPoses.Pair[Math.max(n, asyncPairs.length * 2)];
+        int m = 0;
+        for (int k = 0; k < n; k++) {
+            Entity e = all[k];
+            if (mayTickApart(e) && TickAsync.eligible(e)) {
+                asyncPairs[m] = TickPoses.spare(e);
+                all[m++] = e;   // (m <= k: that slot is done with)
+                TickAsync.WALKING.put(e, Boolean.TRUE);
+            } else consumer.accept(e);
+        }
+        java.util.Arrays.fill(all, m, n, null);
+        n = 0;   // (the finally clears nothing: the left-out ones stay for startAsync)
+        asyncM = m;
+        tick = consumer;
+        return true;
+    }
+
+    /** Minecraft.tick returned: the left-out entities on the pool, each ticked then captured; the render thread goes on */
+    static void startAsync() {
+        int m = asyncM;
+        if (m == 0 || asyncRunning) return;
+        tail0 = 0;
+        end = m;
+        if (movedCb.length < m) {
+            int len = Math.max(m, movedCb.length * 2);
+            movedCb = new EntityInLevelCallback[len];
+            removedCb = new EntityInLevelCallback[len];
+            removedWhy = new Entity.RemovalReason[len];
+        }
+        error = null;
+        NEXT.set(0);
+        REMAINING.set(m);
+        ParticleWorkers.renderThread = Thread.currentThread();
+        levelRandom = all[0].level().random;
+        ParticleWorkers.SHARED.clear();
+        ParticleWorkers.active = true;
+        asyncRunning = true;
+        TickAsync.walks++;
+        TickAsync.entities += m;
+        LabRuntime pool = FrameReactor.pool();
+        int helpers = Math.max(1, Math.min(pool.workerCount(), m));
+        for (int k = 0; k < helpers; k++) pool.execute(ParallelEntities::asyncWorkerRun);
+    }
+
+    private static void asyncWorkerRun() {
+        boolean[] in = ParticleWorkers.IN_WORKER.get();
+        in[0] = true;
+        try {
+            asyncDrain(false);
+        } finally {
+            in[0] = false;
+        }
+    }
+
+    /** claims of the left-out entities: each ticked (as the walk would), then its spare pair captured on this thread */
+    private static void asyncDrain(boolean render) {
+        int done = 0;
+        int[] cur = CURRENT.get();
+        for (int s0; (s0 = NEXT.getAndAdd(CHUNK)) < end; ) {   // (1.20.1: fixed chunks)
+            int e0 = Math.min(end, s0 + CHUNK);
+            for (int j = s0; j < e0; j++) {
+                cur[0] = j;
+                try {
+                    tick.accept(all[j]);
+                } catch (Throwable x) {
+                    error = x;
+                }
+                cur[0] = -1;   // (the capture renders: not the tick's doing for the conflict hooks)
+                try {
+                    if (!all[j].isRemoved()) TickPoses.captureInto(asyncPairs[j], all[j]);
+                } catch (Throwable x) {
+                    if (asyncPairs[j] != null) asyncPairs[j].markUnusable();
+                }
+                if (render && ParticleWorkers.pending()) ParticleWorkers.serve();
+            }
+            done += e0 - s0;
+        }
+        cur[0] = -1;
+        if (done > 0 && REMAINING.addAndGet(-done) == 0 && !render) LockSupport.unpark(ParticleWorkers.renderThread);
+    }
+
+    /** render thread: the walk finished (helping first), its deferred moves and removals applied, the pairs swapped */
+    static void joinAsync() {
+        try {
+            asyncDrain(true);
+            long spinUntil = System.nanoTime() + 20_000;
+            while (REMAINING.get() != 0) {
+                ParticleWorkers.serve();
+                if (REMAINING.get() == 0) break;
+                if (System.nanoTime() < spinUntil) Thread.onSpinWait();
+                else LockSupport.parkNanos(ParallelEntities.class, 200_000L);
+            }
+            ParticleWorkers.serve();
+        } finally {
+            ParticleWorkers.active = false;
+        }
+        int m = asyncM;
+        for (int i = 0; i < m; i++) {
+            EntityInLevelCallback cb = movedCb[i];
+            if (cb != null) {
+                movedCb[i] = null;
+                deferredMoves++;
+                cb.onMove();
+            }
+            cb = removedCb[i];
+            if (cb != null) {
+                removedCb[i] = null;
+                deferredRemoves++;
+                cb.onRemove(removedWhy[i]);
+                removedWhy[i] = null;
+            }
+        }
+        for (int i = 0; i < m; i++) {
+            TickPoses.install(all[i], asyncPairs[i]);
+            asyncPairs[i] = null;
+        }
+        java.util.Arrays.fill(all, 0, m, null);
+        asyncM = 0;
+        TickAsync.WALKING.clear();
+        asyncRunning = false;
+        Throwable e = error;
         if (e instanceof RuntimeException re) throw re;
         if (e instanceof Error er) throw er;
     }

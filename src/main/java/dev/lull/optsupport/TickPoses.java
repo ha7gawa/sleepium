@@ -85,6 +85,79 @@ public final class TickPoses {
 
     private static final Map<EntityType<?>, Stat> STATS = new IdentityHashMap<>();
     private static final Map<Entity, Pair> PAIRS = new IdentityHashMap<>();
+    /** TickAsync: each walking entity's second pair, written by a worker while frames draw from the first (render thread map) */
+    private static final Map<Entity, Pair> SPARE = new IdentityHashMap<>();
+
+    /** render thread: drawn from tick poses now - its type qualified, its current pair done, usable, on the GPU path */
+    static boolean asyncReady(Entity e) {
+        Stat st = STATS.get(e.getType());
+        if (st == null || st.state != 1) return false;
+        Pair p = PAIRS.get(e);
+        return p != null && p.done && p.usable;   // (the GPU records or the CPU interpolation: both hold at the last key)
+    }
+
+    /** render thread: the entity's spare pair (made once), its type's statistics given along for the worker */
+    static Pair spare(Entity e) {
+        Pair p = SPARE.computeIfAbsent(e, k -> new Pair());
+        p.stat = STATS.get(e.getType());
+        return p;
+    }
+
+    /** a worker, right after the entity's tick: the spare pair captured on this thread (no frame reads it yet) */
+    static void captureInto(Pair p, Entity e) {
+        Stat st = p.stat;
+        boolean check;
+        synchronized (st) {
+            check = st.state == 0 || ++st.recheckN % RECHECK == 0;
+        }
+        configure(p, e, stamp(e), check);
+        p.run();
+        ASYNC_CAPTURES.incrementAndGet();
+    }
+
+    static final AtomicLong ASYNC_CAPTURES = new AtomicLong();
+
+    /** render thread, the walk joined: the spare pair becomes the current one, the old current one the spare */
+    static void install(Entity e, Pair p) {
+        if (p == null) return;
+        Pair old = PAIRS.put(e, p);
+        SPARE.remove(e);
+        if (old != null && old != p) SPARE.put(e, old);
+        p.frameUsed = frame;
+        runPrep(p);
+    }
+
+    /** render thread: a walking entity's pair as frames hold it (null: none to draw from) */
+    static Pair held(Entity e) {
+        Pair p = PAIRS.get(e);
+        return p != null && p.done && p.usable ? p : null;
+    }
+
+    /** a pair set up for a capture of e (not started) */
+    private static void configure(Pair p, Entity e, long stamp, boolean check) {
+        p.stamp = stamp;
+        p.check = check;
+        p.usable = false;
+        p.gpuOk = false;
+        p.done = false;
+        p.ax = e.getX();
+        p.ay = e.getY();
+        p.az = e.getZ();
+        for (int i = 0; i < 4; i++) {
+            ParallelRender.Job j = p.jobs[i];
+            j.entity = e;
+            j.camX = p.ax;
+            j.camY = p.ay;
+            j.camZ = p.az;
+            j.pt = PTS[i];
+            j.rendererOnly = true;
+            j.tick = null;
+            j.done = false;
+            j.ok = false;
+            j.claimed.set(false);
+        }
+        p.claimed.set(false);
+    }
 
     /** One entity's records for the current tick: jobs at 0, 1 (and 0.5 when checked), rendered one after another on one worker. */
     static final class Pair implements Runnable {
@@ -147,6 +220,13 @@ public final class TickPoses {
             }
         }
 
+        /** TickAsync: a capture that failed on a worker - frames draw the entity the usual way after the join */
+        void markUnusable() {
+            usable = false;
+            gpuOk = false;
+            done = true;
+        }
+
         void free() {
             for (ParallelRender.Job j : jobs) j.parts.free();
             if (gpu != 0) MemoryUtil.nmemFree(gpu);
@@ -177,12 +257,18 @@ public final class TickPoses {
 
     /** ParallelRender.drain's end: pairs of entities not drawn for a while (gone, out of view) freed */
     static void endFrame() {
-        if ((++frame & 255) != 0 || PAIRS.isEmpty()) return;
+        if ((++frame & 255) != 0 || PAIRS.isEmpty() || !TickAsync.WALKING.isEmpty()) return;   // (a walk running: its pairs are in use)
         for (Iterator<Map.Entry<Entity, Pair>> it = PAIRS.entrySet().iterator(); it.hasNext(); ) {
-            Pair p = it.next().getValue();
+            Map.Entry<Entity, Pair> en = it.next();
+            Pair p = en.getValue();
             if (frame - p.frameUsed > 600 && (p.done || p.claimed.compareAndSet(false, true))) {
                 runPrep(p);   // (asked once: dropped, the parts would stay the CPU way)
                 p.free();
+                Pair sp = SPARE.remove(en.getKey());
+                if (sp != null) {
+                    runPrep(sp);
+                    sp.free();
+                }
                 it.remove();
             }
         }
@@ -380,7 +466,7 @@ public final class TickPoses {
      */
     static boolean frameParts(Pair p, ParallelRender.Job j) {
         p.await();
-        if (!p.usable || p.stat.state != 1) {
+        if (!p.usable || !j.hold && p.stat.state != 1) {
             FALLBACKS.incrementAndGet();
             return false;
         }
