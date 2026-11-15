@@ -137,6 +137,12 @@ public final class PartBatch {
         pre.append("struct ProbePart { mat4 pose; vec4 n0; vec4 n1; vec4 n2; vec4 color; ivec4 lo; };\n");
         pre.append("layout(std430) buffer ProbeParts { ProbePart probeParts[]; };\n");
         pre.append("uniform int ProbePartMode;\n");
+        boolean TICK = TickPoses.ON && !tbo;
+        if (TICK) {   // mode 8 (TickPoses): the same storage seen as vec4s - a record is 18 of them (two 144-byte slots)
+            pre.append("layout(std430) buffer ProbeTicks { vec4 probeTick[]; };\n");
+            pre.append("vec3 probeRot(vec4 q, vec3 v) { return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v); }\n");
+            if (!EXTRA) pre.append("uniform mat3 ProbeView;\n");   // 1.20.1: the frame's view rotation (with EXTRA: declared below for mode 5)
+        }
         // mode 7 (ItemGpu): position and normal as JOML computes them on the CPU (Vector3f.mulPosition / Matrix3f.transform
         // without Math.fma: m00 x + (m10 y + (m20 z + m30)), every product and sum rounded on its own); `precise` keeps the
         // compiler from fusing or reordering them, so the vertex is vanilla's to the bit (without the extension: as before)
@@ -176,6 +182,27 @@ public final class PartBatch {
         pre.append("        float probe_rl = length(probe_rn);\n");
         pre.append("        if (probe_rl > 0.0) probe_rn /= probe_rl;\n");
         pre.append("        probe_Normal = trunc(clamp(probe_rn, -1.0, 1.0) * 127.0) / 127.0;\n");
+        if (TICK) {
+            // mode 8 (TickPoses): keys at partial 0, 0.5, 1 - each a rotation (quaternion), per-column scale and a translation
+            // (relative to the entity's anchor); the frame's partial tick picks two, nlerp / lerp between them; the anchor's
+            // offset to the camera and the partial tick in vec4 17; colour 9, light and overlay 10 (int bits)
+            pre.append("    } else if (ProbePartMode == 8) {\n");
+            pre.append("        int probe_b = " + PROBE_I + " * 18;\n");
+            pre.append("        vec4 probe_m = probeTick[probe_b + 17];\n");
+            pre.append("        int probe_k = probe_b + (probe_m.w < 0.5 ? 0 : 3);\n");
+            pre.append("        float probe_u = probe_m.w < 0.5 ? probe_m.w * 2.0 : probe_m.w * 2.0 - 1.0;\n");
+            pre.append("        vec4 probe_qa = probeTick[probe_k], probe_qb = probeTick[probe_k + 3];\n");
+            pre.append("        if (dot(probe_qa, probe_qb) < 0.0) probe_qb = -probe_qb;\n");
+            pre.append("        vec4 probe_q = normalize(mix(probe_qa, probe_qb, probe_u));\n");
+            pre.append("        vec4 probe_sa = probeTick[probe_k + 1], probe_sb = probeTick[probe_k + 4], probe_ta = probeTick[probe_k + 2], probe_tb = probeTick[probe_k + 5];\n");
+            pre.append("        vec3 probe_sc = mix(probe_sa.xyz, probe_sb.xyz, probe_u);\n");
+            pre.append("        probe_Position = ProbeView * (probeRot(probe_q, probe_sc * Position) + mix(vec3(probe_sa.w, probe_ta.xy), vec3(probe_sb.w, probe_tb.xy), probe_u) + probe_m.xyz);\n");
+            pre.append("        probe_Normal = trunc(clamp(normalize(ProbeView * probeRot(probe_q, Normal / probe_sc)), -1.0, 1.0) * 127.0) / 127.0;\n");
+            pre.append("        probe_Color = probeTick[probe_b + 9];\n");
+            if (uv1 != null || uv2 != null) pre.append("        ivec4 probe_lo8 = floatBitsToInt(probeTick[probe_b + 10]);\n");
+            if (uv1 != null) pre.append("        probe_UV1 = ").append(uv1).append("(probe_lo8.zw);\n");
+            if (uv2 != null) pre.append("        probe_UV2 = probe_lo8.xy;\n");
+        }
         pre.append("    } else if (ProbePartMode != 0) {\n");
         if (EXTRA) {
             pre.append("        int probe_i = " + PROBE_I + ";\n");   // (mode 5: one instance, the persistent record as base instance)
@@ -490,8 +517,20 @@ public final class PartBatch {
 
     /** Per render type: the queued part records (144 bytes each: pose, normal columns, colour, light/overlay). */
     static final class Queue {
-        long mem = MemoryUtil.nmemAlloc(144L * 256);
+        /** bytes a record: 144; TickPoses' records (mode 8) 288 */
+        final int stride;
+        long mem;
         int cap = 256, n;
+
+        Queue() {
+            this(144);
+        }
+
+        Queue(int stride) {
+            this.stride = stride;
+            mem = MemoryUtil.nmemAlloc((long) stride * 256);
+        }
+
         long counts = MemoryUtil.nmemAlloc(4L * 256), bases = MemoryUtil.nmemAlloc(4L * 256), indices = MemoryUtil.nmemCalloc(256, 8);
         int maxIndices;
         float[] keys = new float[64];
@@ -501,7 +540,7 @@ public final class PartBatch {
         void ensure() {
             if (n < cap) return;
             cap *= 2;
-            mem = MemoryUtil.nmemRealloc(mem, 144L * cap);
+            mem = MemoryUtil.nmemRealloc(mem, (long) stride * cap);
             if (aux != 0) aux = MemoryUtil.nmemRealloc(aux, 48L * cap);
             counts = MemoryUtil.nmemRealloc(counts, 4L * cap);
             bases = MemoryUtil.nmemRealloc(bases, 4L * cap);
@@ -511,6 +550,8 @@ public final class PartBatch {
         }
     }
 
+    /** TickPoses' records (mode 8: a tick's three key poses, interpolated by the shader) */
+    private static final Map<RenderType, Queue> TICK_QUEUES = new IdentityHashMap<>();
     private static final Map<RenderType, Queue> QUEUES = new IdentityHashMap<>(), GEO_QUEUES = new IdentityHashMap<>(), RESIDENT = new IdentityHashMap<>(),
             SBB_QUEUES = new IdentityHashMap<>(), LIT_QUEUES = new IdentityHashMap<>(), ITEM_QUEUES = new IdentityHashMap<>();
 
@@ -1488,6 +1529,53 @@ public final class PartBatch {
         return true;
     }
 
+    /**
+     * TickPoses (render thread, the entity's place in the frame's order): a pair's GPU records (288 bytes each, the
+     * frame's anchor offset and partial tick written in) into the types' tick queues. False: a type is not a batch of
+     * this source, or one whose order matters (records are grouped) - the entity goes the other way.
+     */
+    public static boolean mergeTick(RenderType[] types, int[] first, int[] quads, int n, long recs, net.minecraft.client.renderer.MultiBufferSource buffers,
+                                    float dx, float dy, float dz, float t) {
+        if (!TickPoses.ON || tbo) return false;
+        RenderType last = null;
+        for (int i = 0; i < n; i++) {
+            if (types[i] == last) continue;
+            last = types[i];
+            if (!(buffers.getBuffer(last) instanceof BufferBuilder bb) || EntityBatch.typeOf(bb) != last || !EntityBatch.commutes(last) || !typeOk(last)) return false;
+        }
+        last = null;
+        BufferBuilder bb = null;
+        Queue q = null;
+        for (int i = 0; i < n; i++) {
+            if (types[i] != last) {
+                last = types[i];
+                bb = (BufferBuilder) buffers.getBuffer(last);
+                q = TICK_QUEUES.get(last);
+            }
+            if (q == null || q.n == q.cap || ((dev.lull.opt.BufferBuilderAccessor) bb).sleep$vertices() == 0) q = slotTick(last, bb);
+            long r = q.mem + 288L * q.n;
+            MemoryUtil.memCopy(recs + 288L * i, r, 288);
+            MemoryUtil.memPutFloat(r + 272, dx);
+            MemoryUtil.memPutFloat(r + 276, dy);
+            MemoryUtil.memPutFloat(r + 280, dz);
+            MemoryUtil.memPutFloat(r + 284, t);
+            commit(q, first[i], quads[i]);
+        }
+        tickRecords += n;
+        return true;
+    }
+
+    public static long tickRecords;
+    /** 1.20.1: the frame's view rotation for mode 8 (the level pose's rotation; TickPoses.mergeGpu sets it) */
+    public static final Matrix3f tickView = new Matrix3f();
+
+    private static Queue slotTick(RenderType type, BufferBuilder bb) {
+        emptyQuad(bb);
+        Queue q = TICK_QUEUES.computeIfAbsent(type, t -> new Queue(288));
+        q.ensure();
+        return q;
+    }
+
     /** The render type draws with a patched shader (its shader shard's supplier, asked once). */
     private static boolean typeOk(RenderType t) {
         Boolean ok = TYPE_OK.get(t);
@@ -1584,12 +1672,14 @@ public final class PartBatch {
         }
         PQueue pq = PERSIST.isEmpty() ? null : PERSIST.get(t);
         Queue lq = LIT_QUEUES.isEmpty() ? null : LIT_QUEUES.get(t);
+        Queue tq = TICK_QUEUES.isEmpty() ? null : TICK_QUEUES.get(t);
+        boolean tick = tq != null && tq.n > 0;
         // a source that draws a type in more than one piece a frame (ImmediatelyFast): each queue is drawn after the
         // type's next draw and emptied there, the persistent records once a frame - never twice (translucent ones would
         // blend twice, opaque ones cost the GPU again)
         boolean parts = q != null && q.n > 0, res = r != null && r.n > 0, geo = gq != null && gq.n > 0, sbb = sq != null && sq.n > 0,
                 per = pq != null && pq.n > 0 && pq.drawnFrame != frame, lit = lq != null && lq.n > 0;
-        if (!parts && !res && !geo && !sbb && !per && !lit) {
+        if (!parts && !res && !geo && !sbb && !per && !lit && !tick) {
             if (drewItems) {   // vanilla's state as below: its next immediate draw must not take our vertex array for its own
                 drewItems = false;
                 com.mojang.blaze3d.vertex.BufferUploader.invalidate();
@@ -1600,6 +1690,15 @@ public final class PartBatch {
         drewItems = false;
         if (lit) drawQueue(shader, lq, 6);
         if (parts) drawQueue(shader, q, 1);
+        if (tick) {
+            int[] tst = programState(shader);
+            if (tst.length > 7 && tst[7] >= 0) {   // 1.20.1: the frame's view rotation (the records are made without it)
+                tickView.get(VIEW_BUF.clear());
+                GL20C.glUniformMatrix3fv(tst[7], false, VIEW_BUF);
+            }
+            drawQueue(shader, tq, 8);
+            tq.n = 0;
+        }
         if (geo) drawQueue(shader, gq, 3);
         if (sbb) drawQueue(shader, sq, 4);
         if (per) {
@@ -1646,6 +1745,8 @@ public final class PartBatch {
             int f = GL20C.glGetUniformLocation(id, "ProbePartMode");
             int b = GL43C.glGetProgramResourceIndex(id, GL43C.GL_SHADER_STORAGE_BLOCK, "ProbeParts");
             if (f >= 0 && b != GL31C.GL_INVALID_INDEX) GL43C.glShaderStorageBlockBinding(id, b, SSBO_BINDING);
+            int tb = GL43C.glGetProgramResourceIndex(id, GL43C.GL_SHADER_STORAGE_BLOCK, "ProbeTicks");
+            if (f >= 0 && tb != GL31C.GL_INVALID_INDEX) GL43C.glShaderStorageBlockBinding(id, tb, SSBO_BINDING);   // (the same storage, as vec4s)
             int cam = -1, time = -1, view = -1, boxes = GL31C.GL_INVALID_INDEX;
             if (LIT_ON) {
                 boxes = GL43C.glGetProgramResourceIndex(id, GL43C.GL_SHADER_STORAGE_BLOCK, "ProbeBoxes");
@@ -1664,6 +1765,7 @@ public final class PartBatch {
                     view = GL20C.glGetUniformLocation(id, "ProbeView");
                 }
             }
+            if (view < 0 && TickPoses.ON) view = GL20C.glGetUniformLocation(id, "ProbeView");   // (mode 8 turns by it too)
             return new int[] {f, b, GL20C.glGetUniformLocation(id, "ProbeLight0"), GL20C.glGetUniformLocation(id, "ProbeLight1"), cam, time, boxes, view};
         });
     }
@@ -1827,10 +1929,11 @@ public final class PartBatch {
             return;
         }
         if (ssbo == 0) ssbo = GL15C.glGenBuffers();
-        long bytes = 144L * q.n;
+        int stride = q.stride;
+        long bytes = (long) stride * q.n;
         // instancing (modes 1, 3, 7): the records grouped by geometry - sorted when the type's order does not matter, else
         // only runs already next to each other (the order kept)
-        boolean grouped = instanced && (mode == 1 || mode == 3 || mode == 7) && q.n > 1;
+        boolean grouped = instanced && (mode == 1 || mode == 3 || mode == 7 || mode == 8) && q.n > 1;
         long src = q.mem;
         if (grouped) {
             boolean sort = current != null && EntityBatch.commutes(current);
@@ -1842,7 +1945,7 @@ public final class PartBatch {
                     MemoryUtil.nmemFree(gBases);
                 }
                 gCap = Math.max(n, gCap * 2);
-                gMem = MemoryUtil.nmemAlloc(144L * gCap);
+                gMem = MemoryUtil.nmemAlloc(288L * gCap);
                 gCounts = MemoryUtil.nmemAlloc(4L * gCap);
                 gBases = MemoryUtil.nmemAlloc(4L * gCap);
             }
@@ -1890,7 +1993,7 @@ public final class PartBatch {
                 for (int i = 0; i < n; i++) {
                     int pos = hCnt[gId[i]]++;
                     long key = hKey[gId[i]];
-                    MemoryUtil.memCopy(q.mem + 144L * i, dst + 144L * pos, 144);
+                    MemoryUtil.memCopy(q.mem + (long) stride * i, dst + (long) stride * pos, stride);
                     MemoryUtil.memPutInt(gCounts + 4L * pos, (int) key);
                     MemoryUtil.memPutInt(gBases + 4L * pos, (int) (key >>> 32));
                 }

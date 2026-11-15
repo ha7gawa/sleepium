@@ -48,6 +48,13 @@ public final class TickPoses {
     /** the jobs: 0 at 0, 1 at 1, 2 at 0.5 (a key with 3 keys, else the check), 3 at 0.25 (the check with 3 keys) */
     private static final float[] PTS = {0f, 1f, 0.5f, 0.25f};
     private static final int CHECK_JOB = KEYS == 3 ? 3 : 2;
+    /**
+     * -Dlab.prender.tickPoses.gpu (default on, 3 keys): the keys decomposed once a tick on the worker (rotation, scale,
+     * translation each) into 288-byte records the part shader interpolates (PartBatch mode 8) - a frame copies them; no
+     * interpolation on the CPU. Vanilla model parts only (GeckoLib bones and items: the CPU interpolation).
+     */
+    static final boolean GPU = KEYS == 3 && !"false".equals(System.getProperty("lab.prender.tickPoses.gpu"));
+    static final AtomicLong GPU_FRAMES = new AtomicLong(), GPU_REFUSED = new AtomicLong();
 
     public static long captures;
     static final AtomicLong MERGED = new AtomicLong(), FALLBACKS = new AtomicLong(), STRUCTURAL = new AtomicLong(), CHECKS = new AtomicLong(),
@@ -93,6 +100,10 @@ public final class TickPoses {
         /** a scratch record set for the check (this pair's task only) */
         long mid;
         int midCap;
+        /** GPU: the keys as mode-8 records (288 bytes each), valid when gpuOk */
+        long gpu;
+        int gpuCap;
+        volatile boolean gpuOk;
 
         @Override
         public void run() {
@@ -107,6 +118,7 @@ public final class TickPoses {
                     if (!j.ok) break;
                 }
                 usable = set != null && evaluate(this);
+                gpuOk = usable && GPU && buildGpu(this);
             } catch (Throwable t) {
                 usable = false;
             } finally {
@@ -136,6 +148,9 @@ public final class TickPoses {
 
         void free() {
             for (ParallelRender.Job j : jobs) j.parts.free();
+            if (gpu != 0) MemoryUtil.nmemFree(gpu);
+            gpu = 0;
+            gpuCap = 0;
             if (mid != 0) MemoryUtil.nmemFree(mid);
             mid = 0;
             midCap = 0;
@@ -178,7 +193,7 @@ public final class TickPoses {
      */
     static Pair pairFor(Entity e, java.util.concurrent.Executor pool) {
         // (parts the CPU way, or a measured choice running - PartsTune, InstTune, CacheTune: nothing to capture, nothing to disturb)
-        if (!enabled || !PartBatch.partsInJobs || ParallelRender.measuring() || PartBatch.InstTune.measuring() || e.displayFireAnimation()) return null;
+        if (!enabled || !PartBatch.partsInJobs || ParallelRender.measuring() || PartBatch.InstTune.measuring()) return null;   // (burning: the flame drawn per frame by ParallelRender.shadow)
         Stat st = STATS.computeIfAbsent(e.getType(), Stat::new);
         if (st.state == 2) return null;
         long s = stamp(e);
@@ -210,6 +225,8 @@ public final class TickPoses {
             j.camZ = p.az;
             j.pt = PTS[i];
             j.rendererOnly = true;
+            j.basePose.identity();   // 1.20.1: records without the view rotation (the frame applies its own)
+            j.baseNormal.identity();
             j.tick = null;
             j.done = false;
             j.ok = false;
@@ -318,8 +335,9 @@ public final class TickPoses {
                 else if (st.samples >= SAMPLES) decide(st, 1, st.errors());
             } else if (st.state == 1) {
                 st.since++;
-                if (bad) st.recheckBad++;   // (rare snaps - an attack's start, a hurt jolt - allowed: more than 2 % of 64+ rechecks drop the type)
-                if (bad && st.since >= 64 && st.recheckBad * 50 > st.since)
+                boolean far = err > 2 * TOLERANCE;   // (a recheck counts against the type only when well over: values near the line are noise)
+                if (far) st.recheckBad++;   // (rare snaps - an attack's start, a hurt jolt - allowed: more than 3 % of 64+ rechecks drop the type)
+                if (far && st.since >= 64 && st.recheckBad * 100 > 3 * st.since)
                     decide(st, 2, String.format(java.util.Locale.ROOT, "began to differ (worst %.4f blocks, %d of %d rechecks)", st.worst, st.recheckBad, st.since));
             }
         }
@@ -353,6 +371,15 @@ public final class TickPoses {
             FALLBACKS.incrementAndGet();
             return false;
         }
+        if (p.gpuOk) {   // (the render thread copies the GPU records at the merge: mergeGpu)
+            j.gpuTick = true;
+            return true;
+        }
+        j.gpuTick = false;
+        if (Boolean.TRUE) {   // 1.20.1: the CPU interpolation would need the frame's view rotation applied to each record - not yet
+            FALLBACKS.incrementAndGet();
+            return false;
+        }
         long t0 = System.nanoTime();
         PartBatch.JobParts out = j.parts;
         out.copyShape(p.jobs[0].parts);
@@ -364,6 +391,40 @@ public final class TickPoses {
     }
 
     private static final ThreadLocal<Interp> INTERP = ThreadLocal.withInitial(Interp::new);
+
+    /** the pair's task: its three keys as mode-8 records; false (the CPU way) for anything but vanilla model parts */
+    private static boolean buildGpu(Pair p) {
+        PartBatch.JobParts k0 = p.jobs[0].parts, k1 = p.jobs[1].parts, km = p.jobs[2].parts;
+        int n = k0.n;
+        for (int i = 0; i < n; i++) if (k0.kind[i] != 2) return false;
+        if (p.gpuCap < n) {
+            if (p.gpu != 0) MemoryUtil.nmemFree(p.gpu);
+            p.gpuCap = Math.max(n, 2 * p.gpuCap);
+            p.gpu = MemoryUtil.nmemAlloc(288L * p.gpuCap);
+        }
+        Interp in = INTERP.get();
+        for (int i = 0; i < n; i++) {
+            long o = p.gpu + 288L * i;
+            in.key(k0.mem + 144L * i, o);
+            in.key(km.mem + 144L * i, o + 48);
+            in.key(k1.mem + 144L * i, o + 96);
+            MemoryUtil.memCopy(km.mem + 144L * i + 112, o + 144, 32);   // colour, light and overlay (the middle key's)
+        }
+        return true;
+    }
+
+    /** ParallelRender.drain (render thread): the pair's GPU records into the frame (PartBatch's tick queues) */
+    static boolean mergeGpu(Pair p, ParallelRender.Job j) {
+        PartBatch.JobParts k0 = p.jobs[0].parts;
+        PartBatch.tickView.set(j.basePose);   // 1.20.1: the level pose's rotation - the camera's (one for the frame)
+        boolean ok = PartBatch.mergeTick(k0.types, k0.first, k0.quads, k0.n, p.gpu, j.buffers,
+                (float) (p.ax - j.camX), (float) (p.ay - j.camY), (float) (p.az - j.camZ), j.pt);
+        if (ok) {
+            GPU_FRAMES.incrementAndGet();
+            MERGED.incrementAndGet();
+        } else GPU_REFUSED.incrementAndGet();
+        return ok;
+    }
     static final AtomicLong BIG = new AtomicLong();
 
     /** the pair's keys at t into out (the records of key 0's shape), translated by (dx, dy, dz) */
@@ -451,6 +512,24 @@ public final class TickPoses {
             write3(o, A);
         }
 
+        /** a record's pose as a mode-8 key at o (48 bytes): rotation (quaternion), scale xyz + translation x, translation y z */
+        void key(long rec, long o) {
+            read3(rec, A);
+            decompose(A, QA, SA);
+            MemoryUtil.memPutFloat(o, QA.x);
+            MemoryUtil.memPutFloat(o + 4, QA.y);
+            MemoryUtil.memPutFloat(o + 8, QA.z);
+            MemoryUtil.memPutFloat(o + 12, QA.w);
+            MemoryUtil.memPutFloat(o + 16, SA[0]);
+            MemoryUtil.memPutFloat(o + 20, SA[1]);
+            MemoryUtil.memPutFloat(o + 24, SA[2]);
+            MemoryUtil.memPutFloat(o + 28, MemoryUtil.memGetFloat(rec + 48));
+            MemoryUtil.memPutFloat(o + 32, MemoryUtil.memGetFloat(rec + 52));
+            MemoryUtil.memPutFloat(o + 36, MemoryUtil.memGetFloat(rec + 56));
+            MemoryUtil.memPutFloat(o + 40, 0f);
+            MemoryUtil.memPutFloat(o + 44, 0f);
+        }
+
         /** record a and b (144 bytes each) at t into o: pose, normal matrix, the rest from the nearer one; translation + (dx, dy, dz) */
         void interpolate(long a, long b, long o, float t, float dx, float dy, float dz) {
             MemoryUtil.memCopy(t < 0.5f ? a : b, o, 144);   // colour, light, overlay, coatings (w of the normal rows), m03/m13/m23/m33
@@ -473,7 +552,7 @@ public final class TickPoses {
             else obs++;
         }
         long rec = INTERP_REC.get();
-        return String.format(java.util.Locale.ROOT, "tick poses: captures %d (preparations %d), frames from them %d (%.0f ns a record), fallbacks %d (structure %d, not parts only %d), checks %d (failed %d); qualify [%s], per frame [%s], observing %d; pairs %d",
-                captures, PREPARED.get(), MERGED.get(), rec == 0 ? 0.0 : (double) INTERP_NS.get() / rec, FALLBACKS.get(), STRUCTURAL.get(), NOT_PARTS.get(), CHECKS.get(), CHECK_FAILS.get(), q, no, obs, PAIRS.size());
+        return String.format(java.util.Locale.ROOT, "tick poses: GPU frames %d (refused %d, records %d); captures %d (preparations %d), frames from them %d (%.0f ns a record), fallbacks %d (structure %d, not parts only %d), checks %d (failed %d); qualify [%s], per frame [%s], observing %d; pairs %d",
+                GPU_FRAMES.get(), GPU_REFUSED.get(), PartBatch.tickRecords, captures, PREPARED.get(), MERGED.get(), rec == 0 ? 0.0 : (double) INTERP_NS.get() / rec, FALLBACKS.get(), STRUCTURAL.get(), NOT_PARTS.get(), CHECKS.get(), CHECK_FAILS.get(), q, no, obs, PAIRS.size());
     }
 }
