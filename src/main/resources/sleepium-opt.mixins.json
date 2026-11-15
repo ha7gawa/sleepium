@@ -167,6 +167,7 @@
     "FrameThreadDirtyInvoker",
     "FrameThreadCallsMixin",
     "FrameThreadLightCallMixin",
+    "FrameThreadCameraMixin",
     "GlWorkerFrameMixin",
     "GlWorkerFlipMixin",
     "GlWorkerLayerMixin",

@@ -542,8 +542,53 @@ public final class FrameThread {
     /** Minecraft.tick HEAD / RETURN on the main thread (FrameThreadMixin) */
     public static long ticksSeen, ticksWhileFrameBusy, ticksWhileIdle;
 
+    /**
+     * -Dlab.frameThread.extraTurn=true (with extra frames): an extra frame turns its camera by the cursor's move since the
+     * tick began (GetCursorPos - the window's input is only read by the main thread, which is busy) through vanilla's
+     * sensitivity formula; the player itself turns when the main thread polls after the tick (first person only)
+     */
+    public static final boolean EXTRA_TURN = Boolean.getBoolean("lab.frameThread.extraTurn");
+    private static volatile int tickCursorX, tickCursorY;
+    private static volatile double turnScale;
+    private static volatile boolean turnOk;
+    public static volatile float turnYaw, turnPitch;
+    private static org.lwjgl.system.windows.POINT cursorMain, cursorFrame;
+
+    /** main thread at a tick's start: the cursor and the turn factors now */
+    private static void turnStart() {
+        if (!EXTRA_TURN || !WINDOWS || mc == null || mc.player == null) {
+            turnOk = false;
+            return;
+        }
+        if (cursorMain == null) cursorMain = org.lwjgl.system.windows.POINT.calloc();
+        org.lwjgl.system.windows.User32.GetCursorPos(cursorMain);
+        tickCursorX = cursorMain.x();
+        tickCursorY = cursorMain.y();
+        double d2 = mc.options.sensitivity().get() * 0.6 + 0.2;
+        turnScale = d2 * d2 * d2 * 8.0 * 0.15;
+        turnOk = mc.mouseHandler.isMouseGrabbed() && !mc.options.smoothCamera && mc.options.getCameraType().isFirstPerson() && !mc.player.isScoping();
+        if (mc.options.invertYMouse().get()) turnScale = -turnScale;   // (the sign of the pitch only: undone for yaw below)
+    }
+
+    /** frame thread, an extra frame: the camera turn since the tick began (degrees), into turnYaw / turnPitch */
+    private static void turnNow() {
+        turnYaw = 0f;
+        turnPitch = 0f;
+        if (!turnOk) return;
+        if (cursorFrame == null) cursorFrame = org.lwjgl.system.windows.POINT.calloc();
+        org.lwjgl.system.windows.User32.GetCursorPos(cursorFrame);
+        double k = Math.abs(turnScale);
+        turnYaw = (float) ((cursorFrame.x() - tickCursorX) * k);
+        turnPitch = (float) ((cursorFrame.y() - tickCursorY) * turnScale);
+    }
+
+    public static boolean extraNow() {
+        return extraNow && Thread.currentThread() == thread;
+    }
+
     public static void tickStart() {
         mainTicking = true;
+        turnStart();
         ticksSeen++;
         if (jobDone) ticksWhileIdle++;
         else ticksWhileFrameBusy++;
@@ -611,6 +656,7 @@ public final class FrameThread {
         long t0 = System.nanoTime();
         drawing = true;
         extraNow = true;
+        turnNow();
         try {
             UploadRing.frameBegin();
             runOps();
