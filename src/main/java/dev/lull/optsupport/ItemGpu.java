@@ -63,7 +63,10 @@ public final class ItemGpu {
         String p = System.getProperty("lab.itemgpu.contexts", "ground,fixed,third_person_left_hand,third_person_right_hand,head,none");
         for (String n : p.split(","))
             for (ItemDisplayContext c : ItemDisplayContext.values())
-                if (c.getSerializedName().equals(n.trim())) s.add(c);
+                // (the hands' names are "thirdperson_righthand" etc.: the default list's "third_person_right_hand" never
+                // matched them - held items were never taken; matched without underscores only in the non-exact mode for now)
+                if (c.getSerializedName().equals(n.trim())
+                        || Boolean.getBoolean("lab.partbatch.itemsAnyOrder") && c.getSerializedName().replace("_", "").equals(n.trim().replace("_", ""))) s.add(c);
         return s;
     }
 
@@ -134,28 +137,41 @@ public final class ItemGpu {
      */
     public static boolean capture(BakedModel model, ItemStack stack, int light, int overlay, PoseStack poseStack, VertexConsumer vc,
                                   RenderType type, ItemDisplayContext ctx, MultiBufferSource buffers) {
-        if (!enabled || !CONTEXTS.contains(ctx) || stack.isEmpty()) return false;
-        if (type.format() != DefaultVertexFormat.NEW_ENTITY || type.mode() != VertexFormat.Mode.QUADS) return false;
+        if (!enabled || !CONTEXTS.contains(ctx) || stack.isEmpty()) {
+            if (ParallelRender.jobParts() != null) {
+                WHY[0]++;
+                if (!CONTEXTS.contains(ctx) && WHY_CTX.add(ctx)) org.slf4j.LoggerFactory.getLogger("sleep").info("[sleep/opt] item gpu: a job's item in context {} ({}) not taken", ctx, stack.getItem());
+            }
+            return false;
+        }
+        if (type.format() != DefaultVertexFormat.NEW_ENTITY || type.mode() != VertexFormat.Mode.QUADS) {
+            if (ParallelRender.jobParts() != null) WHY[1]++;
+            return false;
+        }
         ItemColors ic = colors;
         if (ic == null) colors = ic = Minecraft.getInstance().getItemColors();
         PartBatch.JobParts jp;
         if (vc instanceof RecordingBuilder rb) {
             // a ParallelRender job: the record into the job, merged on the render thread (PartBatch.mergeJob); another
             // recorder (the render cache's) keeps the bytes
-            if (rb.type != type || (jp = ParallelRender.jobParts()) == null || !PartBatch.itemTypeKnown(type)) return false;
+            if (rb.type != type) { WHY[2]++; return false; }
+            if ((jp = ParallelRender.jobParts()) == null) { WHY[3]++; return false; }
+            if (!PartBatch.itemTypeKnown(type)) { WHY[4]++; return false; }
             Scratch s = SCRATCH.get();
             List<?>[] lists = listsOf(model, s);
             Geo[] gs = geoSnapshot.get(model);
             Geo g = gs == null ? null : find(gs, lists, stack, ic);
             if (g == null) {
+                WHY[5]++;
                 ask(model, lists, stack, ic);
                 return false;
             }
-            if (g.quads == 0 || !g.orderFree && !EntityBatch.commutes(type)) return false;
+            if (g.quads == 0 || !g.orderFree && !EntityBatch.commutes(type) && !PartBatch.ITEMS_ANY_ORDER) { WHY[6]++; return false; }   // (any order: NOT exact)
             PartBatch.itemInJob(jp, type, g.first, g.quads, poseStack.last(), light, overlay);
             records++;
             return true;
         }
+        if (ParallelRender.jobParts() != null) WHY[7]++;   // (in a job but not the job's own recording builder: wrapped - foil, decals)
         if (!(vc instanceof BufferBuilder bb) || !RenderSystem.isOnRenderThread() || !PartBatch.itemTarget(type, bb, buffers)) return false;
         Scratch s = SCRATCH.get();
         List<?>[] lists = listsOf(model, s);
@@ -339,7 +355,11 @@ public final class ItemGpu {
                 && !t.isOutline();
     }
 
+    /** job captures refused: 0 off / context / empty, 1 format, 2 another type's recorder, 3 no job parts, 4 type not known yet, 5 no geometry yet (asked), 6 order-bound, 7 not the job's recorder */
+    public static final long[] WHY = new long[8];
+    private static final java.util.Set<ItemDisplayContext> WHY_CTX = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "item gpu: records %d, geometries %d (%d bound to order), refused at merge %d", records, built, orderBound, refused);
+        return String.format(java.util.Locale.ROOT, "item gpu: records %d, geometries %d (%d bound to order), refused at merge %d; job refusals %s", records, built, orderBound, refused, java.util.Arrays.toString(WHY));
     }
 }

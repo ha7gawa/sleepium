@@ -534,6 +534,14 @@ public final class PartBatch {
     private static final java.util.Set<RenderType> ASKED_ITEM = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
     private static final Map<RenderType, Boolean> ITEM_TYPE_OK = new IdentityHashMap<>();
 
+    /**
+     * -Dlab.partbatch.itemsAnyOrder=true (NOT exact - the decoupling mode, the user's call 11-15): translucent item types
+     * (held items: entity_translucent_cull over the block atlas) take item records with the records grouped by geometry
+     * too - their draw order changes (overlapping translucent pixels may differ); a mob holding an item then draws model
+     * parts and item records only, so TickPoses can draw it from tick-rate poses interpolated on the GPU
+     */
+    static final boolean ITEMS_ANY_ORDER = Boolean.getBoolean("lab.partbatch.itemsAnyOrder");
+
     /** Render thread: a type item records may be drawn in (GL queries: typeOk). */
     private static boolean itemTypeOk(RenderType t) {
         Boolean ok = ITEM_TYPE_OK.get(t);
@@ -544,7 +552,8 @@ public final class PartBatch {
                     && typeOk(t) && (full()
                     // texture buffers: records grouped by geometry (their order changes) - entity types whose order does not
                     // matter only; block-format runs (QuadGpu, the terrain program's copies) not there yet
-                    || tbo && EntityBatch.commutes(t));   // (block types too: QuadGpu's runs through the terrain program's copy)
+                    || tbo && EntityBatch.commutes(t)   // (block types too: QuadGpu's runs through the terrain program's copy)
+                    || tbo && ITEMS_ANY_ORDER && t.format() == DefaultVertexFormat.NEW_ENTITY && ItemGpu.sortedOk(t));   // (NOT exact: see ITEMS_ANY_ORDER)
             ITEM_TYPE_OK.put(t, ok);
         }
         return ok && partsAllowed();
