@@ -78,6 +78,11 @@ public final class UploadRing {
     private static final int DEEP_K = Math.min(15, Integer.getInteger("lab.gpu.framesInFlight.deepK", 6));
     /** the limit applies: fixed by the flag, or the automatic one decided (see AUTO) */
     private static boolean limiting = FIF_FIXED > 0;
+
+    /** the limit applies now (fixed or found needed): no frame more than FIF frames ahead of the GPU */
+    public static boolean limitingNow() {
+        return FIF > 0 && limiting && fifEnabled;
+    }
     private static boolean autoChecked;
     private static int autoFrames, autoDeep;
     public static String fifWhy = FIF_FIXED > 0 ? "fixed by the flag" : AUTO ? "watching the queue" : "off";
