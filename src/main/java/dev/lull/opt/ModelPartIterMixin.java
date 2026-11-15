@@ -37,6 +37,8 @@ public abstract class ModelPartIterMixin {
 
     @Redirect(method = "compile", at = @At(value = "INVOKE", target = "Ljava/util/List;iterator()Ljava/util/Iterator;"))
     private Iterator<?> sleep$cubes(List<?> list) {
+        Thread g = dev.lull.optsupport.PartBatch.GEO_THREAD;
+        if (g != null && g == Thread.currentThread()) return list.iterator();   // (a geometry compile from a job's journal: the part may be rendering on a worker)
         Object[] a = sleep$cubes;
         if (a == null || a.length != cubes.size()) sleep$cubes = a = cubes.toArray();
         return sleep$cubeIter.reset(a);
