@@ -70,6 +70,12 @@ public final class UploadRing {
     public static long fifWaits, fifWaitNs, frames, deepFrames;
     /** off: no waiting (the fences still made) - ClientAuto's in-window flip switches it */
     public static boolean fifEnabled = true;
+    /**
+     * test (flippable): the limit at -Dlab.gpu.framesInFlight.deepK (6) frames instead of K - a deeper queue hides a long
+     * client tick from the GPU (11-15 N100: limit off 0.14 % GPU stutters, K = 3 5.67 %), at the cost of latency
+     */
+    public static boolean fifDeep = Boolean.getBoolean("lab.gpu.framesInFlight.deep6");
+    private static final int DEEP_K = Math.min(15, Integer.getInteger("lab.gpu.framesInFlight.deepK", 6));
     /** the limit applies: fixed by the flag, or the automatic one decided (see AUTO) */
     private static boolean limiting = FIF_FIXED > 0;
     private static boolean autoChecked;
@@ -130,9 +136,10 @@ public final class UploadRing {
             if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
             FRAME_FENCES[i] = GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
             if (!limiting) watchQueue();
-            long old = limiting && fifEnabled && frameNo >= FIF ? FRAME_FENCES[(frameNo - FIF) & 15] : 0;
+            int k = fifDeep ? DEEP_K : FIF;
+            long old = limiting && fifEnabled && frameNo >= k ? FRAME_FENCES[(frameNo - k) & 15] : 0;
             if (old != 0) {
-                int r = GL32C.glClientWaitSync(old, GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 0);
+                int r = GL32C.glClientWaitSync(old, 0, 0);   // a look without the flush bit (it made the Intel driver submit every frame; the fence K frames back went with a swap long ago)
                 if (r == GL32C.GL_TIMEOUT_EXPIRED) {
                     long t0 = System.nanoTime();
                     GL32C.glClientWaitSync(old, GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 100_000_000L);
@@ -149,7 +156,7 @@ public final class UploadRing {
         used = 0;
         long f = FENCES[seg];
         if (f != 0) {
-            int r = GL32C.glClientWaitSync(f, GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 0);   // a look, never a wait (the fence sent on)
+            int r = GL32C.glClientWaitSync(f, 0, 0);   // a look, never a wait (no flush bit: the fence went with an earlier swap)
             segFree = r == GL32C.GL_ALREADY_SIGNALED || r == GL32C.GL_CONDITION_SATISFIED;
             if (segFree) {
                 GL32C.glDeleteSync(f);
