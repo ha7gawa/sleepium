@@ -1443,12 +1443,26 @@ public final class PartBatch {
     /** Render thread: whether PartBatch can draw this type from VRAM (checked here: GL queries); published for workers. */
     private static void learnType(RenderType type) {
         ASKED.remove(type);
-        if (EntityBatch.commutes(type) && type.format() == DefaultVertexFormat.NEW_ENTITY && type.mode() == VertexFormat.Mode.QUADS && typeOk(type) && partsAllowed()) {
+        if ((EntityBatch.commutes(type) || ITEMS_ANY_ORDER && anyOrderOk(type)) && type.format() == DefaultVertexFormat.NEW_ENTITY && type.mode() == VertexFormat.Mode.QUADS && typeOk(type) && partsAllowed()) {
             java.util.Set<RenderType> s = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
             s.addAll(workerTypes);
             s.add(type);
             workerTypes = s;
         }
+    }
+
+    /**
+     * the non-exact mode (ITEMS_ANY_ORDER): part types whose records may go in any order too - translucent sorted types
+     * (a slime's outer layer: overlapping pixels may blend in another order) and additive ones without depth writes (the
+     * glowing eyes of spiders and endermen: addition commutes, only the depth test against what is drawn before matters)
+     */
+    private static boolean anyOrderOk(RenderType t) {
+        if (ItemGpu.sortedOk(t)) return true;
+        if (!(t instanceof dev.lull.opt.CompositeRenderTypeAccessor a) || t.isOutline()) return false;
+        dev.lull.opt.CompositeStateAccessor st = (dev.lull.opt.CompositeStateAccessor) (Object) a.sleep$state();
+        return st.sleep$transparency() == net.minecraft.client.renderer.RenderStateShard.ADDITIVE_TRANSPARENCY
+                && st.sleep$colorLogic() == net.minecraft.client.renderer.RenderStateShard.NO_COLOR_LOGIC
+                && st.sleep$output() == net.minecraft.client.renderer.RenderStateShard.MAIN_TARGET;
     }
 
     private static void publishGeo(Object key) {
