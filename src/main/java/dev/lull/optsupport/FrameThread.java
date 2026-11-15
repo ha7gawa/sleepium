@@ -566,6 +566,25 @@ public final class FrameThread {
         mainTicking = false;
     }
 
+    private static volatile boolean mainHolding;
+    public static long mainHolds2;
+
+    /**
+     * the main thread is about to change what a drawing frame may read (TickAsync's join: its snapshots and pairs): no
+     * frame or extra frame drawing from here until releaseForMain (it waits for the one drawing now)
+     */
+    public static void holdForMain() {
+        if (!active || Thread.currentThread() != mainThread) return;
+        mainHolding = true;
+        mainHolds2++;
+        awaitLast();
+        if (extraRunning) waitPumping(() -> !extraRunning);
+    }
+
+    public static void releaseForMain() {
+        mainHolding = false;
+    }
+
     /** a DeltaTracker whose partial tick goes on with the clock since the recorded frame (capped at 1) */
     private static final net.minecraft.client.DeltaTracker LIVE = new net.minecraft.client.DeltaTracker() {
         @Override public float getGameTimeDeltaTicks() { return 0f; }
@@ -583,9 +602,9 @@ public final class FrameThread {
 
     /** the frame thread, idle: an extra frame if the main thread is in a tick and the last frame is older than one frame */
     private static boolean extraFrame() {
-        if (!EXTRA || !OVERLAP || !mainTicking || borrowAsked || nOps == 0 || !jobDone) return false;
+        if (!EXTRA || !OVERLAP || !mainTicking || borrowAsked || mainHolding || nOps == 0 || !jobDone) return false;
         extraRunning = true;
-        if (!jobDone || borrowAsked) {   // (a job or a borrow came meanwhile)
+        if (!jobDone || borrowAsked || mainHolding) {   // (a job or a borrow came meanwhile)
             extraRunning = false;
             return false;
         }
