@@ -627,6 +627,19 @@ public final class SleepScreen extends Screen {
                 for (String t : c.top()) infoRow("  " + t);
             }
         }
+        // the mod's own threads (observed: a census of the threads its code runs on, every 2 s at most)
+        list.add(new Row(() -> Component.translatable("sleepium.ui.mods.threads").withStyle(ChatFormatting.BOLD), null, Component.translatable("sleepium.ui.mods.threads.tip")));
+        var th = dev.lull.optsupport.ModThreads.of(mod);
+        if (th == null) list.add(new Row(() -> Component.translatable("sleepium.ui.mods.threads.none").withStyle(ChatFormatting.GRAY), null, Component.translatable("sleepium.ui.mods.threads.tip")));
+        else {
+            String total = th.line();
+            list.add(new Row(() -> Component.literal(total).withStyle(th.cpuSeconds() > 60 ? ChatFormatting.GOLD : ChatFormatting.WHITE), null, Component.translatable("sleepium.ui.mods.threads.tip")));
+            int shown = 0;
+            for (var g : th.groups()) {
+                if (shown++ == 8) break;
+                infoRow(String.format(java.util.Locale.ROOT, "  %s: %d (%d idle), CPU %.1f s", g.name(), g.live(), g.idle(), g.cpuSeconds()));
+            }
+        }
         var rep = dev.lull.optsupport.ModReport.of(mod);
         list.add(new Row(() -> Component.translatable("sleepium.ui.mods.what").withStyle(ChatFormatting.BOLD), null, Component.translatable("sleepium.ui.mods.what.tip")));
         if (!rep.touched()) list.add(new Row(() -> Component.translatable("sleepium.ui.mods.untouched").withStyle(ChatFormatting.GRAY), null, Component.translatable("sleepium.ui.mods.what.tip")));
