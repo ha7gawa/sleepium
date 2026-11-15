@@ -20,6 +20,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ClientLightAsyncMixin {
     @Redirect(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/multiplayer/ClientLevel;pollLightUpdates()V"))
     private void sleep$poll(ClientLevel level) {
+        if (dev.lull.optsupport.FrameThread.lightOnMain()) return;   // (a frame drawn while the main thread ticks: the main thread did this point before handing it over)
+        lightPoll(level);
+    }
+
+    /** the light point's poll (renderLevel's, or the main thread's before a frame it hands over: FrameThread) */
+    private static void lightPoll(ClientLevel level) {
         if (ClientLightAsync.running() && ((ClientLevelLightQueueAccessor) level).sleep$lightQueue().isEmpty()) {
             ClientLightAsync.skipNext = true;   // the running job has all the work there is
             ClientLightAsync.skipped++;
@@ -32,12 +38,28 @@ public abstract class ClientLightAsyncMixin {
 
     @Redirect(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/lighting/LevelLightEngine;runLightUpdates()I"))
     private int sleep$async(LevelLightEngine engine) {
+        if (dev.lull.optsupport.FrameThread.lightOnMain()) return 0;
+        return lightRun(engine);
+    }
+
+    private static int lightRun(LevelLightEngine engine) {
         if (ClientLightAsync.skipNext) {
             ClientLightAsync.skipNext = false;
             return 0;
         }
         ClientLightAsync.start(engine);
         return 0;   // vanilla ignores the count
+    }
+
+    /** FrameThread (overlap): the light point on the main thread, before the frame is handed over */
+    @org.spongepowered.asm.mixin.Unique
+    private static void sleep$lightPointOnMain(ClientLevel level) {
+        lightPoll(level);
+        lightRun(level.getChunkSource().getLightEngine());
+    }
+
+    static {
+        dev.lull.optsupport.FrameThread.lightPoint = ClientLightAsyncMixin::sleep$lightPointOnMain;
     }
 
     @Inject(method = "renderLevel", at = @At("RETURN"))

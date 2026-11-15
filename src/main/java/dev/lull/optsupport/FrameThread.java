@@ -94,6 +94,14 @@ public final class FrameThread {
     private static final java.util.ArrayList<net.minecraft.world.entity.Entity> HELD = new java.util.ArrayList<>();
     private static boolean heldValid;
 
+    /** the light point (ClientLightAsyncMixin's, set when that mixin's class loads) - null: vanilla's two calls */
+    public static java.util.function.Consumer<net.minecraft.client.multiplayer.ClientLevel> lightPoint;
+
+    /** renderLevel's light point is skipped on the frame thread under OVERLAP: the main thread did it before the hand-over */
+    public static boolean lightOnMain() {
+        return heldValid && drawingHere();
+    }
+
     private static final java.util.LinkedHashMap<net.minecraft.client.particle.ParticleRenderType, java.util.Queue<net.minecraft.client.particle.Particle>> HELD_PARTICLES = new java.util.LinkedHashMap<>();
 
     /** the frame thread under OVERLAP: the particle queues held for this frame, else null (the live ones) */
@@ -206,6 +214,13 @@ public final class FrameThread {
             for (var en : ((dev.lull.opt.ParticleEngineAccessor) mc.particleEngine).sleep$particles().entrySet())
                 HELD_PARTICLES.put(en.getKey(), new java.util.ArrayDeque<>(en.getValue()));
             heldValid = mc.level != null;
+            if (mc.level != null) {   // renderLevel's light point, here (packets and the tick may change the light engine while the frame draws)
+                if (lightPoint != null) lightPoint.accept(mc.level);
+                else {
+                    mc.level.pollLightUpdates();
+                    mc.level.getChunkSource().getLightEngine().runLightUpdates();
+                }
+            }
         } else heldValid = false;
         jobDone = false;
         LockSupport.unpark(thread);
