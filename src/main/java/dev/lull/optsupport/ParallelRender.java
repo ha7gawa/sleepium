@@ -1360,6 +1360,8 @@ public final class ParallelRender {
         rec.reset();
         PoseStack pose = s.pose;
         pose.setIdentity();
+        pose.last().pose().set(j.basePose);   // 1.20.1: the level pose's view rotation, as render() starts from
+        pose.last().normal().set(j.baseNormal);
         Vec3 off = r.getRenderOffset(e, pt);
         pose.pushPose();
         pose.translate(Mth.lerp((double) pt, e.xOld, e.getX()) - j.camX + off.x(), Mth.lerp((double) pt, e.yOld, e.getY()) - j.camY + off.y(),
@@ -1367,11 +1369,11 @@ public final class ParallelRender {
         EntityRenderDispatcher d = Minecraft.getInstance().getEntityRenderDispatcher();
         if (e.displayFireAnimation()) {
             EntityRenderDispatcherInvoker di = (EntityRenderDispatcherInvoker) d;
-            di.sleep$renderFlame(pose, rec, e, Mth.rotationAroundAxis(Mth.Y_AXIS, di.sleep$cameraOrientation(), new org.joml.Quaternionf()));
+            di.sleep$renderFlame(pose, rec, e);   // (1.20.1: the flame faces the camera by itself)
         }
         pose.translate(-off.x(), -off.y(), -off.z());
         if (d.options.entityShadows().get() && ((EntityRenderDispatcherInvoker) d).sleep$shouldRenderShadow() && !e.isInvisible()) {
-            float f = ((dev.lull.opt.EntityRendererAccessor) r).sleep$shadowRadius(e);
+            float f = ((dev.lull.opt.EntityRendererAccessor) r).sleep$shadowRadius();   // (1.20.1: the renderer's field)
             if (f > 0.0F) {
                 double d1 = d.distanceToSqr(e.getX(), e.getY(), e.getZ());
                 float f1 = (float) ((1.0 - d1 / 256.0) * (double) ((dev.lull.opt.EntityRendererAccessor) r).sleep$shadowStrength());

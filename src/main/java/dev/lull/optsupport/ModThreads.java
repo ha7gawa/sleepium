@@ -43,26 +43,12 @@ public final class ModThreads {
     private static Map<String, String[]> modules() {
         if (moduleToMod == null) {
             Map<String, String[]> m = new HashMap<>();
-            Map<Object, String> idOf = new java.util.IdentityHashMap<>();
             try {
-                for (var f : net.neoforged.fml.ModList.get().getModFiles())
-                    if (!f.getMods().isEmpty()) idOf.put(f.getFile(), f.getMods().get(0).getModId());
-                for (var f : net.neoforged.fml.ModList.get().getModFiles()) {
+                // (1.20.1: Forge's mod files know no parent jar - a mod inside another's counts for itself only)
+                for (var f : net.minecraftforge.fml.ModList.get().getModFiles()) {
                     if (f.getMods().isEmpty()) continue;
                     String id = f.getMods().get(0).getModId();
                     String top = id;
-                    try {
-                        var file = f.getFile();
-                        for (int d = 0; d < 8; d++) {
-                            var parent = file.getDiscoveryAttributes().parent();
-                            if (parent == null) break;
-                            file = parent;
-                            String pid = idOf.get(parent);
-                            if (pid != null) top = pid;
-                        }
-                    } catch (Throwable ignored) {
-                        // no discovery attributes: the mod alone
-                    }
                     try {
                         m.put(f.getFile().getSecureJar().name(), top.equals(id) ? new String[] {id} : new String[] {id, top});
                     } catch (Throwable ignored) {
@@ -101,7 +87,7 @@ public final class ModThreads {
                 String top = st[0].getClassName() + "." + st[0].getMethodName();
                 if (top.contains("Unsafe.park") || top.contains("Thread.sleep") || top.contains("Object.wait")) idle = true;
             }
-            long c = mx.getThreadCpuTime(t.threadId());
+            long c = mx.getThreadCpuTime(t.getId());   // (Java 17)
             for (String mod : owners) {
                 long[] v = by.computeIfAbsent(mod, k -> new TreeMap<>()).computeIfAbsent(group, k -> new long[3]);
                 v[0]++;
