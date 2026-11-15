@@ -59,6 +59,16 @@ final class ClientMeter {
 
     private ClientMeter() {}
 
+    /** a measured window is running (frames are being logged) */
+    public static boolean measuring() {
+        return stopAtNanos >= 0;
+    }
+
+    /** the frame log's index of the next frame (ClientAuto's in-window flips) */
+    public static int frameIndex() {
+        return n;
+    }
+
     static void register(IEventBus bus) {
         if (System.getProperty("sleep.clientAuto") != null) ClientAuto.register(bus);
         bus.addListener(EventPriority.HIGHEST, RenderFrameEvent.Pre.class, e -> onPre());
