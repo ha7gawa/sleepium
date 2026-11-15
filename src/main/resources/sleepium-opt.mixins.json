@@ -159,6 +159,7 @@
     "TickAsyncMixin",
     "GlWorkerFrameMixin",
     "GlWorkerFlipMixin",
+    "GlWorkerLayerMixin",
     "GrowVertexBufferMixin",
     "StallProbeMixin",
     "StallProbeGlMixin",

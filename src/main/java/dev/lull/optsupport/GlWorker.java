@@ -27,6 +27,8 @@ public final class GlWorker {
     public static final boolean ON = Boolean.getBoolean("lab.glWorker");
     /** off: the work done on the render thread again (ClientAuto's in-window flip) */
     public static volatile boolean enabled = true;
+    /** -Dlab.glWorker.lateJoin=true: the job waited for at the frame's first terrain layer (the first draws reading an atlas) */
+    public static final boolean LATE_JOIN = Boolean.getBoolean("lab.glWorker.lateJoin");
     private static boolean started, broken;
     private static long window;
     private static Thread worker, renderThread;

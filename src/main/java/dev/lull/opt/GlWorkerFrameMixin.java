@@ -11,6 +11,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class GlWorkerFrameMixin {
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;render(Lnet/minecraft/client/DeltaTracker;Z)V"))
     private void sleep$glWorkerJoin(boolean renderLevel, CallbackInfo ci) {
-        dev.lull.optsupport.GlWorker.joinIfBusy();
+        if (!dev.lull.optsupport.GlWorker.LATE_JOIN) dev.lull.optsupport.GlWorker.joinIfBusy();   // (late: at the first terrain layer, GlWorkerLayerMixin)
     }
 }
