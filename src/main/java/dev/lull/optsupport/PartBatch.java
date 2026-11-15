@@ -1789,6 +1789,8 @@ public final class PartBatch {
     /** the groups as direct instanced draws (default) or one instanced multi-draw (-Dlab.partbatch.instancedMdi=true); flippable */
     public static boolean direct = !Boolean.getBoolean("lab.partbatch.instancedMdi");
     public static long instGroups, instRecords;
+    /** test: -Dlab.partbatch.groupOnlyTest=true - grouped order, one command a record (see drawQueueFull) */
+    private static final boolean GROUP_ONLY_TEST = Boolean.getBoolean("lab.partbatch.groupOnlyTest");
     private static long gMem, gCounts, gBases;
     private static int gCap;
     private static int[] gId = new int[0], hTab = new int[0], hCnt = new int[0], hSlot = new int[0];
@@ -2063,7 +2065,19 @@ public final class PartBatch {
             cmdMem = MemoryUtil.nmemAlloc(cmdCap);
         }
         int cmds = 0;
-        if (grouped) {
+        if (grouped && GROUP_ONLY_TEST) {
+            // test: the records reordered by geometry as for instancing, but a command per record (instanceCount 1) - which
+            // of the two (the new order or the instanced draws) costs the host's NVIDIA driver its frames
+            for (int i = 0; i < q.n; i++) {
+                long c = cmdMem + 20L * i;
+                MemoryUtil.memPutInt(c, MemoryUtil.memGetInt(gCounts + 4L * i));
+                MemoryUtil.memPutInt(c + 4, 1);
+                MemoryUtil.memPutInt(c + 8, 0);
+                MemoryUtil.memPutInt(c + 12, MemoryUtil.memGetInt(gBases + 4L * i));
+                MemoryUtil.memPutInt(c + 16, i);
+            }
+            cmds = q.n;
+        } else if (grouped) {
             // one command per run of one geometry: count, k instances, base vertex, the run's first record as base instance
             for (int k = 0; k < q.n; ) {
                 int count = MemoryUtil.memGetInt(gCounts + 4L * k), base = MemoryUtil.memGetInt(gBases + 4L * k);
@@ -2091,7 +2105,7 @@ public final class PartBatch {
             cmds = q.n;
         }
         boolean mat = mode != 2 && mode != 7 && Materials.begin(shader, current);   // a material mask beside the type's texture
-        if (grouped && direct) {
+        if (grouped && direct && !GROUP_ONLY_TEST) {
             // the groups as direct instanced draws: the instanced multi-draw cost the host's NVIDIA driver ~50 us a frame on
             // the CPU (11-15: -9.5 % fps for the same commands; the texture-buffer path's direct draws won there)
             int type = seq.type().asGLType;
