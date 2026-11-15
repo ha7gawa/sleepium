@@ -66,6 +66,18 @@ public final class UploadRing {
     private static final int FIF = FIF_FIXED > 0 ? FIF_FIXED : AUTO ? 3 : 0;
     private static final int DEEP = Integer.getInteger("lab.gpu.framesInFlight.deep", 6), AUTO_WINDOW = 240;
     private static final long[] FRAME_FENCES = new long[16];
+    /** per FRAME_FENCES slot: the frame count (frames) when the fence was made - it covers that frame's commands */
+    private static final long[] FENCE_AT = new long[16];
+
+    /**
+     * the fence made at the start of the frame after the one counted {@code at} (every command of frame {@code at},
+     * its atlas ticks included, before it), or 0 if not made (yet) or gone
+     */
+    public static long fenceAfter(long at) {
+        for (int i = 0; i < 16; i++)
+            if (FRAME_FENCES[i] != 0 && FENCE_AT[i] == at) return FRAME_FENCES[i];
+        return 0;
+    }
     private static int frameNo;
     public static long fifWaits, fifWaitNs, frames, deepFrames;
     /** off: no waiting (the fences still made) - ClientAuto's in-window flip switches it */
@@ -147,6 +159,7 @@ public final class UploadRing {
             int i = frameNo & 15;
             if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
             FRAME_FENCES[i] = GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+            FENCE_AT[i] = frames;
             if (!limiting) watchQueue();
             if (dev.lull.ClientMeter.measuring()) {   // the queue: frames sent whose fence is not done (looks without the flush bit)
                 int d = 0;

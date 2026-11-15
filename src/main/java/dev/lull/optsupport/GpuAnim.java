@@ -277,6 +277,7 @@ public final class GpuAnim {
                     + (batches > 0 ? String.format(java.util.Locale.ROOT, "; batched: %d ticks, %d frames, %.3f ms a tick", batches, batchFrames, batchNs / 1e6 / batches) : "")
                     + (pbo != 0 ? String.format(java.util.Locale.ROOT, "; the ring's fence wait %.3f ms (delete %.3f, trusted by age %d), fence + flush %.3f ms a tick",
                     beginWaitNs / 1e6 / ticks, deleteNs / 1e6 / ticks, trusted, endFlushNs / 1e6 / ticks) : "") + perAtlas()
+                    + (SKIP_FENCE || skippedFences > 0 ? String.format(java.util.Locale.ROOT, "; fences skipped %d (frame-fence looks %d, finishes %d)", skippedFences, frameFenceWaits, finishes) : "")
                     + (GlWorker.ON ? String.format(java.util.Locale.ROOT, "; worker ticks %d%s", workerTicks, WK_VERIFY ? ", checked " + workerVerified + ", mismatches " + workerMismatches + " " + diag() : "") + GlWorker.report() : ""));
     }
 
@@ -298,6 +299,14 @@ public final class GpuAnim {
     public static long pboUploads, pboNs, ringWaits, pboMemNs, pboSubNs, pboCopyNs, beginWaitNs, endFlushNs, deleteNs, trusted;
     /** -Dlab.gpuAnim.trustAge=N frames (8; 0: always look): see tickBegin */
     private static final int TRUST_AGE = Integer.getInteger("lab.gpuAnim.trustAge", 8);
+    /**
+     * -Dlab.gpuAnim.skipFence=true: while the frames-in-flight limit holds no fence (and flush) after an atlas tick's
+     * uploads - a segment coming round sooner than TRUST_AGE frames waits on the frame fence UploadRing makes anyway
+     * (fenceAfter). Flippable (ClientAuto).
+     */
+    public static boolean SKIP_FENCE = Boolean.getBoolean("lab.gpuAnim.skipFence");
+    private static final boolean[] NO_FENCE = new boolean[8];
+    public static long skippedFences, frameFenceWaits, finishes;
     private static final long[] FENCE_FRAME = new long[8];
     /** -Dlab.gpuAnim.noFlush=true: no glFlush after the ring's fence (the next frame's swap sends it; the wait 8 ticks later flushes anyway) */
     public static boolean NO_FLUSH = Boolean.getBoolean("lab.gpuAnim.noFlush");   // (not final: ClientAuto's flip)
@@ -425,6 +434,24 @@ public final class GpuAnim {
         seg = (seg + 1) % NSEG;
         segUsed = 0;
         stageTick++;
+        if (NO_FENCE[seg]) {   // written without a fence of its own (SKIP_FENCE)
+            NO_FENCE[seg] = false;
+            long w0 = System.nanoTime();
+            if (!(UploadRing.limitingNow() && UploadRing.frames - FENCE_FRAME[seg] >= TRUST_AGE)) {
+                long f = UploadRing.fenceAfter(FENCE_FRAME[seg]);
+                if (f != 0) {
+                    frameFenceWaits++;
+                    if (org.lwjgl.opengl.GL32C.glClientWaitSync(f, 0, 0) == org.lwjgl.opengl.GL32C.GL_TIMEOUT_EXPIRED) {
+                        ringWaits++;
+                        org.lwjgl.opengl.GL32C.glClientWaitSync(f, org.lwjgl.opengl.GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 1_000_000_000L);
+                    }
+                } else {   // (the same frame, or its fence gone: everything sent so far waited for)
+                    finishes++;
+                    GL11C.glFinish();
+                }
+            } else trusted++;
+            beginWaitNs += System.nanoTime() - w0;
+        }
         if (FENCES[seg] != 0) {
             long w0 = System.nanoTime();
             // a segment written TRUST_AGE frames ago or more while the frames-in-flight limit holds (no frame more than K
@@ -462,7 +489,11 @@ public final class GpuAnim {
             return;
         }
         if (batchN > 0) batchFlush();
-        if (pbo != 0 && segUsed > 0) {
+        if (pbo != 0 && segUsed > 0 && SKIP_FENCE && UploadRing.limitingNow()) {
+            NO_FENCE[seg] = true;
+            FENCE_FRAME[seg] = UploadRing.frames;
+            skippedFences++;
+        } else if (pbo != 0 && segUsed > 0) {
             long f0 = System.nanoTime();
             FENCES[seg] = org.lwjgl.opengl.GL32C.glFenceSync(org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
             FENCE_FRAME[seg] = UploadRing.frames;
