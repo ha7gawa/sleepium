@@ -296,4 +296,48 @@ public final class CompositeEventBus extends EventBus {
     @Override public <T extends Event> void addListener(EventPriority priority, boolean receiveCanceled, Class<T> eventType, Consumer<T> consumer) { EventSites.invalidate(); super.addListener(priority, receiveCanceled, eventType, consumer); EventSites.invalidate(); }
     @Override public <T extends Event> void addListener(boolean receiveCanceled, Consumer<T> consumer) { EventSites.invalidate(); super.addListener(receiveCanceled, consumer); EventSites.invalidate(); }
     @Override public <T extends Event> void addListener(boolean receiveCanceled, Class<T> eventType, Consumer<T> consumer) { EventSites.invalidate(); super.addListener(receiveCanceled, eventType, consumer); EventSites.invalidate(); }
+
+    // ---- the private registration methods of EventBus, mirrored: mods reach them by reflection on EVENT_BUS.getClass()
+    // (CustomNPCs: getClass().getDeclaredMethod("register", Class, Object, Method) for its script events - on this class
+    // it threw NoSuchMethodException and none of its handlers were registered: NPCs did not react to clicks). Each one
+    // runs EventBus' own, the event sites invalidated around it as for the public ones.
+
+    private static final java.util.Map<String, java.lang.reflect.Method> SUPER_PRIVATE = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private Object superPrivate(String name, Class<?>[] types, Object... args) {
+        java.lang.reflect.Method m = SUPER_PRIVATE.computeIfAbsent(name + java.util.Arrays.toString(types), k -> {
+            try {
+                java.lang.reflect.Method x = getClass().getSuperclass().getDeclaredMethod(name, types);
+                x.setAccessible(true);
+                return x;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                throw new IllegalStateException("EventBus." + name + " not found", e);
+            }
+        });
+        EventSites.invalidate();
+        try {
+            return m.invoke(this, args);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable c = e.getCause();
+            if (c instanceof RuntimeException r) throw r;
+            if (c instanceof Error er) throw er;
+            throw new IllegalStateException(c);
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException(e);
+        } finally {
+            EventSites.invalidate();
+        }
+    }
+
+    private void register(Class<?> eventType, Object target, java.lang.reflect.Method method) {
+        superPrivate("register", new Class<?>[] {Class.class, Object.class, java.lang.reflect.Method.class}, eventType, target, method);
+    }
+
+    private void registerListener(Object target, java.lang.reflect.Method method, java.lang.reflect.Method real) {
+        superPrivate("registerListener", new Class<?>[] {Object.class, java.lang.reflect.Method.class, java.lang.reflect.Method.class}, target, method, real);
+    }
+
+    private void addToListeners(Object target, Class<?> eventType, net.neoforged.bus.api.EventListener listener, net.neoforged.bus.api.EventPriority priority) {
+        superPrivate("addToListeners", new Class<?>[] {Object.class, Class.class, net.neoforged.bus.api.EventListener.class, net.neoforged.bus.api.EventPriority.class}, target, eventType, listener, priority);
+    }
 }
