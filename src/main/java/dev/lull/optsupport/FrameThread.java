@@ -83,11 +83,94 @@ public final class FrameThread {
         LOG.info("[sleep/opt] frame thread: the GL context and the frame's drawing on a thread of their own (stage A1b)");
     }
 
+    /**
+     * -Dlab.frameThread.overlap=true (stage A2 test, NOT exact: nothing holds the world yet): present() does not wait -
+     * the main thread's next tasks, packets and tick run while the frame thread draws; the next frame's first recorded
+     * op waits for it. Flippable (ClientAuto).
+     */
+    public static volatile boolean OVERLAP = Boolean.getBoolean("lab.frameThread.overlap");
+    private static boolean pending;
+    /** the entity list as the main thread had it when the frame was handed over (A2: the frame walks this) */
+    private static final java.util.ArrayList<net.minecraft.world.entity.Entity> HELD = new java.util.ArrayList<>();
+    private static boolean heldValid;
+
+    private static final java.util.LinkedHashMap<net.minecraft.client.particle.ParticleRenderType, java.util.Queue<net.minecraft.client.particle.Particle>> HELD_PARTICLES = new java.util.LinkedHashMap<>();
+
+    /** the frame thread under OVERLAP: the particle queues held for this frame, else null (the live ones) */
+    public static java.util.Map<net.minecraft.client.particle.ParticleRenderType, java.util.Queue<net.minecraft.client.particle.Particle>> heldParticles() {
+        return heldValid && drawingHere() ? HELD_PARTICLES : null;
+    }
+
+    /** the frame thread under OVERLAP: the entity list held for this frame, else null (the live one) */
+    public static Iterable<net.minecraft.world.entity.Entity> heldEntities() {
+        return heldValid && drawingHere() ? HELD : null;
+    }
+    public static long overlapFrames, overlapWaitNs;
+
+    /** sections the main thread marked dirty while a frame drew: x, y, z, flags (bit 0: re-render on the main thread) */
+    private static int[] DIRTY = new int[4 * 256];
+    private static int nDirty;
+    public static long deferredDirty;
+
+    /** LevelRenderer.setSectionDirty on the main thread while a frame draws (OVERLAP): queued (true), else false */
+    public static boolean deferDirty(int x, int y, int z, boolean mainThread) {
+        if (!pending || Thread.currentThread() != mainThread() || jobDone) return false;
+        if (nDirty * 4 + 4 > DIRTY.length) DIRTY = java.util.Arrays.copyOf(DIRTY, DIRTY.length * 2);
+        int o = nDirty++ * 4;
+        DIRTY[o] = x;
+        DIRTY[o + 1] = y;
+        DIRTY[o + 2] = z;
+        DIRTY[o + 3] = mainThread ? 1 : 0;
+        deferredDirty++;
+        return true;
+    }
+
+    private static Thread mainThread() {
+        return mainThread;
+    }
+
+    /** the main thread before it records a new frame: the last one (still drawing under OVERLAP) done */
+    private static void awaitLast() {
+        if (!pending) return;
+        long t0 = System.nanoTime();
+        waitPumping(() -> jobDone);
+        pending = false;
+        overlapWaitNs += System.nanoTime() - t0;
+        if (nDirty > 0) {   // the marks queued meanwhile, now (the frame done: nothing reads the dirty sets)
+            int n = nDirty;
+            nDirty = 0;
+            net.minecraft.client.renderer.LevelRenderer lr = mc.levelRenderer;
+            for (int i = 0; i < n; i++) {
+                int o = i * 4;
+                ((dev.lull.opt.FrameThreadDirtyInvoker) lr).sleep$setSectionDirty(DIRTY[o], DIRTY[o + 1], DIRTY[o + 2], DIRTY[o + 3] != 0);
+            }
+        }
+        Throwable f = failure;
+        if (f != null) {
+            failure = null;
+            failures++;
+            if (f instanceof RuntimeException r) throw r;
+            if (f instanceof Error e) throw e;
+            throw new RuntimeException(f);
+        }
+    }
+
+    /** the next op begins a new frame (set by present): the last one waited for, the list started over */
+    private static boolean fresh = true;
+
+    private static void begin() {
+        awaitLast();
+        nOps = 0;
+        fresh = false;
+    }
+
     public static void op(int code) {
+        if (fresh) begin();
         OPS[nOps++] = code;
     }
 
     public static void op(int code, int i, int j, boolean z) {
+        if (fresh) begin();
         ARG_I[nOps] = i;
         ARG_J[nOps] = j;
         ARG_Z[nOps] = z;
@@ -115,8 +198,24 @@ public final class FrameThread {
         org.lwjgl.glfw.GLFW.glfwPollEvents();
         if (mainHolds) giveBack();
         long t0 = System.nanoTime();
+        fresh = true;
+        if (OVERLAP) {   // the world's lists the frame walks, as they are now (the main thread changes them meanwhile)
+            HELD.clear();
+            if (mc.level != null) for (net.minecraft.world.entity.Entity e : mc.level.entitiesForRendering()) HELD.add(e);
+            HELD_PARTICLES.clear();
+            for (var en : ((dev.lull.opt.ParticleEngineAccessor) mc.particleEngine).sleep$particles().entrySet())
+                HELD_PARTICLES.put(en.getKey(), new java.util.ArrayDeque<>(en.getValue()));
+            heldValid = mc.level != null;
+        } else heldValid = false;
         jobDone = false;
         LockSupport.unpark(thread);
+        if (OVERLAP) {   // (A2 test) the frame draws while the main thread goes on; the next frame's first op waits
+            pending = true;
+            overlapFrames++;
+            frames++;
+            org.lwjgl.glfw.GLFW.glfwPollEvents();
+            return;
+        }
         waitPumping(() -> jobDone);
         waitNs += System.nanoTime() - t0;
         frames++;
@@ -213,7 +312,6 @@ public final class FrameThread {
             } catch (Throwable t) {
                 failure = t;
             }
-            nOps = 0;
             jobDone = true;
             LockSupport.unpark(mainThread);
         }
@@ -240,8 +338,8 @@ public final class FrameThread {
 
     public static String report() {
         if (!ON) return "";
-        StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT, "; frame thread: frames %d (%.3f ms a frame waited), borrows %d (%.3f ms each), failures %d",
-                frames, waitNs / 1e6 / Math.max(1, frames), borrows, borrowWaitNs / 1e6 / Math.max(1, borrows), failures));
+        StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT, "; frame thread: frames %d (%.3f ms a frame waited), overlapped %d (%.3f ms waited before the next), borrows %d (%.3f ms each), failures %d",
+                frames, waitNs / 1e6 / Math.max(1, frames), overlapFrames, overlapWaitNs / 1e6 / Math.max(1, overlapFrames), borrows, borrowWaitNs / 1e6 / Math.max(1, borrows), failures));
         BORROW_SITES.entrySet().stream().sorted((x, y) -> Long.compare(y.getValue()[0], x.getValue()[0])).limit(8)
                 .forEach(e -> b.append("; borrow ").append(e.getValue()[0]).append(" x ").append(e.getKey()));
         return b.toString();

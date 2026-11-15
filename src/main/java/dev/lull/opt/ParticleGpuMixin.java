@@ -34,7 +34,8 @@ public abstract class ParticleGpuMixin {
     @Redirect(method = RENDER, at = @At(value = "INVOKE", target = "Lnet/minecraft/client/particle/ParticleRenderType;begin(Lcom/mojang/blaze3d/vertex/Tesselator;Lnet/minecraft/client/renderer/texture/TextureManager;)Lcom/mojang/blaze3d/vertex/BufferBuilder;"))
     private BufferBuilder sleep$begin(ParticleRenderType type, Tesselator tesselator, TextureManager textures) {
         BufferBuilder bb = type.begin(tesselator, textures);
-        ParticleGpu.begin(type, bb, ((ParticleEngineAccessor) this).sleep$particles().get(type));
+        java.util.Map<ParticleRenderType, java.util.Queue<Particle>> held = dev.lull.optsupport.FrameThread.heldParticles();   // (a frame drawn while the main thread ticks: the queues held for it)
+        ParticleGpu.begin(type, bb, (held != null ? held : ((ParticleEngineAccessor) this).sleep$particles()).get(type));
         return bb;
     }
 
