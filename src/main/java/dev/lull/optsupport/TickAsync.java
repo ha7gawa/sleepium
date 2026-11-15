@@ -60,6 +60,20 @@ public final class TickAsync {
         return v instanceof ParallelRender.Job j ? j : null;
     }
 
+    public static long unseenWaits;
+
+    /**
+     * render thread, a frame queuing a walking entity that was taken as unseen: its tick waited for (then it is drawn the
+     * usual way - its fields hold the new tick, the frame's partial tick near 0: as vanilla); false for any other entity
+     */
+    public static boolean awaitUnseen(Entity e) {
+        Object v = WALKING.get(e);
+        if (!(v instanceof Integer i)) return false;
+        ParallelEntities.awaitTicked(i);
+        unseenWaits++;
+        return true;
+    }
+
     /** render thread: the entity is ticking on the pool - frames draw it only from its held pair */
     public static boolean holding(Entity e) {
         return !WALKING.isEmpty() && WALKING.containsKey(e);
@@ -80,7 +94,7 @@ public final class TickAsync {
     }
 
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "tick async: walks %d, entities %d (snapshots %d, unseen %d), frames holding %d (from snapshots %d), skipped %d, joins %d (%.3f ms a join)",
-                walks, entities, snapshots, unseen, holdFrames, snapFrames, skipped, joins, joins == 0 ? 0.0 : joinWaitNs / 1e6 / joins);
+        return String.format(java.util.Locale.ROOT, "tick async: walks %d, entities %d (snapshots %d, unseen %d - waited for in a frame %d), frames holding %d (from snapshots %d), skipped %d, joins %d (%.3f ms a join)",
+                walks, entities, snapshots, unseen, unseenWaits, holdFrames, snapFrames, skipped, joins, joins == 0 ? 0.0 : joinWaitNs / 1e6 / joins);
     }
 }

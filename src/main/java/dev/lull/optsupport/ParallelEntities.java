@@ -207,6 +207,18 @@ public final class ParallelEntities {
     private static int asyncM;
     private static volatile boolean asyncRunning;
     private static TickPoses.Pair[] asyncPairs = new TickPoses.Pair[256];
+    /** per walking entity: 1 once its tick (and capture) is done - a frame that meets an unseen one waits for that */
+    private static java.util.concurrent.atomic.AtomicIntegerArray asyncDone = new java.util.concurrent.atomic.AtomicIntegerArray(256);
+
+    /** render thread, a frame: wait (serving the workers) until walking entity i has ticked */
+    static void awaitTicked(int i) {
+        long spinUntil = System.nanoTime() + 20_000;
+        while (asyncRunning && asyncDone.get(i) == 0) {
+            ParticleWorkers.serve();
+            if (System.nanoTime() < spinUntil) Thread.onSpinWait();
+            else LockSupport.parkNanos(50_000L);
+        }
+    }
 
     static boolean asyncRunning() {
         return asyncRunning;
@@ -246,7 +258,7 @@ public final class ParallelEntities {
                 asyncPairs[m] = null;
                 asyncSnaps[m] = null;
                 asyncAll[m++] = e;
-                TickAsync.WALKING.put(e, Boolean.FALSE);   // (nothing to draw it from: a frame that meets it leaves it out)
+                TickAsync.WALKING.put(e, Integer.valueOf(m - 1));   // (nothing to draw it from: a frame that meets it waits for its tick)
                 TickAsync.unseen++;
             } else all[r++] = e;   // (r <= k: that slot is done with)
         }
@@ -268,6 +280,8 @@ public final class ParallelEntities {
         System.arraycopy(asyncAll, 0, all, 0, m);   // (the walk is over: all[] is free; the hooks index it)
         java.util.Arrays.fill(asyncAll, 0, m, null);
         tick = asyncTick;
+        if (asyncDone.length() < m) asyncDone = new java.util.concurrent.atomic.AtomicIntegerArray(Math.max(m, asyncDone.length() * 2));
+        for (int i = 0; i < m; i++) asyncDone.set(i, 0);
         tail0 = 0;
         end = m;
         if (movedCb.length < m) {
@@ -325,6 +339,7 @@ public final class ParallelEntities {
                 } catch (Throwable x) {
                     if (asyncPairs[j] != null) asyncPairs[j].markUnusable();
                 }
+                asyncDone.set(j, 1);
                 if (render && ParticleWorkers.pending()) ParticleWorkers.serve();
             }
             done += e0 - s0;
