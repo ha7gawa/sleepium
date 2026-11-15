@@ -56,8 +56,11 @@ public final class FrameThread {
     }
 
     /** the main thread records this frame's render half (not on the frame thread, in a world) */
+    /** -Dlab.frameThread.inactive=true: the hooks in place, the frame thread never started (a baseline with the same hooks) */
+    private static final boolean INACTIVE = Boolean.getBoolean("lab.frameThread.inactive");
+
     public static boolean recording() {
-        if (!ON) return false;
+        if (!ON || INACTIVE) return false;
         if (!active) {
             Minecraft m = Minecraft.getInstance();
             if (m.level == null || m.player == null || !com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()) return false;
@@ -210,6 +213,7 @@ public final class FrameThread {
 
     private static void begin() {
         awaitLast();
+        if (extraRunning) waitPumping(() -> !extraRunning);
         nOps = 0;
         fresh = false;
     }
@@ -327,7 +331,7 @@ public final class FrameThread {
         }
         borrowAsked = true;
         LockSupport.unpark(thread);
-        waitPumping(() -> !frameHolds && jobDone);
+        waitPumping(() -> !frameHolds && jobDone && !extraRunning);
         org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(0L);   // (the side context released)
         org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(window);
         org.lwjgl.opengl.GL.setCapabilities(caps);
@@ -461,7 +465,11 @@ public final class FrameThread {
             long spinUntil = System.nanoTime() + SPIN_NS;   // (bounded: the main thread's next frame usually comes soon)
             while (jobDone && !borrowAsked) {
                 if (System.nanoTime() < spinUntil) Thread.onSpinWait();
-                else LockSupport.park();
+                else if (EXTRA && mainTicking && frameHolds && nOps > 0) {
+                    long due = doneAt + lastFrameNs - System.nanoTime();
+                    if (due > 0) LockSupport.parkNanos(due);
+                    else if (extraFrame()) doneAt = System.nanoTime();
+                } else LockSupport.park();
             }
             if (!jobDone) wakeNs += System.nanoTime() - handAt;
             if (jobDone && borrowAsked) {   // a borrow: release, wait until handed back (the next job)
@@ -498,8 +506,12 @@ public final class FrameThread {
                     JOB_CALL_ARGS.clear();
                     long q3 = System.nanoTime();
                     tCalls += q3 - q2;
+                    recordedAt = System.nanoTime();
+                    recordedPt = mc.getTimer().getGameTimeDeltaPartialTick(true);
                     runOps();
-                    tOps += System.nanoTime() - q3;
+                    long dt = System.nanoTime() - q3;
+                    tOps += dt;
+                    lastFrameNs = dt;
                 } finally {
                     drawing = false;
                 }
@@ -512,13 +524,95 @@ public final class FrameThread {
         }
     }
 
+    // ------------------------------------------------------------------ extra frames during a long tick (non-exact)
+
+    /**
+     * -Dlab.frameThread.extra=true (with overlap; NOT exact): while the main thread runs a client tick and no new frame
+     * comes, the frame thread draws the last recorded frame again with a live partial tick (the time since the tick that
+     * frame was recorded after, up to 1) - motion goes on interpolating, the camera's turn waits for the main thread's
+     * next poll. A long tick no longer stops the frames.
+     */
+    public static volatile boolean EXTRA = Boolean.getBoolean("lab.frameThread.extra");
+    private static volatile boolean mainTicking, extraRunning;
+    private static boolean extraNow;
+    private static long recordedAt, lastFrameNs = 500_000;
+    private static float recordedPt;
+    public static long extraFrames, extraNs;
+
+    /** Minecraft.tick HEAD / RETURN on the main thread (FrameThreadMixin) */
+    public static long ticksSeen, ticksWhileFrameBusy, ticksWhileIdle;
+
+    public static void tickStart() {
+        mainTicking = true;
+        ticksSeen++;
+        if (jobDone) ticksWhileIdle++;
+        else ticksWhileFrameBusy++;
+        if (EXTRA && active) LockSupport.unpark(thread);
+    }
+
+    /**
+     * -Dsleep.test.tickLoadMs=N (test only): every client tick keeps the main thread busy N ms (a busy wait, as a heavy
+     * mod's tick would) - a long tick on vanilla, to measure what the frame thread gives against it
+     */
+    private static final double TEST_TICK_MS = Double.parseDouble(System.getProperty("sleep.test.tickLoadMs", "0"));
+
+    public static void testTickLoad() {
+        if (TEST_TICK_MS <= 0 || mc == null && Minecraft.getInstance().level == null) return;
+        long until = System.nanoTime() + (long) (TEST_TICK_MS * 1e6);
+        while (System.nanoTime() < until) Thread.onSpinWait();
+    }
+
+    public static void tickEnd() {
+        mainTicking = false;
+    }
+
+    /** a DeltaTracker whose partial tick goes on with the clock since the recorded frame (capped at 1) */
+    private static final net.minecraft.client.DeltaTracker LIVE = new net.minecraft.client.DeltaTracker() {
+        @Override public float getGameTimeDeltaTicks() { return 0f; }
+        @Override public float getGameTimeDeltaPartialTick(boolean runsNormally) {
+            return Math.min(1f, recordedPt + (System.nanoTime() - recordedAt) / 50_000_000f);
+        }
+        @Override public float getRealtimeDeltaTicks() { return 0f; }
+    };
+
+    private static Object[] live(Object[] args) {
+        Object[] a = args.clone();
+        for (int i = 0; i < a.length; i++) if (a[i] instanceof net.minecraft.client.DeltaTracker) a[i] = LIVE;
+        return a;
+    }
+
+    /** the frame thread, idle: an extra frame if the main thread is in a tick and the last frame is older than one frame */
+    private static boolean extraFrame() {
+        if (!EXTRA || !OVERLAP || !mainTicking || borrowAsked || nOps == 0 || !jobDone) return false;
+        extraRunning = true;
+        if (!jobDone || borrowAsked) {   // (a job or a borrow came meanwhile)
+            extraRunning = false;
+            return false;
+        }
+        long t0 = System.nanoTime();
+        drawing = true;
+        extraNow = true;
+        try {
+            UploadRing.frameBegin();
+            runOps();
+        } catch (Throwable t) {
+            failure = t;
+        } finally {
+            extraNow = false;
+            drawing = false;
+        }
+        extraFrames++;
+        extraNs += System.nanoTime() - t0;
+        extraRunning = false;
+        LockSupport.unpark(mainThread);
+        return true;
+    }
+
     private static void runOps() {
         Minecraft m = mc;
         for (int k = 0; k < nOps; k++) {
             if (OPS[k] == 0) {   // a wrapped call: its Operation with the recorded arguments
-                OPERATIONS[k].call(ARGS[k]);
-                OPERATIONS[k] = null;
-                ARGS[k] = null;
+                OPERATIONS[k].call(extraNow ? live(ARGS[k]) : ARGS[k]);
                 continue;
             }
             switch (OPS[k]) {
@@ -540,9 +634,11 @@ public final class FrameThread {
     public static String report() {
         if (!ON) return "";
         StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT, "; frame thread: frames %d (%.3f ms a frame waited), overlapped %d (%.3f ms waited before the next), hand-over wake-ups: the frame thread %.1f us, the main thread %.1f us, borrows %d (%.3f ms each), failures %d",
-                frames, waitNs / 1e6 / Math.max(1, frames), overlapFrames, overlapWaitNs / 1e6 / Math.max(1, overlapFrames), wakeNs / 1e3 / Math.max(1, frames),
+                frames + extraFrames, waitNs / 1e6 / Math.max(1, frames), overlapFrames, overlapWaitNs / 1e6 / Math.max(1, overlapFrames), wakeNs / 1e3 / Math.max(1, frames),
                 mainWakeNs / 1e3 / Math.max(1, mainWakes), borrows, borrowWaitNs / 1e6 / Math.max(1, borrows), failures));
         long fr = Math.max(1, frames);
+        if (EXTRA) b.append(String.format(java.util.Locale.ROOT, "; extra frames during ticks %d (%.3f ms each); ticks %d (the frame thread busy at their start %d, idle %d)",
+                extraFrames, extraNs / 1e6 / Math.max(1, extraFrames), ticksSeen, ticksWhileFrameBusy, ticksWhileIdle));
         b.append(String.format(java.util.Locale.ROOT, "; per frame (us): main present: polls %.1f, side fence %.1f, held lists + light %.1f; frame thread: side wait %.1f, frameBegin + queue %.1f, calls %.1f, ops %.1f",
                 tPoll / 1e3 / fr, tFence / 1e3 / fr, tHeld / 1e3 / fr, tSideWait / 1e3 / fr, tReplay / 1e3 / fr, tCalls / 1e3 / fr, tOps / 1e3 / fr));
         BORROW_SITES.entrySet().stream().sorted((x, y) -> Long.compare(y.getValue()[0], x.getValue()[0])).limit(8)

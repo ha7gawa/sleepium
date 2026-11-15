@@ -82,6 +82,17 @@ public abstract class FrameThreadMixin {
         } else op.call(w);
     }
 
+    @Inject(method = "tick", at = @At("HEAD"))
+    private void sleep$tickStart(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        FrameThread.tickStart();
+        FrameThread.testTickLoad();
+    }
+
+    @Inject(method = "tick", at = @At("RETURN"))
+    private void sleep$tickEnd(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        FrameThread.tickEnd();
+    }
+
     /** the event loop's thread as each thread sees it: the frame thread counts as Minecraft's own while it draws */
     @Inject(method = "getRunningThread", at = @At("HEAD"), cancellable = true)
     private void sleep$frameIsSame(CallbackInfoReturnable<Thread> cir) {
