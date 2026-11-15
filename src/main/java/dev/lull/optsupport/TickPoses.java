@@ -187,7 +187,14 @@ public final class TickPoses {
      * The frame's entity queue (ParallelRender.enqueue, an entity going to the workers): the pair this frame's job
      * interpolates, or null (the usual job). A new tick's pair is started on the pool here.
      */
-    static Pair pairFor(Entity e, java.util.concurrent.Executor pool) {
+    /**
+     * -Dlab.prender.tickPoses.wait=true: the first frame after a tick waits for the entity's capture (the old way). Off
+     * (default): a capture runs on the pool's BACKGROUND lane and no frame waits for it - until it is done the entity is
+     * drawn the usual way (11-15 N100: waiting made the frame after each tick longer - GPU stutters 4.4 -> 7.5 %).
+     */
+    static final boolean WAIT = Boolean.getBoolean("lab.prender.tickPoses.wait");
+
+    static Pair pairFor(Entity e, dev.lab.runtime.LabRuntime pool) {
         // (parts the CPU way, or a measured choice running - PartsTune, InstTune, CacheTune: nothing to capture, nothing to disturb)
         if (!enabled || !PartBatch.partsInJobs || ParallelRender.measuring() || PartBatch.InstTune.measuring()) return null;   // (burning: the flame drawn per frame by ParallelRender.shadow)
         Stat st = STATS.computeIfAbsent(e.getType(), Stat::new);
@@ -198,7 +205,8 @@ public final class TickPoses {
         if (p != null && p.stamp == s) {
             p.frameUsed = frame;
             if (st.state != 1) return null;
-            return !p.done || p.usable ? p : null;   // (still rendering: the job waits for it)
+            if (!p.done) return WAIT ? p : null;   // (still rendering: drawn the usual way this frame)
+            return p.usable ? p : null;
         }
         if (p == null) {
             p = new Pair();
@@ -228,8 +236,12 @@ public final class TickPoses {
         }
         p.claimed.set(false);
         captures++;
-        pool.execute(p);
-        return st.state == 1 ? p : null;
+        if (WAIT) {
+            pool.execute(p);
+            return st.state == 1 ? p : null;
+        }
+        pool.execute(p, dev.lab.runtime.LabRuntime.Lane.BACKGROUND);   // (behind the frame's own jobs; no frame waits for it)
+        return null;
     }
 
     /** a finished capture's preparations (types learnt, geometry compiled), on the render thread; while there were some, the pair is not used */
