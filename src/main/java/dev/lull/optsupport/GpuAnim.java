@@ -134,7 +134,8 @@ public final class GpuAnim {
                     (VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "")
                     + (pboUploads > 0 ? String.format(java.util.Locale.ROOT, "; the ring's parts per upload: rows %.1f us, sub image %.1f us, copies %.1f us",
                     pboMemNs / 1e3 / pboUploads, pboSubNs / 1e3 / pboUploads, pboCopyNs / 1e3 / pboUploads) : "")
-                    + (batches > 0 ? String.format(java.util.Locale.ROOT, "; batched: %d ticks, %d frames, %.3f ms a tick", batches, batchFrames, batchNs / 1e6 / batches) : ""));
+                    + (batches > 0 ? String.format(java.util.Locale.ROOT, "; batched: %d ticks, %d frames, %.3f ms a tick", batches, batchFrames, batchNs / 1e6 / batches) : "")
+                    + (pbo != 0 ? String.format(java.util.Locale.ROOT, "; the ring's fence wait %.3f ms, fence + flush %.3f ms a tick", beginWaitNs / 1e6 / ticks, endFlushNs / 1e6 / ticks) : ""));
     }
 
     /**
@@ -162,7 +163,9 @@ public final class GpuAnim {
     private static int pbo, seg, segUsed;
     private static long pboPtr;
     private static final long[] FENCES = new long[NSEG];
-    public static long pboUploads, pboNs, ringWaits, pboMemNs, pboSubNs, pboCopyNs;
+    public static long pboUploads, pboNs, ringWaits, pboMemNs, pboSubNs, pboCopyNs, beginWaitNs, endFlushNs;
+    /** -Dlab.gpuAnim.noFlush=true: no glFlush after the ring's fence (the next frame's swap sends it; the wait 8 ticks later flushes anyway) */
+    public static boolean NO_FLUSH = Boolean.getBoolean("lab.gpuAnim.noFlush");   // (not final: ClientAuto's flip)
 
     /**
      * -Dlab.gpuAnim.batch=true (with the PBO ring): a tick's interpolated frames packed into one staging texture
@@ -274,10 +277,16 @@ public final class GpuAnim {
         segUsed = 0;
         stageTick++;
         if (FENCES[seg] != 0) {
-            if (org.lwjgl.opengl.GL32C.glClientWaitSync(FENCES[seg], 0, 0) == org.lwjgl.opengl.GL32C.GL_TIMEOUT_EXPIRED) ringWaits++;   // not read yet: counted
-            org.lwjgl.opengl.GL32C.glClientWaitSync(FENCES[seg], org.lwjgl.opengl.GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 1_000_000_000L);   // the fence sent to the GPU, else the wait runs to its timeout
+            long w0 = System.nanoTime();
+            // a look first; the waiting call (with the flush bit: the fence must have been sent) only when the GPU is not
+            // done - the flush bit made the Intel driver submit its commands every atlas tick, ~1 ms (11-15 N100)
+            if (org.lwjgl.opengl.GL32C.glClientWaitSync(FENCES[seg], 0, 0) == org.lwjgl.opengl.GL32C.GL_TIMEOUT_EXPIRED) {
+                ringWaits++;   // not read yet: counted
+                org.lwjgl.opengl.GL32C.glClientWaitSync(FENCES[seg], org.lwjgl.opengl.GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 1_000_000_000L);
+            }
             org.lwjgl.opengl.GL32C.glDeleteSync(FENCES[seg]);
             FENCES[seg] = 0;
+            beginWaitNs += System.nanoTime() - w0;
         }
     }
 
@@ -287,8 +296,10 @@ public final class GpuAnim {
         interpEnd();
         if (batchN > 0) batchFlush();
         if (pbo != 0 && segUsed > 0) {
+            long f0 = System.nanoTime();
             FENCES[seg] = org.lwjgl.opengl.GL32C.glFenceSync(org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-            GL11C.glFlush();
+            if (!NO_FLUSH) GL11C.glFlush();
+            endFlushNs += System.nanoTime() - f0;
         }
     }
 
