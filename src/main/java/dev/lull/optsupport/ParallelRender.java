@@ -408,7 +408,8 @@ public final class ParallelRender {
         if (TickAsync.ON) DRAWN.put(e, drainFrame);
         TickPoses.Pair held = null;
         Job snap = null;
-        if (TickAsync.ON && TickAsync.holding(e)) {   // ticking on the pool right now: only its held pair or snapshot may be drawn
+        if (TickAsync.ON && TickAsync.holding(e) && TickAsync.awaitUnseen(e)) { }   // (an unseen one came into view: its tick waited for)
+        else if (TickAsync.ON && TickAsync.holding(e)) {   // ticking on the pool right now: only its held pair or snapshot may be drawn
             snap = TickAsync.snapshotOf(e);
             if (snap == null) held = TickPoses.held(e);
             if (held == null && snap == null) {
