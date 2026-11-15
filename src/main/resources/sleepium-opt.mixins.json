@@ -156,6 +156,7 @@
   ],
   "client": [
     "ClientTickProfileMixin",
+    "TickAsyncMixin",
     "GrowVertexBufferMixin",
     "StallProbeMixin",
     "StallProbeGlMixin",

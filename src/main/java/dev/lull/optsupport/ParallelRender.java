@@ -211,6 +211,8 @@ public final class ParallelRender {
         TickPoses.Pair tick;
         /** TickPoses: the pair's GPU records are used (the render thread copies them at the merge) */
         boolean gpuTick;
+        /** TickAsync: the entity is ticking on the pool - drawn from its held pair only, never the usual way */
+        boolean hold;
         /** TickPoses: a pair's renders all with one renderer set (a part's geometry is keyed by the set's own model objects) */
         Set forcedSet;
         Entity entity;
@@ -399,6 +401,14 @@ public final class ParallelRender {
     /** LevelRenderer's entity loop, per entity (in place of renderEntity). */
     public static void enqueue(LevelRenderer lr, Entity e, double camX, double camY, double camZ, float pt, PoseStack pose, MultiBufferSource buffers) {
         if (TEST_SKIP_ON && TEST_SKIP.contains(e.getClass().getSimpleName())) return;
+        TickPoses.Pair held = null;
+        if (TickAsync.ON && TickAsync.holding(e)) {   // ticking on the pool right now: only its held pair may be drawn
+            held = TickPoses.held(e);
+            if (held == null) {
+                TickAsync.skipped++;
+                return;
+            }
+        }
         if (size == 0) {
             if (RENDER_PIN != 0 && !renderPinned) {
                 renderPinned = true;
@@ -426,7 +436,18 @@ public final class ParallelRender {
         j.parallel = eligible(e, buffers);
         j.rendererOnly = false;
         j.tick = null;
-        if (TickPoses.ON && j.parallel && !INNER) {
+        j.hold = false;
+        if (held != null) {   // TickAsync: the pair at its last key (the state the tick started from), no capture
+            if (!setsChecked) {
+                ensureSets();
+                setsChecked = true;
+            }
+            j.parallel = true;
+            j.tick = held;
+            j.hold = true;
+            j.pt = 1f;
+            TickAsync.holdFrames++;
+        } else if (TickPoses.ON && j.parallel && !INNER) {
             if (!setsChecked) {
                 ensureSets();
                 setsChecked = true;
@@ -1093,6 +1114,13 @@ public final class ParallelRender {
                 j.parts.clear();
                 j.ok = false;
                 j.parallel = false;   // the usual way, on this thread
+                if (j.hold) {   // (not while a worker ticks it: left out of this frame)
+                    j.hold = false;
+                    TickAsync.skipped++;
+                    if (clean) leakCheck(j);
+                    j.entity = null;
+                    continue;
+                }
             }
             if (j.parallel) {
                 // helping instead of waiting: the queued jobs from here on that no worker has taken yet
@@ -1270,7 +1298,9 @@ public final class ParallelRender {
         pose.setIdentity();
         Vec3 off = r.getRenderOffset(e, pt);
         pose.pushPose();
-        pose.translate(Mth.lerp((double) pt, e.xOld, e.getX()) - j.camX + off.x(), Mth.lerp((double) pt, e.yOld, e.getY()) - j.camY + off.y(),
+        if (j.hold && j.tick != null)   // TickAsync: where the held pair stands (the entity itself is being ticked)
+            pose.translate(j.tick.ax - j.camX + off.x(), j.tick.ay - j.camY + off.y(), j.tick.az - j.camZ + off.z());
+        else pose.translate(Mth.lerp((double) pt, e.xOld, e.getX()) - j.camX + off.x(), Mth.lerp((double) pt, e.yOld, e.getY()) - j.camY + off.y(),
                 Mth.lerp((double) pt, e.zOld, e.getZ()) - j.camZ + off.z());
         EntityRenderDispatcher d = Minecraft.getInstance().getEntityRenderDispatcher();
         if (e.displayFireAnimation()) {
@@ -1354,6 +1384,6 @@ public final class ParallelRender {
         }
         return String.format(java.util.Locale.ROOT, "parallel render: %d workers, jobs %d, on workers %d (render thread helped %d), on the render thread %d, failed %d, refused %d, journaled calls %d, part records merged in %.0f ms%s", THREADS, jobs, parallel,
                 helped, sequential, failed, refused, journaled, mergeNanos / 1e6, (CPU_STATS ? cpuReport() : "") + (WORKER_REFUSED.isEmpty() ? "" : ", kept on the render thread " + WORKER_REFUSED) + (CHECK ? ", checked in place " + checked + (checkMismatches > 0 ? " (differed " + checkMismatches + ")" : "") : "") + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches + (MISMATCH_TYPES.isEmpty() ? "" : " " + MISMATCH_TYPES) : ""))
-                + (TickPoses.ON ? "; " + TickPoses.report() : "");
+                + (TickPoses.ON ? "; " + TickPoses.report() : "") + (TickAsync.ON ? "; " + TickAsync.report() : "");
     }
 }
