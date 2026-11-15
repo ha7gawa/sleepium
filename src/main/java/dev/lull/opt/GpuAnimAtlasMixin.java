@@ -36,7 +36,9 @@ public abstract class GpuAnimAtlasMixin {
     private void sleep$atlasOut(CallbackInfo ci) {
         if (GpuAnim.on() && GpuAnim.atlas != 0) {
             GpuAnim.tickEnd();
-            GpuAnim.tickDone(System.nanoTime() - sleep$t0);
+            long ns = System.nanoTime() - sleep$t0;
+            GpuAnim.atlasTime(((TextureAtlas) (Object) this).location(), ns);
+            GpuAnim.tickDone(ns);
         }
         GpuAnim.atlas = 0;
     }

@@ -42,6 +42,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkIo");
         if (simple.startsWith("JobSite"))   // one feature: brains' job sites counted, PoiCompetitorScan's walk skipped when alone
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.JobSiteIndex");
+        if (simple.startsWith("GlWorker"))   // the GL worker's hooks (GlWorker)
+            on = Boolean.getBoolean("lab.glWorker");
         if (simple.equals("WriteBarrierMixin"))   // the write barrier of mob parts (WriteBarrier, WB)
             on = Boolean.getBoolean("lab.opt.WriteBarrier");
         if (simple.startsWith("OffThreadEntity"))   // one feature: entities added from another thread go where they belong

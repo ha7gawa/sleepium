@@ -43,7 +43,10 @@ public abstract class SpriteInterpolateMixin {
                 dev.lull.optsupport.GpuAnim.verifyBlend(activeFrame[0], x, y, width, height);
             return;
         }
-        if (!SpriteMix.interpolate(c.byMipLevel, activeFrame, width, height, anim.getFrameX(i), anim.getFrameY(i), anim.getFrameX(j), anim.getFrameY(j), d)) {
+        long b0 = System.nanoTime();
+        boolean fast = SpriteMix.interpolate(c.byMipLevel, activeFrame, width, height, anim.getFrameX(i), anim.getFrameY(i), anim.getFrameX(j), anim.getFrameY(j), d);
+        dev.lull.optsupport.GpuAnim.blendNs += System.nanoTime() - b0;
+        if (!fast) {
             SpriteMix.slow++;
             for (int k = 0; k < activeFrame.length; k++) {   // vanilla's loop
                 int l = width >> k, h = height >> k;

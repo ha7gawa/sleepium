@@ -68,19 +68,147 @@ public final class GpuAnim {
     private static final int STAGES = Math.max(1, Integer.getInteger("lab.gpuAnim.stages", 1));
     private static int stageTick;
     public static long copies, sheetsMade, verified, mismatches, copyNs, ticks, tickNs, interpolated, emptyAtlasTicks;
-    public static long uploadT0, interpUploadNs, interpUploads;
+    public static long uploadT0, interpUploadNs, interpUploads, blendNs;
+
+    // ------------------------------------------------------------------ the GL worker (-Dlab.glWorker, GlWorker)
+
+    /** this atlas tick's GL work recorded and run on GlWorker's shared context */
+    private static boolean wk;
+    /** the job uses objects made on the render context since the last frame */
+    private static boolean renderSync;
+    /** this atlas tick recorded something (the arrays are its own: a record joins the last job first) */
+    private static boolean wkRecorded;
+    private static int jobSeg = -1, jobAtlas;
+    /** recorded frame copies: sheet, level, sx, sy, dx, dy, w, h; level 0's source image (the worker check) */
+    private static int[] CP = new int[8 * 256];
+    private static NativeImage[] CP_IMG = new NativeImage[256];
+    private static int cpN;
+    private static final boolean WK_VERIFY = Boolean.getBoolean("lab.glWorker.verify");
+    private static final java.util.Map<String, long[]> WK_DIAG = new java.util.TreeMap<>();
+    public static long workerTicks, workerVerified, workerMismatches;
+    private static final Runnable WORKER_JOB = GpuAnim::workerRun;
+    private static final java.util.function.LongConsumer WORKER_JOINED = GpuAnim::workerJoined;
+
+    /** on the worker: the recorded copies, then the batch (its upload from the ring and its copies) */
+    private static void workerRun() {
+        int a = jobAtlas;
+        for (int i = 0; i < cpN; i++) {
+            int o = i * 8;
+            GL43C.glCopyImageSubData(CP[o], GL11C.GL_TEXTURE_2D, CP[o + 1], CP[o + 2], CP[o + 3], 0, a, GL11C.GL_TEXTURE_2D, CP[o + 1], CP[o + 4], CP[o + 5], 0,
+                    CP[o + 6], CP[o + 7], 1);
+        }
+        if (batchN > 0) batchGl(a);
+    }
+
+    /** render thread: the job joined - its fence becomes the ring segment's; the record arrays free again */
+    private static void workerJoined(long fence) {
+        if (workerTicks < 13) LOG.info("[sleep/opt] gl worker joined: atlas {}, copies {}, batch {}, seg {}", jobAtlas, cpN, batchN, jobSeg);
+        if (WK_VERIFY && readBack) {
+            int saved = atlas;
+            atlas = jobAtlas;
+            boolean finish = (workerTicks & 1) == 0;   // (every other job read after a glFinish: visibility vs wrong data)
+            if (finish) GL11C.glFinish();
+            long m0 = mismatches;
+            for (int i = 0; i < cpN; i++)
+                if (CP_IMG[i] != null) {
+                    int o = i * 8;
+                    verify(CP_IMG[i], CP[o + 4], CP[o + 5], CP[o + 2], CP[o + 3], CP[o + 6], CP[o + 7]);
+                    workerVerified++;
+                }
+            long m1 = mismatches;
+            for (int i = 0; i < batchN; i++) {
+                verify(BDATA[i], BAX[i], BAY[i], BFX[i], BFY[i], BWID[i], BHEI[i]);
+                workerVerified++;
+            }
+            long dc = m1 - m0, db = mismatches - m1;
+            workerMismatches += dc + db;
+            String k = (finish ? "finish " : "plain ") + jobAtlas;
+            long[] a = WK_DIAG.computeIfAbsent(k, x -> new long[4]);
+            a[0] += cpN;
+            a[1] += dc;
+            a[2] += batchN;
+            a[3] += db;
+            atlas = saved;
+        }
+        java.util.Arrays.fill(CP_IMG, 0, cpN, null);
+        cpN = 0;
+        if (batchN > 0) {
+            java.util.Arrays.fill(BDATA, 0, batchN, null);
+            batches++;
+            batchFrames += batchN;
+            pboUploads += batchN;
+            batchN = 0;
+        }
+        if (jobSeg >= 0 && fence != 0) {
+            if (FENCES[jobSeg] != 0) org.lwjgl.opengl.GL32C.glDeleteSync(FENCES[jobSeg]);
+            FENCES[jobSeg] = fence;
+            FENCE_FRAME[jobSeg] = UploadRing.frames;
+        } else if (fence != 0) org.lwjgl.opengl.GL32C.glDeleteSync(fence);
+        jobSeg = -1;
+    }
+
+    private static String diag() {
+        StringBuilder sb = new StringBuilder("(stale " + wkStale + ", other " + wkOther + "; atlas: copies/bad, batch/bad:");
+        WK_DIAG.forEach((k, v) -> sb.append(' ').append(k).append(' ').append(v[0]).append('/').append(v[1]).append(", ").append(v[2]).append('/').append(v[3]).append(';'));
+        return sb.append(')').toString();
+    }
+
+    private static void workerJoin() {
+        GlWorker.joinIfBusy();
+    }
+    /** per atlas: ticks, ns (the report's breakdown) */
+    private static final java.util.LinkedHashMap<Object, long[]> PER_ATLAS = new java.util.LinkedHashMap<>();
+
+    public static void atlasTime(Object atlas, long ns) {
+        long[] a = PER_ATLAS.computeIfAbsent(atlas, k -> new long[2]);
+        a[0]++;
+        a[1] += ns;
+    }
+
+    private static String perAtlas() {
+        StringBuilder sb = new StringBuilder("; per atlas:");
+        for (var e : PER_ATLAS.entrySet())
+            sb.append(String.format(java.util.Locale.ROOT, " %s %d ticks %.3f ms each;", e.getKey(), e.getValue()[0], e.getValue()[1] / 1e6 / Math.max(1, e.getValue()[0])));
+        return sb.append(String.format(java.util.Locale.ROOT, " the CPU blends %.3f ms an atlas tick", blendNs / 1e6 / Math.max(1, ticks))).toString();
+    }
 
     /** in place of SpriteContents.upload(x, y, frameX, frameY, byMipLevel); false: vanilla uploads */
     public static boolean copyFrame(SpriteContents c, NativeImage[] mips, int x, int y, int frameX, int frameY) {
         if (atlas == 0 || mips.length == 0 || mips[0].format() != NativeImage.Format.RGBA || blitBroken) return false;
         long t0 = System.nanoTime();
+        if (wk && GlWorker.busy()) workerJoin();   // (the record arrays are the last job's until joined)
         Integer sheet = SHEETS.get(c);
         if (sheet == null) {
             sheet = sheet(mips);
             SHEETS.put(c, sheet);
+            renderSync = true;   // (made on the render context: the worker's job waits for it)
             if (sheetsMade++ == 0) LOG.info("[sleep/opt] gpu anim: active - the first sprite sheet on the GPU, frame changes copied there");
         }
         int w = c.width(), h = c.height();
+        if (wk) {   // recorded: the GL worker copies (GlWorker)
+            for (int i = 0; i < mips.length; i++) {
+                if ((w >> i) <= 0 || (h >> i) <= 0) break;
+                if (cpN * 8 + 8 > CP.length) {
+                    CP = java.util.Arrays.copyOf(CP, CP.length * 2);
+                    CP_IMG = java.util.Arrays.copyOf(CP_IMG, CP.length / 8);
+                }
+                int o = cpN * 8;
+                CP[o] = sheet;
+                CP[o + 1] = i;
+                CP[o + 2] = frameX >> i;
+                CP[o + 3] = frameY >> i;
+                CP[o + 4] = x >> i;
+                CP[o + 5] = y >> i;
+                CP[o + 6] = w >> i;
+                CP[o + 7] = h >> i;
+                CP_IMG[cpN] = i == 0 ? mips[0] : null;
+                cpN++;
+                wkRecorded = true;
+            }
+            copyNs += System.nanoTime() - t0;
+            copies++;
+            return true;
+        }
         for (int i = 0; i < mips.length; i++) {
             if ((w >> i) <= 0 || (h >> i) <= 0) break;   // NeoForge's bound, as in upload
             if (blit) {
@@ -109,16 +237,29 @@ public final class GpuAnim {
         ByteBuffer b = MemoryUtil.memAlloc(w * h * 4);
         GL45C.glGetTextureSubImage(atlas, 0, x, y, 0, w, h, 1, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, b);
         boolean same = true;
-        for (int j = 0; j < h && same; j++)
-            for (int i = 0; i < w; i++)
-                if (b.getInt((j * w + i) * 4) != src.getPixelRGBA(frameX + i, frameY + j)) {
-                    same = false;
-                    break;
-                }
+        int got = 1, want = 1;
+        for (int j = 0; j < h; j++)
+            for (int i = 0; i < w; i++) {
+                int a = b.getInt((j * w + i) * 4), e = src.getPixelRGBA(frameX + i, frameY + j);
+                if (a != e) same = false;
+                got = got * 31 + a;
+                want = want * 31 + e;
+            }
         MemoryUtil.memFree(b);
         verified++;
+        if (WK_VERIFY) {   // the worker check: a wrong region compared with what it should have held the time before
+            long key = (long) atlas << 40 | (long) x << 20 | y;
+            Integer before = LAST_WANT.put(key, want);
+            if (!same) {
+                if (before != null && before == got) wkStale++;
+                else wkOther++;
+            }
+        }
         if (!same && mismatches++ < 5) LOG.warn("[sleep/opt] gpu anim: a copied frame differs from its sheet at {},{} ({}x{})", x, y, w, h);
     }
+
+    private static final java.util.Map<Long, Integer> LAST_WANT = new java.util.HashMap<>();
+    private static long wkStale, wkOther;
 
     /** around TextureAtlas.cycleAnimationFrames: the whole animation tick of an atlas, the copies part of it */
     public static void tickDone(long ns) {
@@ -135,7 +276,8 @@ public final class GpuAnim {
                     pboMemNs / 1e3 / pboUploads, pboSubNs / 1e3 / pboUploads, pboCopyNs / 1e3 / pboUploads) : "")
                     + (batches > 0 ? String.format(java.util.Locale.ROOT, "; batched: %d ticks, %d frames, %.3f ms a tick", batches, batchFrames, batchNs / 1e6 / batches) : "")
                     + (pbo != 0 ? String.format(java.util.Locale.ROOT, "; the ring's fence wait %.3f ms (delete %.3f, trusted by age %d), fence + flush %.3f ms a tick",
-                    beginWaitNs / 1e6 / ticks, deleteNs / 1e6 / ticks, trusted, endFlushNs / 1e6 / ticks) : ""));
+                    beginWaitNs / 1e6 / ticks, deleteNs / 1e6 / ticks, trusted, endFlushNs / 1e6 / ticks) : "") + perAtlas()
+                    + (GlWorker.ON ? String.format(java.util.Locale.ROOT, "; worker ticks %d%s", workerTicks, WK_VERIFY ? ", checked " + workerVerified + ", mismatches " + workerMismatches + " " + diag() : "") + GlWorker.report() : ""));
     }
 
     /**
@@ -187,6 +329,12 @@ public final class GpuAnim {
     private static boolean batchPlace(SpriteContents c, int x, int y, int frameX, int frameY, NativeImage[] data, int w, int h, int levels) {
         if (batchN == BX.length || levels > BLEVELS || (w & 15) != 0 || (h & 15) != 0) return false;
         if (batchN == 0) {
+            if (wk && batchTex == 0) {
+                batchTex = TextureUtil.generateTextureId();
+                TextureUtil.prepareImage(batchTex, BLEVELS - 1, BW, BH);
+                GlStateManager._bindTexture(atlas);
+                renderSync = true;
+            }
             long need = levelOff(BLEVELS);
             if (segUsed + need > SEG) return false;
             batchOff = (long) seg * SEG + segUsed;
@@ -227,6 +375,22 @@ public final class GpuAnim {
         return true;
     }
 
+    /** the batch's GL calls (the render thread's or the GL worker's context; the unpack state at its defaults) */
+    private static void batchGl(int atlasId) {
+        int used = shelfY + shelfH, maxLev = 0;
+        for (int i = 0; i < batchN; i++) maxLev = Math.max(maxLev, BLEV[i]);
+        org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, pbo);
+        for (int k = 0; k < maxLev; k++) {
+            int lh = Math.max(1, used >> k);
+            GL45C.glTextureSubImage2D(batchTex, k, 0, 0, BW >> k, lh, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, batchOff + levelOff(k));
+        }
+        org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, 0);
+        for (int i = 0; i < batchN; i++)
+            for (int k = 0; k < BLEV[i]; k++)
+                GL43C.glCopyImageSubData(batchTex, GL11C.GL_TEXTURE_2D, k, BX[i] >> k, BY[i] >> k, 0, atlasId, GL11C.GL_TEXTURE_2D, k, BAX[i] >> k, BAY[i] >> k, 0,
+                        BWID[i] >> k, BHEI[i] >> k, 1);
+    }
+
     /** the tick's batch: one upload a level (the rows in use), then each sprite's copies into the atlas */
     private static void batchFlush() {
         long t0 = System.nanoTime();
@@ -235,22 +399,11 @@ public final class GpuAnim {
             TextureUtil.prepareImage(batchTex, BLEVELS - 1, BW, BH);
             GlStateManager._bindTexture(atlas);
         }
-        int used = shelfY + shelfH, maxLev = 0;
-        for (int i = 0; i < batchN; i++) maxLev = Math.max(maxLev, BLEV[i]);
-        org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, pbo);
         GlStateManager._pixelStore(GL11C.GL_UNPACK_ROW_LENGTH, 0);
         GlStateManager._pixelStore(GL11C.GL_UNPACK_SKIP_PIXELS, 0);
         GlStateManager._pixelStore(GL11C.GL_UNPACK_SKIP_ROWS, 0);
         GlStateManager._pixelStore(GL11C.GL_UNPACK_ALIGNMENT, 4);
-        for (int k = 0; k < maxLev; k++) {
-            int lh = Math.max(1, used >> k);
-            GL45C.glTextureSubImage2D(batchTex, k, 0, 0, BW >> k, lh, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, batchOff + levelOff(k));
-        }
-        org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, 0);
-        for (int i = 0; i < batchN; i++)
-            for (int k = 0; k < BLEV[i]; k++)
-                GL43C.glCopyImageSubData(batchTex, GL11C.GL_TEXTURE_2D, k, BX[i] >> k, BY[i] >> k, 0, atlas, GL11C.GL_TEXTURE_2D, k, BAX[i] >> k, BAY[i] >> k, 0,
-                        BWID[i] >> k, BHEI[i] >> k, 1);
+        batchGl(atlas);
         if (VERIFY && readBack)   // -Dlab.gpuAnim.verify: each sprite's level 0 read back against what vanilla uploads
             for (int i = 0; i < batchN; i++) verify(BDATA[i], BAX[i], BAY[i], BFX[i], BFY[i], BWID[i], BHEI[i]);
         java.util.Arrays.fill(BDATA, 0, batchN, null);
@@ -265,6 +418,9 @@ public final class GpuAnim {
 
     /** an atlas's animation tick begins: the next ring segment, once the GPU has read it */
     public static void tickBegin() {
+        wk = GlWorker.usable() && !blit && !VERIFY;
+        wkRecorded = false;
+        if (GlWorker.busy() && (!wk || pbo != 0 && (seg + 1) % NSEG == jobSeg)) workerJoin();   // (its segment comes round again / the render thread's own way)
         if (pbo == 0) return;
         seg = (seg + 1) % NSEG;
         segUsed = 0;
@@ -292,6 +448,19 @@ public final class GpuAnim {
     public static void tickEnd() {
         blitEnd();
         interpEnd();
+        if (wk) {
+            if (wkRecorded) {   // the work this atlas tick recorded to the GL worker: its fence is the segment's (workerJoined)
+                wkRecorded = false;   // (the arrays may still hold the last atlas's job, not joined: nothing of this tick)
+                jobSeg = batchN > 0 ? batchSeg : -1;
+                jobAtlas = atlas;
+                if (workerTicks < 12) LOG.info("[sleep/opt] gl worker job {}: atlas {}, copies {}, batch {}, busy {}", workerTicks, atlas, cpN, batchN, GlWorker.busy());
+                GlWorker.submit(WORKER_JOB, renderSync, WORKER_JOINED);
+                renderSync = false;
+                workerTicks++;
+            }
+            wk = false;
+            return;
+        }
         if (batchN > 0) batchFlush();
         if (pbo != 0 && segUsed > 0) {
             long f0 = System.nanoTime();
@@ -321,6 +490,13 @@ public final class GpuAnim {
             GL45C.glNamedBufferStorage(pbo, (long) SEG * NSEG, flags);
             pboPtr = MemoryUtil.memAddress(GL45C.glMapNamedBufferRange(pbo, 0, (long) SEG * NSEG, flags));
             segUsed = 0;
+            renderSync = true;
+        }
+        if (wk) {   // the GL worker's tick: the batch or vanilla's own upload (no render-side ring uploads beside the worker's)
+            if (GlWorker.busy()) workerJoin();
+            boolean placed = BATCH && batchOn && segUsed + need <= SEG && batchPlace(c, x, y, frameX, frameY, data, w, h, levels);
+            if (placed) wkRecorded = true;
+            return placed;
         }
         if (segUsed + need > SEG) return false;
         if (BATCH && batchOn && batchPlace(c, x, y, frameX, frameY, data, w, h, levels)) return true;
@@ -557,7 +733,7 @@ public final class GpuAnim {
      * level as upload would (NeoForge's bound). false: nothing drawn - the CPU way.
      */
     public static boolean interpolate(SpriteContents c, int x, int y, int fx0, int fy0, int fx1, int fy1, double d) {
-        if (!INTERP || atlas == 0 || interpBroken || c.byMipLevel.length == 0 || c.byMipLevel[0].format() != NativeImage.Format.RGBA) return false;
+        if (!INTERP || wk || atlas == 0 || interpBroken || c.byMipLevel.length == 0 || c.byMipLevel[0].format() != NativeImage.Format.RGBA) return false;
         if (tunePhase == 0 || tunePhase == 1 || tunePhase == 5) return false;   // settling / measuring the CPU way, or decided for it
         if (!interpReady()) return false;
         long t0 = System.nanoTime();

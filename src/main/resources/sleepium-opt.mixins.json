@@ -157,6 +157,8 @@
   "client": [
     "ClientTickProfileMixin",
     "TickAsyncMixin",
+    "GlWorkerFrameMixin",
+    "GlWorkerFlipMixin",
     "GrowVertexBufferMixin",
     "StallProbeMixin",
     "StallProbeGlMixin",
