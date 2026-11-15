@@ -59,6 +59,16 @@ final class ClientMeter {
 
     private ClientMeter() {}
 
+    /** a measured window is running (frames are being logged) */
+    public static boolean measuring() {
+        return stopAtNanos >= 0;
+    }
+
+    /** the frame log's index of the next frame (ClientAuto's in-window flips) */
+    public static int frameIndex() {
+        return n;
+    }
+
     static void register(IEventBus bus) {
         if (System.getProperty("sleep.clientAuto") != null) ClientAuto.register(bus);
         // Forge 1.20.1: RenderTickEvent START / END is 1.21's RenderFrameEvent Pre / Post (both around GameRenderer.render

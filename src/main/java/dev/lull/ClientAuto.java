@@ -275,6 +275,7 @@ public final class ClientAuto {
         if (STEADY) {
             if (dev.lull.optsupport.LightTiming.ON) dev.lull.optsupport.LightTiming.reset();
             ClientMeter.start(Integer.getInteger("sleep.clientAuto.steadySeconds", 30), LABEL);   // stationary: rendering only, no loading in the window
+            flipStart();
             enter(Phase.FINISH);
         } else {
             ClientMeter.start(40, LABEL);
@@ -333,6 +334,54 @@ public final class ClientAuto {
                     log("shot " + i + " failed: " + e);
                 }
             }
+        }
+    }
+
+    /**
+     * -Dsleep.clientAuto.flip=class#field@W: an A/B of a runtime switch (a static boolean) inside one measured window -
+     * the field set in turn A B B A A B B A ... (A = its value at the start, B = flipped), W seconds each, restored at the
+     * end. Each change is logged with the frame log's frame index ("flip w=... frame=... value=..."), so the frame log
+     * splits into windows (tools: flip_split.py). One launch instead of one per variant: the same world, scene, JIT warm-up
+     * and heat on both sides, the variants interleaved against drift.
+     */
+    private static final String FLIP = System.getProperty("sleep.clientAuto.flip");
+    private static int flipFrom = -1, flipWindow = -1;
+    private static boolean flipA;
+    private static java.lang.reflect.Field flipField;
+
+    private static void flipStart() {
+        if (FLIP == null) return;
+        try {
+            String cls = FLIP.substring(0, FLIP.indexOf('#')), name = FLIP.substring(FLIP.indexOf('#') + 1, FLIP.indexOf('@'));
+            flipField = Class.forName(cls).getDeclaredField(name);
+            flipField.setAccessible(true);
+            flipA = flipField.getBoolean(null);
+            flipFrom = ticks;
+            flipWindow = -1;
+        } catch (Throwable t) {
+            log("flip failed: " + t);
+        }
+    }
+
+    private static void flipTick() {
+        try {
+            int w = (int) Math.round(Double.parseDouble(FLIP.substring(FLIP.indexOf('@') + 1)) * 20);
+            int win = (ticks - flipFrom) / Math.max(1, w);
+            if (win == flipWindow) return;
+            flipWindow = win;
+            boolean b = (win % 4 == 1) || (win % 4 == 2);   // A B B A
+            boolean v = b != flipA;
+            if (ClientMeter.measuring()) {
+                flipField.setBoolean(null, v);
+                log("flip w=" + win + " frame=" + ClientMeter.frameIndex() + " value=" + v + " (" + (b ? "B" : "A") + ")");
+            } else if (win > 0) {   // the window is over: back to A
+                flipField.setBoolean(null, flipA);
+                log("flip done, " + flipField.getName() + " back to " + flipA);
+                flipFrom = -1;
+            }
+        } catch (Throwable t) {
+            log("flip failed: " + t);
+            flipFrom = -1;
         }
     }
 
@@ -506,6 +555,7 @@ public final class ClientAuto {
         }
         shotsTick(Minecraft.getInstance());
         if (abAt >= 0 && ticks >= abAt) abTick(Minecraft.getInstance());
+        if (FLIP != null && flipFrom >= 0) flipTick();
         if (hashAt >= 0 && ticks >= hashAt) {
             // only when the renderer is idle: every section built and uploaded (the scene's sections may still be queued)
             Minecraft m = Minecraft.getInstance();
