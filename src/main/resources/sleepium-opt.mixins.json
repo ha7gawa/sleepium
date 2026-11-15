@@ -166,6 +166,7 @@
     "TickSliceRenderMixin",
     "TickSliceBlockEntityMixin",
     "GlInboxMixin",
+    "ClientTickProfileMixin",
     "UploadRingMixin",
     "NoFrameYieldMixin",
     "GrowVertexBufferMixin",
