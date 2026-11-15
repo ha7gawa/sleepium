@@ -258,13 +258,21 @@ public final class ParallelRender {
         public void run() {
             if (!claimed.compareAndSet(false, true)) return;   // the render thread took it while waiting
             if (tick != null) {   // TickPoses: the tick's pair interpolated at this frame's partial tick
+                Set ts = null;
                 try {
                     parts.clear();
                     ok = TickPoses.frameParts(tick, this);
+                    // the dispatcher's flame and shadow here too, as the usual job draws them (on the render thread they
+                    // cost the N100 0.7 ms a frame, 11-15)
+                    if (ok) {
+                        ts = SETS.poll();
+                        ok = ts != null && extras(ts, this);
+                    }
                 } catch (Throwable t) {
                     ok = false;
                     if (failed++ < 5) System.out.println("[sleep/opt] tick poses: " + t);
                 } finally {
+                    backHome(ts);
                     done = true;
                     synchronized (this) {
                         notifyAll();
@@ -1169,7 +1177,7 @@ public final class ParallelRender {
                 j.await();
                 j.tick = null;
                 if (j.ok && (j.gpuTick ? TickPoses.mergeGpu(tp, j) : PartBatch.mergeJob(j.parts, j.buffers))) {
-                    shadow(j);
+                    RenderCache.append(j.out, j.buffers);   // (the flame and the shadow the job recorded)
                     parallel++;
                     if (clean) leakCheck(j);
                     j.entity = null;
@@ -1342,6 +1350,40 @@ public final class ParallelRender {
     }
 
     /** renderEntity + EntityRenderDispatcher.render (without hitboxes), with a worker's renderers. */
+    /** TickPoses' frame job: the dispatcher's flame (burning) and shadow into the job's output, as render() draws them */
+    private static boolean extras(Set s, Job j) {
+        Entity e = j.entity;
+        float pt = j.pt;
+        EntityRenderer<? super Entity> r = s.renderer(e);
+        if (r == null) return false;
+        RenderCache.Recorder rec = s.recorder;
+        rec.reset();
+        PoseStack pose = s.pose;
+        pose.setIdentity();
+        Vec3 off = r.getRenderOffset(e, pt);
+        pose.pushPose();
+        pose.translate(Mth.lerp((double) pt, e.xOld, e.getX()) - j.camX + off.x(), Mth.lerp((double) pt, e.yOld, e.getY()) - j.camY + off.y(),
+                Mth.lerp((double) pt, e.zOld, e.getZ()) - j.camZ + off.z());
+        EntityRenderDispatcher d = Minecraft.getInstance().getEntityRenderDispatcher();
+        if (e.displayFireAnimation()) {
+            EntityRenderDispatcherInvoker di = (EntityRenderDispatcherInvoker) d;
+            di.sleep$renderFlame(pose, rec, e, Mth.rotationAroundAxis(Mth.Y_AXIS, di.sleep$cameraOrientation(), new org.joml.Quaternionf()));
+        }
+        pose.translate(-off.x(), -off.y(), -off.z());
+        if (d.options.entityShadows().get() && ((EntityRenderDispatcherInvoker) d).sleep$shouldRenderShadow() && !e.isInvisible()) {
+            float f = ((dev.lull.opt.EntityRendererAccessor) r).sleep$shadowRadius(e);
+            if (f > 0.0F) {
+                double d1 = d.distanceToSqr(e.getX(), e.getY(), e.getZ());
+                float f1 = (float) ((1.0 - d1 / 256.0) * (double) ((dev.lull.opt.EntityRendererAccessor) r).sleep$shadowStrength());
+                if (f1 > 0.0F) EntityRenderDispatcherInvoker.sleep$renderShadow(pose, rec, e, f1, pt, e.level(), Math.min(f, 32.0F));
+            }
+        }
+        pose.popPose();
+        if (rec.unsupported) return false;
+        rec.finish(j.out);
+        return true;
+    }
+
     private static boolean render(Set s, Job j) {
         Entity e = j.entity;
         long coat = Coatings.of(e);
