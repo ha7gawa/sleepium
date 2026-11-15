@@ -209,6 +209,8 @@ public final class ParallelRender {
         boolean rendererOnly;
         /** TickPoses: this frame the entity is drawn from its tick's pair */
         TickPoses.Pair tick;
+        /** TickPoses: the pair's GPU records are used (the render thread copies them at the merge) */
+        boolean gpuTick;
         /** TickPoses: a pair's renders all with one renderer set (a part's geometry is keyed by the set's own model objects) */
         Set forcedSet;
         Entity entity;
@@ -1069,10 +1071,11 @@ public final class ParallelRender {
             Job j = QUEUE.get(i);
             boolean clean = j.pose.clear();   // (PoseStack.clear: only the base pose left)
             if (j.tick != null) {
+                TickPoses.Pair tp = j.tick;
                 j.run();   // (not taken by a worker yet: here)
                 j.await();
                 j.tick = null;
-                if (j.ok && PartBatch.mergeJob(j.parts, j.buffers)) {
+                if (j.ok && (j.gpuTick ? TickPoses.mergeGpu(tp, j) : PartBatch.mergeJob(j.parts, j.buffers))) {
                     shadow(j);
                     parallel++;
                     if (clean) leakCheck(j);
@@ -1139,10 +1142,24 @@ public final class ParallelRender {
         if (TickPoses.ON) TickPoses.endFrame();
     }
 
-    /** TickPoses: the dispatcher's shadow for an entity drawn from its pair (vanilla draws it after the renderer, at the entity's position) */
+    /**
+     * TickPoses: what the dispatcher draws around the renderer, for an entity drawn from its pair - the flame (burning:
+     * at the render offset, facing the camera) and the shadow (at the entity's position), as vanilla after the renderer.
+     */
     private static void shadow(Job j) {
         Entity e = j.entity;
         EntityRenderDispatcher d = Minecraft.getInstance().getEntityRenderDispatcher();
+        if (e.displayFireAnimation()) {
+            float pt = j.pt;
+            Vec3 off = d.getRenderer(e).getRenderOffset(e, pt);
+            PoseStack ps = j.pose;
+            ps.pushPose();
+            ps.translate(Mth.lerp((double) pt, e.xOld, e.getX()) - j.camX + off.x(), Mth.lerp((double) pt, e.yOld, e.getY()) - j.camY + off.y(),
+                    Mth.lerp((double) pt, e.zOld, e.getZ()) - j.camZ + off.z());
+            EntityRenderDispatcherInvoker di = (EntityRenderDispatcherInvoker) d;
+            di.sleep$renderFlame(ps, j.buffers, e, Mth.rotationAroundAxis(Mth.Y_AXIS, di.sleep$cameraOrientation(), new org.joml.Quaternionf()));
+            ps.popPose();
+        }
         if (!d.options.entityShadows().get() || !((EntityRenderDispatcherInvoker) d).sleep$shouldRenderShadow() || e.isInvisible()) return;
         EntityRenderer<? super Entity> r = d.getRenderer(e);
         float f = ((dev.lull.opt.EntityRendererAccessor) r).sleep$shadowRadius(e);
