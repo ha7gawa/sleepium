@@ -112,7 +112,19 @@ public final class ParallelEntities {
                 : e.canBeCollidedWith() ? " (collidable)" : REFUSED.contains(e.getClass()) ? " (refused)" : "");
     }
 
+    /**
+     * -Dlab.pentities.living=true (plan B5, 11-15): living entities too (mobs - their client tick is lerping toward the
+     * server's positions, head turns, walk animation, effects), players never (the local one is driven by input). For a
+     * living entity on a worker any entity query that sees another entity is a conflict (pushEntities on the client
+     * pushes the players it finds: a write to another entity).
+     */
+    static final boolean LIVING = Boolean.getBoolean("lab.pentities.living");
+    /** test: the tail ticked by the render thread alone (the check's own artefacts apart from the threads') */
+    private static final boolean SERIAL_TAIL = Boolean.getBoolean("lab.pentities.serialTailTest");
+
     private static boolean mayTickApart(Entity e) {
+        if (LIVING && e instanceof LivingEntity)
+            return !(e instanceof net.minecraft.world.entity.player.Player) && !e.isPassenger() && !e.isVehicle() && !e.canBeCollidedWith() && !REFUSED.contains(e.getClass());
         return !(e instanceof LivingEntity) && !e.isPassenger() && !e.isVehicle() && !e.canBeCollidedWith() && !REFUSED.contains(e.getClass());
     }
 
@@ -226,7 +238,8 @@ public final class ParallelEntities {
             if (cls == null) return false;
             try {
                 Class<?> c = Class.forName(cls.replace('/', '.'), false, ParallelEntities.class.getClassLoader());
-                return LivingEntity.class.isAssignableFrom(c);
+                // (inert for the runs' entities: unless a living one with LIVING - then only a player's guard keeps it out)
+                return LIVING ? net.minecraft.world.entity.player.Player.class.isAssignableFrom(c) : LivingEntity.class.isAssignableFrom(c);
             } catch (ClassNotFoundException e) {
                 return false;
             }
@@ -298,7 +311,7 @@ public final class ParallelEntities {
         try {
             LabRuntime pool = FrameReactor.pool();
             int chunks = (runEnd - t + CHUNK - 1) / CHUNK;
-            int helpers = Math.min(pool.workerCount(), LabRuntime.GUIDED ? runEnd - t - 1 : chunks - 1);
+            int helpers = SERIAL_TAIL ? 0 : Math.min(pool.workerCount(), LabRuntime.GUIDED ? runEnd - t - 1 : chunks - 1);
             parts = helpers + 1;
             for (int k = 0; k < helpers; k++) pool.execute(ParallelEntities::workerRun);
             drain(true);
@@ -409,7 +422,7 @@ public final class ParallelEntities {
         Entity e = all[i];
         conflicts++;
         if (e != null && REFUSED.add(e.getClass()))
-            System.out.println("[sleep/opt] parallel entities: " + e.getClass().getName() + " refused (a draw from the level's random source)");
+            org.slf4j.LoggerFactory.getLogger("sleep").info("[sleep/opt] parallel entities: " + e.getClass().getName() + " refused (a draw from the level's random source)");
     }
 
     /** a worker did something that belongs to the render thread: counted, its class refused from the next walk on */
@@ -419,7 +432,7 @@ public final class ParallelEntities {
         Entity e = all[i];
         conflicts++;
         if (e != null && REFUSED.add(e.getClass()))
-            System.out.println("[sleep/opt] parallel entities: " + e.getClass().getName() + " refused (" + what + " on a worker)");
+            org.slf4j.LoggerFactory.getLogger("sleep").info("[sleep/opt] parallel entities: " + e.getClass().getName() + " refused (" + what + " on a worker)");
     }
 
     /** an entity query on a worker: its result must not hold another entity of the tail (still being ticked) */
@@ -427,6 +440,14 @@ public final class ParallelEntities {
         int i = CURRENT.get()[0];
         if (i < 0 || !ParticleWorkers.inWorker()) return;
         Entity self = all[i];
+        if (LIVING && self instanceof LivingEntity) {
+            for (Object o : result)
+                if (o != self && o instanceof Entity) {
+                    conflict("an entity query of a living entity that saw another entity");
+                    return;
+                }
+            return;
+        }
         for (Object o : result)
             if (o != self && o instanceof Entity e && indexInTail(e)) {
                 conflict("an entity query that saw another entity of the tail");

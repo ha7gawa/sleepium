@@ -56,6 +56,12 @@ final class ParallelEntitiesCheck {
         if (v instanceof java.util.concurrent.atomic.AtomicInteger a) return a.get();
         if (v instanceof net.minecraft.util.RandomSource && depth < 2) return objectState(v, depth + 1);
         if (v instanceof net.minecraft.world.level.levelgen.MarsagliaPolarGaussian && depth < 3) return objectState(v, depth + 1);
+        // an entity's own small state objects (body rotation control, walk animation, look control...): their fields - the
+        // client tick of a mob changes them in place (Mob.tickHeadTurn: BodyRotationControl.clientTick), 11-15
+        if (depth < 1 && !v.getClass().isRecord() && v.getClass().getName().startsWith("net.minecraft.world.entity.") && !(v instanceof Entity) && !(v instanceof Enum<?>)
+                && !(v instanceof net.minecraft.world.entity.ai.Brain<?>) && !(v instanceof net.minecraft.network.syncher.SynchedEntityData)
+                && !(v instanceof net.minecraft.world.entity.EntityType<?>) && !(v instanceof net.minecraft.world.entity.ai.attributes.AttributeMap)
+                && !(v instanceof Map) && !(v instanceof Collection)) return objectState(v, depth + 1);
         if (v instanceof Map<?, ?> m) return new HashMap<>(m);
         if (v instanceof Collection<?> c) return new ArrayList<>(c);
         if (v instanceof double[] a) return a.clone();
@@ -117,6 +123,7 @@ final class ParallelEntitiesCheck {
                 Object cur = fs[i].get(ref);
                 if (inner instanceof List<?> il && !il.isEmpty() && il.get(0) == cur) putBack(cur, inner);
                 else if (cur instanceof java.util.concurrent.atomic.AtomicLong || cur instanceof java.util.concurrent.atomic.AtomicInteger) putBack(cur, inner);
+                else if (cur != null && cur != inner && (cur instanceof Collection || cur instanceof Map || cur.getClass().isArray())) putBack(cur, inner);   // (in place: a copy is not the field's type)
                 else fs[i].set(ref, inner);
             }
         } else if (ref instanceof Map m) {   // only when changed: an immutable one is replaced, never changed in place
@@ -153,7 +160,7 @@ final class ParallelEntitiesCheck {
                         ok = false;
                         String key = e.getClass().getSimpleName() + "." + fs[k].getName();
                         if (BY_FIELD.merge(key, 1L, Long::sum) <= 3)
-                            System.out.println("[sleep/opt] parallel entities MISMATCH " + key + ": parallel " + show(p[2 * k + 1]) + ", vanilla " + show(ser[2 * k + 1]));
+                            org.slf4j.LoggerFactory.getLogger("sleep").info("[sleep/opt] parallel entities MISMATCH " + key + ": parallel " + show(p[2 * k + 1]) + ", vanilla " + show(ser[2 * k + 1]));
                     }
                 checked++;
                 if (!ok) mismatches++;
