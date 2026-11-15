@@ -59,10 +59,12 @@ public final class UploadRing {
     private static final long[] FRAME_FENCES = new long[16];
     private static int frameNo;
     public static long fifWaits, fifWaitNs, frames;
+    /** off: no waiting (the fences still made) - ClientAuto's in-window flip switches it */
+    public static boolean fifEnabled = true;
 
     /** Minecraft.runTick HEAD (UploadRingMixin): the last frame gets its fence, the next segment is taken if the GPU is done with it */
     public static void frameBegin() {
-        if (FIF > 0) {
+        if (FIF > 0 && fifEnabled) {
             // a fence for every frame, the oldest one we keep waited for: at most FIF frames queued ahead of the GPU
             int i = frameNo & 15;
             if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
