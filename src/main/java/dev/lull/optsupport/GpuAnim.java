@@ -131,7 +131,10 @@ public final class GpuAnim {
                     ticks, emptyAtlasTicks, String.format(java.util.Locale.ROOT, "%.3f", tickNs / 1e6 / ticks), copies, String.format(java.util.Locale.ROOT, "%.1f", (double) copies / ticks),
                     String.format(java.util.Locale.ROOT, "%.1f", copyNs / 1e3 / Math.max(1, copies)), String.format(java.util.Locale.ROOT, "%.3f", copyNs / 1e6 / ticks),
                     String.format(java.util.Locale.ROOT, "%.1f", (double) (SpriteMix.fast + SpriteMix.slow) / ticks), String.format(java.util.Locale.ROOT, "%.3f", interpUploadNs / 1e6 / ticks), String.format(java.util.Locale.ROOT, "%.3f", pboNs / 1e6 / ticks), ringWaits, sheetsMade, gpuBlends, tableBuilds, tableReuses,
-                    VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "");
+                    (VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "")
+                    + (pboUploads > 0 ? String.format(java.util.Locale.ROOT, "; the ring's parts per upload: rows %.1f us, sub image %.1f us, copies %.1f us",
+                    pboMemNs / 1e3 / pboUploads, pboSubNs / 1e3 / pboUploads, pboCopyNs / 1e3 / pboUploads) : "")
+                    + (batches > 0 ? String.format(java.util.Locale.ROOT, "; batched: %d ticks, %d frames, %.3f ms a tick", batches, batchFrames, batchNs / 1e6 / batches) : ""));
     }
 
     /**
@@ -159,7 +162,110 @@ public final class GpuAnim {
     private static int pbo, seg, segUsed;
     private static long pboPtr;
     private static final long[] FENCES = new long[NSEG];
-    public static long pboUploads, pboNs, ringWaits;
+    public static long pboUploads, pboNs, ringWaits, pboMemNs, pboSubNs, pboCopyNs;
+
+    /**
+     * -Dlab.gpuAnim.batch=true (with the PBO ring): a tick's interpolated frames packed into one staging texture
+     * (shelves of 16-aligned sprites, its mip levels at the same places shifted), uploaded with one glTextureSubImage2D a
+     * level, then copied into the atlas sprite by sprite. On the N100 a glTextureSubImage2D from the ring cost ~28 us a
+     * call whatever its size (139 us a 16x16 sprite with its 5 levels, 11-15): one call a level for all the tick's frames.
+     */
+    static final boolean BATCH = PBO_FLAG && Boolean.getBoolean("lab.gpuAnim.batch");
+    /** off: the frames go one by one again (ClientAuto's in-window flip) */
+    public static boolean batchOn = true;
+    private static final int BW = 256, BH = 64, BLEVELS = 5;
+    private static int batchTex, batchN, shelfX, shelfY, shelfH, batchSeg = -1;
+    private static long batchOff;
+    private static final int[] BX = new int[256], BY = new int[256], BAX = new int[256], BAY = new int[256], BWID = new int[256], BHEI = new int[256], BLEV = new int[256],
+            BFX = new int[256], BFY = new int[256];
+    private static final NativeImage[] BDATA = new NativeImage[256];
+    public static long batches, batchFrames, batchNs;
+
+    /** a level's region of the batch in the segment: BW >> k by BH >> k pixels, after the levels above it */
+    private static long levelOff(int k) {
+        long o = 0;
+        for (int i = 0; i < k; i++) o += (long) (BW >> i) * (BH >> i) * 4;
+        return o;
+    }
+
+    private static boolean batchPlace(SpriteContents c, int x, int y, int frameX, int frameY, NativeImage[] data, int w, int h, int levels) {
+        if (batchN == BX.length || levels > BLEVELS || (w & 15) != 0 || (h & 15) != 0) return false;
+        if (batchN == 0) {
+            long need = levelOff(BLEVELS);
+            if (segUsed + need > SEG) return false;
+            batchOff = (long) seg * SEG + segUsed;
+            batchSeg = seg;
+            segUsed += (int) need;
+            shelfX = shelfY = shelfH = 0;
+        }
+        if (shelfX + w > BW) {   // the next shelf
+            shelfY += shelfH;
+            shelfX = 0;
+            shelfH = 0;
+        }
+        if (shelfY + h > BH || w > BW) return false;
+        int bx = shelfX, by = shelfY;
+        shelfX += w;
+        shelfH = Math.max(shelfH, h);
+        long t0 = System.nanoTime();
+        for (int k = 0; k < levels; k++) {
+            NativeImage img = data[k];
+            if (img.format() != NativeImage.Format.RGBA) return false;
+            long src = img.pixels;   // (1.20.1: the field, by the access transformer)
+            int iw = img.getWidth(), lw = w >> k, lh = h >> k, fx = frameX >> k, fy = frameY >> k, stride = (BW >> k) * 4;
+            long dst = pboPtr + batchOff + levelOff(k) + (long) (by >> k) * stride + (long) (bx >> k) * 4;
+            for (int r = 0; r < lh; r++) MemoryUtil.memCopy(src + ((long) (fy + r) * iw + fx) * 4, dst + (long) r * stride, (long) lw * 4);
+        }
+        int i = batchN++;
+        BX[i] = bx;
+        BY[i] = by;
+        BAX[i] = x;
+        BAY[i] = y;
+        BWID[i] = w;
+        BHEI[i] = h;
+        BLEV[i] = levels;
+        BFX[i] = frameX;
+        BFY[i] = frameY;
+        BDATA[i] = data[0];
+        batchNs += System.nanoTime() - t0;
+        return true;
+    }
+
+    /** the tick's batch: one upload a level (the rows in use), then each sprite's copies into the atlas */
+    private static void batchFlush() {
+        long t0 = System.nanoTime();
+        if (batchTex == 0) {
+            batchTex = TextureUtil.generateTextureId();
+            TextureUtil.prepareImage(batchTex, BLEVELS - 1, BW, BH);
+            GlStateManager._bindTexture(atlas);
+        }
+        int used = shelfY + shelfH, maxLev = 0;
+        for (int i = 0; i < batchN; i++) maxLev = Math.max(maxLev, BLEV[i]);
+        org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, pbo);
+        GlStateManager._pixelStore(GL11C.GL_UNPACK_ROW_LENGTH, 0);
+        GlStateManager._pixelStore(GL11C.GL_UNPACK_SKIP_PIXELS, 0);
+        GlStateManager._pixelStore(GL11C.GL_UNPACK_SKIP_ROWS, 0);
+        GlStateManager._pixelStore(GL11C.GL_UNPACK_ALIGNMENT, 4);
+        for (int k = 0; k < maxLev; k++) {
+            int lh = Math.max(1, used >> k);
+            GL45C.glTextureSubImage2D(batchTex, k, 0, 0, BW >> k, lh, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, batchOff + levelOff(k));
+        }
+        org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, 0);
+        for (int i = 0; i < batchN; i++)
+            for (int k = 0; k < BLEV[i]; k++)
+                GL43C.glCopyImageSubData(batchTex, GL11C.GL_TEXTURE_2D, k, BX[i] >> k, BY[i] >> k, 0, atlas, GL11C.GL_TEXTURE_2D, k, BAX[i] >> k, BAY[i] >> k, 0,
+                        BWID[i] >> k, BHEI[i] >> k, 1);
+        if (VERIFY && readBack)   // -Dlab.gpuAnim.verify: each sprite's level 0 read back against what vanilla uploads
+            for (int i = 0; i < batchN; i++) verify(BDATA[i], BAX[i], BAY[i], BFX[i], BFY[i], BWID[i], BHEI[i]);
+        java.util.Arrays.fill(BDATA, 0, batchN, null);
+        batches++;
+        batchFrames += batchN;
+        pboUploads += batchN;
+        batchN = 0;
+        long ns = System.nanoTime() - t0;
+        batchNs += ns;
+        pboNs += ns;
+    }
 
     /** an atlas's animation tick begins: the next ring segment, once the GPU has read it */
     public static void tickBegin() {
@@ -179,6 +285,7 @@ public final class GpuAnim {
     public static void tickEnd() {
         blitEnd();
         interpEnd();
+        if (batchN > 0) batchFlush();
         if (pbo != 0 && segUsed > 0) {
             FENCES[seg] = org.lwjgl.opengl.GL32C.glFenceSync(org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
             GL11C.glFlush();
@@ -223,6 +330,7 @@ public final class GpuAnim {
             LOG.info("[sleep/opt] gpu anim: interpolated frames through a mapped ring ({})", dsa ? "direct state access" : "bound buffers");
         }
         if (segUsed + need > SEG) return false;
+        if (BATCH && batchOn && dsa && !blit && batchPlace(c, x, y, frameX, frameY, data, w, h, levels)) return true;
         long t0 = System.nanoTime();
         org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL21C.GL_PIXEL_UNPACK_BUFFER, pbo);
         GlStateManager._pixelStore(GL11C.GL_UNPACK_ROW_LENGTH, 0);
@@ -246,6 +354,7 @@ public final class GpuAnim {
             long src = img.pixels;
             int iw = img.getWidth(), lw = w >> k, lh = h >> k, fx = frameX >> k, fy = frameY >> k;
             long off = (long) seg * SEG + segUsed;
+            long m0 = System.nanoTime();
             for (int r = 0; r < lh; r++) MemoryUtil.memCopy(src + ((long) (fy + r) * iw + fx) * 4, pboPtr + off + (long) r * lw * 4, (long) lw * 4);
             if (dsa) {
                 GL45C.glTextureSubImage2D(stage, k, 0, 0, lw, lh, GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, off);
