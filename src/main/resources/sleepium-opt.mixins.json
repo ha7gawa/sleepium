@@ -157,6 +157,9 @@
   "client": [
     "ClientTickProfileMixin",
     "TickAsyncMixin",
+    "TickThreadMixin",
+    "RenderThreadMixin",
+    "RenderThreadModelDataMixin",
     "GlWorkerFrameMixin",
     "GlWorkerFlipMixin",
     "GlWorkerLayerMixin",
