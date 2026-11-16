@@ -824,10 +824,10 @@ public final class FrameThread {
         tHeld += System.nanoTime() - h0;
         handAt = System.nanoTime();
         mainRecording = false;
-        if (holdToFrame) {
+        if (holdToFrame) {   // the level change's hold ends here - only it: a hold around it (a respawn's) goes on
             holdToFrame = false;
-            mainHolding = false;
-            holdDepth = 0;
+            if (holdDepth > 0) holdDepth--;
+            if (holdDepth == 0) mainHolding = false;
         }
         if (SELF && OVERLAP) {
             selfOk = mc.screen == null && mc.level != null && !mc.isPaused() && selfAllowed();
@@ -1532,6 +1532,7 @@ public final class FrameThread {
         if (!active || Thread.currentThread() != mainThread) return;
         if (RING > 1) dropBelow = handed;   // (the frames handed over and not begun: not drawn - their calls are made)
         holdForMain();
+        if (holdToFrame) holdDepth--;   // (one level-change hold at a time: the next hand-over ends it)
         holdToFrame = true;
     }
 

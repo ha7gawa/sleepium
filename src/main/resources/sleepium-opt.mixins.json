@@ -162,6 +162,7 @@
     "RenderThreadMixin",
     "RenderThreadModelDataMixin",
     "FrameThreadMixin",
+    "FrameThreadRespawnMixin",
     "FrameThreadSystemMixin",
     "FrameThreadLevelMixin",
     "FrameThreadParticlesMixin",

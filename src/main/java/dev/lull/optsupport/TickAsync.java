@@ -167,6 +167,22 @@ public final class TickAsync {
         if (ParallelEntities.asyncRunning() && ParallelEntities.asyncFinished()) join();
     }
 
+    public static long tasksDeferred;
+
+    /**
+     * runTick's tasks (TickAsyncMixin): may they run now? Not while the walk ticks entities - joined here if it is done
+     * or a tick is due anyway; otherwise the tasks wait (counted)
+     */
+    public static boolean tasksMayRun(boolean tickDue) {
+        if (!ParallelEntities.asyncRunning()) return true;
+        if (tickDue || ParallelEntities.asyncFinished()) {
+            join();
+            return true;
+        }
+        tasksDeferred++;
+        return false;
+    }
+
     /** a level change: the walk joined whole, its render part too */
     public static void joinAll() {
         if (ParallelEntities.asyncRunning()) {
@@ -230,9 +246,9 @@ public final class TickAsync {
     }
 
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "tick async: walks %d, entities %d (snapshots %d, unseen %d - waited for in a frame %d), frames holding %d (from snapshots %d), skipped %d, joins %d (%.3f ms a join; render part deferred to the tick's end %d, %.3f ms each there; gave way %d times)",
+        return String.format(java.util.Locale.ROOT, "tick async: walks %d, entities %d (snapshots %d, unseen %d - waited for in a frame %d), frames holding %d (from snapshots %d), skipped %d, joins %d (%.3f ms a join; render part deferred to the tick's end %d, %.3f ms each there; gave way %d times; client tasks waited for the walk %d times)",
                 walks, entities, snapshots, unseen, unseenWaits, holdFrames, snapFrames, skipped, joins, joins == 0 ? 0.0 : joinWaitNs / 1e6 / joins,
-                deferredJoins, deferredJoins == 0 ? 0.0 : pendingWaitNs / 1e6 / deferredJoins, gaveWay)
+                deferredJoins, deferredJoins == 0 ? 0.0 : pendingWaitNs / 1e6 / deferredJoins, gaveWay, tasksDeferred)
                 + String.format(java.util.Locale.ROOT, "; skips: no pair %d, snapshot failed %d, pair merge failed %d (held pairs on the CPU after a GPU refusal %d, refusals marked %d)",
                         skipNone, skipSnap, skipMerge, TickPoses.HELD_CPU.get(), TickPoses.HELD_REFUSED.get())
                 + (GEN ? String.format(java.util.Locale.ROOT, "; generation gates %d (waited at %d, %.3f ms a gate)", gates, gateWaits, gates == 0 ? 0.0 : gateWaitNs / 1e6 / gates) : "");
