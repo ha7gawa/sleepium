@@ -213,6 +213,7 @@ public final class FrameThread {
 
     private static void begin() {
         awaitLast();
+        mainRecording = true;   // (before the check: an extra frame starting now sees it and backs off)
         if (extraRunning) waitPumping(() -> !extraRunning);
         nOps = 0;
         fresh = false;
@@ -295,6 +296,11 @@ public final class FrameThread {
         } else heldValid = false;
         tHeld += System.nanoTime() - h0;
         handAt = System.nanoTime();
+        mainRecording = false;
+        if (holdToFrame) {
+            holdToFrame = false;
+            mainHolding = false;
+        }
         jobDone = false;
         LockSupport.unpark(thread);
         if (OVERLAP) {   // (A2 test) the frame draws while the main thread goes on; the next frame's first op waits
@@ -465,10 +471,12 @@ public final class FrameThread {
             long spinUntil = System.nanoTime() + SPIN_NS;   // (bounded: the main thread's next frame usually comes soon)
             while (jobDone && !borrowAsked) {
                 if (System.nanoTime() < spinUntil) Thread.onSpinWait();
-                else if (EXTRA && mainTicking && frameHolds && nOps > 0) {
-                    // (no sooner than the frame rate limit allows: extra frames are frames the player asked to cap)
+                else if (EXTRA && (mainTicking || EXTRA_ANY && !mainRecording && System.nanoTime() - handAt < 1_000_000_000L) && frameHolds && nOps > 0) {
+                    // (no sooner than the frame rate limit allows: extra frames are frames the player asked to cap; when
+                    // the main thread is not known to be busy, only once it is half a frame late)
                     int cap = mc != null ? mc.getWindow().getFramerateLimit() : 260;
-                    long due = doneAt + Math.max(lastFrameNs, cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0) - System.nanoTime();
+                    long iv = Math.max(lastFrameNs, cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0);
+                    long due = doneAt + (mainTicking ? iv : iv * 3 / 2) - System.nanoTime();
                     if (due > 0) LockSupport.parkNanos(due);
                     else if (extraFrame()) doneAt = System.nanoTime();
                 } else LockSupport.park();
@@ -536,6 +544,14 @@ public final class FrameThread {
      */
     public static volatile boolean EXTRA = Boolean.getBoolean("lab.frameThread.extra");
     private static volatile boolean mainTicking, extraRunning;
+    /** the main thread records a frame (begin .. present): no extra frame may start (they share the op list) */
+    private static volatile boolean mainRecording;
+    /**
+     * -Dlab.frameThread.extraAny (off): an extra frame whenever the main thread is half a frame late, whatever holds it
+     * (a light job's join, a mod's work) - not only in a tick or the queued tasks. Lost on the N100 (tour at 120 fps:
+     * p99 15.6 -> 37 ms): an extra frame there takes 6-8 ms, and a main thread only a little late then waits for it.
+     */
+    public static final boolean EXTRA_ANY = Boolean.getBoolean("lab.frameThread.extraAny");
     private static boolean extraNow;
     private static long recordedAt, lastFrameNs = 500_000;
     private static float recordedPt;
@@ -658,7 +674,19 @@ public final class FrameThread {
     }
 
     public static void releaseForMain() {
-        mainHolding = false;
+        if (!holdToFrame) mainHolding = false;   // (a level change's hold lasts until the next frame)
+    }
+
+    private static boolean holdToFrame;
+
+    /**
+     * a level change (FrameReactor's LEVEL_CHANGE: disconnect, a new level): no frame and no extra frame from the old
+     * level until the main thread hands a new frame over (the extra frames' "main thread late" would draw it otherwise)
+     */
+    public static void holdUntilNextFrame() {
+        if (!active || Thread.currentThread() != mainThread) return;
+        holdForMain();
+        holdToFrame = true;
     }
 
     /** a DeltaTracker whose partial tick goes on with the clock since the recorded frame (capped at 1) */
@@ -678,9 +706,9 @@ public final class FrameThread {
 
     /** the frame thread, idle: an extra frame if the main thread is in a tick and the last frame is older than one frame */
     private static boolean extraFrame() {
-        if (!EXTRA || !OVERLAP || !mainTicking || borrowAsked || mainHolding || nOps == 0 || !jobDone) return false;
+        if (!EXTRA || !OVERLAP || !(mainTicking || EXTRA_ANY) || mainRecording || borrowAsked || mainHolding || nOps == 0 || !jobDone) return false;
         extraRunning = true;
-        if (!jobDone || borrowAsked || mainHolding) {   // (a job or a borrow came meanwhile)
+        if (!jobDone || borrowAsked || mainHolding || mainRecording) {   // (a job or a borrow came meanwhile)
             extraRunning = false;
             return false;
         }
