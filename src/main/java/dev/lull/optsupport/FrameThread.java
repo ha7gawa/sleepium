@@ -727,6 +727,7 @@ public final class FrameThread {
             return;
         }
         if (mainHolds) giveBack();
+        cpuMark();
         if (LATCH) turnParams();
         long p1 = System.nanoTime();
         tPoll += p1 - p0;
@@ -1620,6 +1621,17 @@ public final class FrameThread {
         }
     }
 
+    /** the measured window's CPU of the main thread and the frame thread (ns), taken at its first hand-over */
+    private static long cpuMain0 = -1, cpuFrame0, cpuAt0;
+
+    private static void cpuMark() {
+        if (cpuMain0 >= 0 || !dev.lull.ClientMeter.measuring()) return;
+        var mx = java.lang.management.ManagementFactory.getThreadMXBean();
+        cpuMain0 = mx.getThreadCpuTime(mainThread.threadId());
+        cpuFrame0 = mx.getThreadCpuTime(thread.threadId());
+        cpuAt0 = System.nanoTime();
+    }
+
     public static String report() {
         if (!ON) return "";
         StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT, "; frame thread: frames %d (%.3f ms a frame waited), overlapped %d (%.3f ms waited before the next), hand-over wake-ups: the frame thread %.1f us, the main thread %.1f us, borrows %d (%.3f ms each), failures %d",
@@ -1629,6 +1641,12 @@ public final class FrameThread {
         if (NO_WAIT) b.append("; frames skipped by the main thread (no wait) ").append(skippedFrames);
         b.append(pollGaps());
         if (MID_TICK) b.append("; entities drawn at their last tick's end (mid-tick) ").append(midTickDraws);
+        if (cpuMain0 >= 0 && thread != null) {
+            var mx = java.lang.management.ManagementFactory.getThreadMXBean();
+            double secs = (System.nanoTime() - cpuAt0) / 1e9;
+            b.append(String.format(java.util.Locale.ROOT, "; CPU in the window: main thread %.1f ms/s, frame thread %.1f ms/s",
+                    (mx.getThreadCpuTime(mainThread.threadId()) - cpuMain0) / 1e6 / secs, (mx.getThreadCpuTime(thread.threadId()) - cpuFrame0) / 1e6 / secs));
+        }
         if (SELF) b.append(String.format(java.util.Locale.ROOT, "; self-clocked: frames of its own %d, hand-overs %d (level %d, calls %d, marks %d, tick %d, lists %d, 50 ms %d), skipped %d; main idle waits %d (woken: task %d, walk %d, mouse %d, tick due %d, screen %d)",
                 selfFrames, selfHands, HAND_WHY[0], HAND_WHY[1], HAND_WHY[2], HAND_WHY[3], HAND_WHY[4], HAND_WHY[5], selfSkips, idleWaits, idleWakesTask, idleWakesWalk, idleWakesMouse, idleWakesDue, idleWakesScreen));
         if (PUBLISH) b.append("; published lists: entities ").append(entPublishes).append(", particles ").append(partPublishes);
