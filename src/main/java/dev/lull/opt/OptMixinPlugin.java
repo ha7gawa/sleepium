@@ -34,6 +34,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.EntitySectionIndexMixin");
         if (simple.equals("NeighborReactStateMixin") || simple.equals("NeighborReactMultiMixin"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NeighborReactMixin");
+        if (simple.equals("ParallelAnimationMixin"))   // models animated on several threads: a scratch vector each
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntitiesMixin");
         if (simple.startsWith("AllocTrim"))   // one feature: temporary objects of hot paths reused (AllocTrim)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.AllocTrim");
         if (simple.startsWith("LightSnapshot"))   // one feature: light snapshots as base + delta (LightSnapshot)

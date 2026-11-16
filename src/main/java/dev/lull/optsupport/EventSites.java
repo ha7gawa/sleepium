@@ -86,7 +86,11 @@ public final class EventSites {
     }
 
     /** A listener was added or removed somewhere: every fast site back to the normal post (before it can be missed). */
+    /** counted at every listener change (a cache of "has listeners" answers is valid while it stays) */
+    public static volatile int listenerEpoch;
+
     public static void invalidate() {
+        listenerEpoch++;
         synchronized (SITES) {
             List<MutableCallSite> changed = new ArrayList<>();
             for (Site s : SITES) {

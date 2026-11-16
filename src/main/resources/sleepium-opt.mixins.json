@@ -125,6 +125,7 @@
     "ChunkTickMemoEpochMixin",
     "AllocTrimPackMixin",
     "AllocTrimWeightedMixin",
+    "AllocTrimFluidMixin",
     "AllocTrimFaceMixin",
     "LightSnapshotMixin",
     "LightSnapshotBlockMixin",
@@ -159,6 +160,7 @@
     "EntityFluidLoopMixin"
   ],
   "client": [
+    "ParallelAnimationMixin",
     "TickSliceMinecraftMixin",
     "MinecraftTimerAccessor",
     "TickSliceLevelMixin",
