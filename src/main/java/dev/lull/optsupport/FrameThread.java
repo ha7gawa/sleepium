@@ -222,6 +222,7 @@ public final class FrameThread {
     private static boolean tickedSinceHand;
     private static EntList handedEnts;
     private static PartMap handedParts;
+    public static long prepAhead;
     public static long selfSkips, selfHands, idleWaits, idleWakesTask, idleWakesMouse, idleWakesDue, idleWakesScreen, selfFrames;
 
     private static Boolean selfAllowed;
@@ -1113,14 +1114,6 @@ public final class FrameThread {
                 while (taken == handed) LockSupport.park();
             }
             if (taken == handed) continue;
-            if (SELF && selfOk && !borrowAsked && mc != null) {   // (self-clocked: a handed frame waits for its turn at the limit too)
-                long iv = capInterval(), now = System.nanoTime();
-                if (iv > 0 && nextDue - now > PACE_EARLY && now - nextDue < iv) {
-                    paceSleep(nextDue - now);
-                    continue;
-                }
-                paced(now, iv);
-            } else frameStartAt = System.nanoTime();
             long job = taken;
             drawGen = gen;   // (before any read of the world: the gate's Dekker pair with publish)
             wakeNs += System.nanoTime() - handAt;
@@ -1163,6 +1156,22 @@ public final class FrameThread {
                     runRenderTasks();
                     long q3 = System.nanoTime();
                     tCalls += q3 - q2;
+                    long waited = 0;
+                    if (SELF && selfOk && !drop && mc != null) {
+                        // self-clocked: the frame's preparation above (the queued GL work - the atlas tick -, the marks,
+                        // the calls) ran at once, in the idle time before its due time; the drawing waits for it (N100
+                        // 11-16: the frame after a tick took 2-3 ms more - 1.4 ms of queued work before its drawing)
+                        long iv = capInterval(), w = nextDue - System.nanoTime();
+                        if (iv > 0 && w > PACE_EARLY) {
+                            prepAhead++;
+                            drawGen = Long.MAX_VALUE;   // (nothing of the world read while asleep: the tick's gate need not wait)
+                            while ((w = nextDue - System.nanoTime()) > PACE_EARLY && !borrowAsked && !mainHolding) paceSleep(w);
+                            drawGen = gen;
+                            waited = System.nanoTime() - q3;
+                        }
+                        paced(System.nanoTime(), iv);
+                    } else frameStartAt = System.nanoTime();
+                    q3 += waited;
                     recordedAt = System.nanoTime();
                     recordedPt = realTimer.getGameTimeDeltaPartialTick(true);
                     if (drop) ringDropped++;   // (handed over before a level change: not drawn)
@@ -1170,7 +1179,7 @@ public final class FrameThread {
                     long dt = System.nanoTime() - q3;
                     tOps += dt;
                     lastFrameNs = dt;
-                    long tot = System.nanoTime() - q0;
+                    long tot = System.nanoTime() - q0 - waited;
                     if (tot > 10_000_000L) {   // the long jobs: what made them long
                         slowJobs++;
                         slowJobNs += tot;
@@ -1730,8 +1739,8 @@ public final class FrameThread {
             b.append(String.format(java.util.Locale.ROOT, "; CPU in the window: main thread %.1f ms/s, frame thread %.1f ms/s",
                     (mx.getThreadCpuTime(mainThread.threadId()) - cpuMain0) / 1e6 / secs, (mx.getThreadCpuTime(thread.threadId()) - cpuFrame0) / 1e6 / secs));
         }
-        if (SELF) b.append(String.format(java.util.Locale.ROOT, "; self-clocked: frames of its own %d, hand-overs %d (level %d, calls %d, marks %d, tick %d, lists %d, 50 ms %d), skipped %d; main idle waits %d (woken: task %d, walk %d, mouse %d, tick due %d, screen %d)",
-                selfFrames, selfHands, HAND_WHY[0], HAND_WHY[1], HAND_WHY[2], HAND_WHY[3], HAND_WHY[4], HAND_WHY[5], selfSkips, idleWaits, idleWakesTask, idleWakesWalk, idleWakesMouse, idleWakesDue, idleWakesScreen));
+        if (SELF) b.append(String.format(java.util.Locale.ROOT, "; self-clocked: prepared ahead %d; frames of its own %d, hand-overs %d (level %d, calls %d, marks %d, tick %d, lists %d, 50 ms %d), skipped %d; main idle waits %d (woken: task %d, walk %d, mouse %d, tick due %d, screen %d)",
+                prepAhead, selfFrames, selfHands, HAND_WHY[0], HAND_WHY[1], HAND_WHY[2], HAND_WHY[3], HAND_WHY[4], HAND_WHY[5], selfSkips, idleWaits, idleWakesTask, idleWakesWalk, idleWakesMouse, idleWakesDue, idleWakesScreen));
         if (PUBLISH) b.append("; published lists: entities ").append(entPublishes).append(", particles ").append(partPublishes);
         if (RING > 1) b.append(String.format(java.util.Locale.ROOT, "; ring of %d: the main thread waited for a free slot %d times (%.3f ms each), most frames waiting or drawing %d, dropped at level changes %d",
                 RING, ringWaits, ringWaitNs / 1e6 / Math.max(1, ringWaits), ringQueuedMax, ringDropped));
