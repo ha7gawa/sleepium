@@ -134,6 +134,7 @@
     "UnloadRecheckMixin",
     "AllocTrimPackMixin",
     "AllocTrimWeightedMixin",
+    "AllocTrimFluidMixin",
     "AllocTrimFaceMixin",
     "LightSnapshotMixin",
     "LightSnapshotBlockMixin",
