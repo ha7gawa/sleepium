@@ -335,8 +335,15 @@ public final class FrameThread {
 
     private static long capInterval() {
         int cap = mc != null ? mc.getWindow().getFramerateLimit() : 260;
-        return cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0;
+        long iv = cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0;
+        // the tick first: while the client tick or TickAsync's walk runs, frames of its own no more often than this (with
+        // no limit the frame thread and the render pool took the N100's four cores - the tick 1.5 -> 2.1 ms, 11-16)
+        if (TICK_YIELD_NS > 0 && (inClientTick || ParallelEntities.asyncRunning() && !ParallelEntities.asyncFinished())) iv = Math.max(iv, TICK_YIELD_NS);
+        return iv;
     }
+
+    /** -Dlab.frameThread.tickYieldMs (4; 0 = off): self-clocked frames' interval at least this while the tick runs */
+    private static final long TICK_YIELD_NS = (long) (Double.parseDouble(System.getProperty("lab.frameThread.tickYieldMs", "4")) * 1e6);
 
     /** the main thread, nothing to hand over: asleep in the window's event wait until the next tick is due (or woken) */
     private static void mainIdleWait() {
@@ -1048,7 +1055,7 @@ public final class FrameThread {
                     // limit, or back to back)
                     int cap = mc != null ? mc.getWindow().getFramerateLimit() : 260;
                     long capIv = cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0;
-                    long iv = SELF && selfOk ? capIv : Math.max(lastFrameNs, capIv);
+                    long iv = SELF && selfOk ? capInterval() : Math.max(lastFrameNs, capIv);
                     long due = SELF && selfOk ? nextDue - System.nanoTime() : doneAt + (mainTicking ? iv : iv * 3 / 2) - System.nanoTime();
                     if (due > 0) LockSupport.parkNanos(due);
                     else if (extraFrame()) doneAt = System.nanoTime();
