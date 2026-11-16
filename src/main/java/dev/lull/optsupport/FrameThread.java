@@ -333,6 +333,30 @@ public final class FrameThread {
         nextDue = iv <= 0 || now - nextDue > iv ? now + iv : nextDue + iv;
     }
 
+    /**
+     * -Dlab.frameThread.hiResPace: the frame thread's waits for a frame's due time as one Thread.sleep (a high-resolution
+     * timer on Windows) of the time left minus 0.5 ms, a frame less than PACE_EARLY early drawn at once - not
+     * LockSupport.parkNanos: standalone, parkNanos(0.5 / 2 / 6 ms) took 15.7 ms on the N100 and the host (the system
+     * timer's step), Thread.sleep 1.1 / 2.1 / 6.1 ms. Sleeps of 1-ms slices lost (each at least 1.1 ms: the N100's
+     * stall probe 231 -> 519 long frames, 11-16).
+     */
+    static final boolean HI_RES_PACE = Boolean.getBoolean("lab.frameThread.hiResPace");
+    /** a due time nearer than this: the frame is drawn now (no sleep is that short) */
+    static final long PACE_EARLY = HI_RES_PACE ? 1_500_000L : 0;
+
+    private static void paceSleep(long nanos) {
+        if (!HI_RES_PACE) {
+            LockSupport.parkNanos(nanos);
+            return;
+        }
+        long n = Math.max(1_000_000L, nanos - 500_000L);
+        try {
+            Thread.sleep(n / 1_000_000L, (int) (n % 1_000_000L));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private static long capInterval() {
         int cap = mc != null ? mc.getWindow().getFramerateLimit() : 260;
         long iv = cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0;
@@ -1062,9 +1086,9 @@ public final class FrameThread {
                     long capIv = cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0;
                     long iv = SELF && selfOk ? capInterval() : Math.max(lastFrameNs, capIv);
                     long due = SELF && selfOk ? nextDue - System.nanoTime() : doneAt + (mainTicking ? iv : iv * 3 / 2) - System.nanoTime();
-                    if (due > 0) LockSupport.parkNanos(due);
+                    if (due > PACE_EARLY) paceSleep(due);
                     else if (extraFrame()) doneAt = System.nanoTime();
-                    else LockSupport.parkNanos(500_000L);   // (held by the main thread: look again soon, never spin)
+                    else paceSleep(500_000L);   // (held by the main thread: look again soon, never spin)
                 } else LockSupport.park();
             }
             if (taken == handed && borrowAsked) {   // a borrow: release, wait until handed back (the next job)
@@ -1079,8 +1103,8 @@ public final class FrameThread {
             if (taken == handed) continue;
             if (SELF && selfOk && !borrowAsked && mc != null) {   // (self-clocked: a handed frame waits for its turn at the limit too)
                 long iv = capInterval(), now = System.nanoTime();
-                if (iv > 0 && nextDue - now > 0 && now - nextDue < iv) {
-                    LockSupport.parkNanos(nextDue - now);
+                if (iv > 0 && nextDue - now > PACE_EARLY && now - nextDue < iv) {
+                    paceSleep(nextDue - now);
                     continue;
                 }
                 paced(now, iv);
