@@ -11,6 +11,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** -Dlab.frameThread.extraTurn: an extra frame's camera turned by the cursor's move since the tick began (FrameThread). */
 @Mixin(Camera.class)
 public abstract class FrameThreadCameraMixin {
+    /** the camera's entity, ticked already in the tick the main thread runs now: at its last tick's end (FrameThread.partial) */
+    @org.spongepowered.asm.mixin.injection.ModifyVariable(method = "setup", at = @At("HEAD"), argsOnly = true, ordinal = 0)
+    private float sleep$partial(float pt, @com.llamalad7.mixinextras.sugar.Local(argsOnly = true) net.minecraft.world.entity.Entity entity) {
+        return FrameThread.partial(entity, pt);
+    }
+
     @Shadow protected abstract void setRotation(float yRot, float xRot);
     @Shadow public abstract float getYRot();
     @Shadow public abstract float getXRot();

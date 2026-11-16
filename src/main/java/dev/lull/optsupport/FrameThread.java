@@ -51,6 +51,9 @@ public final class FrameThread {
         final java.util.ArrayList<net.minecraft.world.entity.Entity> held = new java.util.ArrayList<>();
         final java.util.LinkedHashMap<net.minecraft.client.particle.ParticleRenderType, java.util.Queue<net.minecraft.client.particle.Particle>> heldParticles = new java.util.LinkedHashMap<>();
         boolean heldValid;
+        /** PUBLISH: the published entity list and particle queues this frame draws (shared between frames) */
+        EntList ents;
+        PartMap parts;
         /** the side context's fence at this frame's hand-over */
         long fence;
     }
@@ -180,13 +183,100 @@ public final class FrameThread {
     /** the frame thread under OVERLAP: the particle queues held for this frame, else null (the live ones) */
     public static java.util.Map<net.minecraft.client.particle.ParticleRenderType, java.util.Queue<net.minecraft.client.particle.Particle>> heldParticles() {
         Slot c = cur;
-        return c != null && c.heldValid && drawingHere() ? c.heldParticles : null;
+        return c != null && c.heldValid && drawingHere() ? (PUBLISH ? c.parts.map : c.heldParticles) : null;
     }
 
     /** the frame thread under OVERLAP: the entity list held for this frame, else null (the live one) */
     public static Iterable<net.minecraft.world.entity.Entity> heldEntities() {
         Slot c = cur;
-        return c != null && c.heldValid && drawingHere() ? c.held : null;
+        return c != null && c.heldValid && drawingHere() ? (PUBLISH ? c.ents.list : c.held) : null;
+    }
+
+    // ------------------------------------------------------------------ published lists (notes/75, stage 1)
+
+    /**
+     * -Dlab.frameThread.publish (in lab.decoupled): the lists frames draw are published when they change instead of
+     * copied by the main thread at every hand-over - the entity list when an entity begins or ends being tracked
+     * (FrameThreadTrackingMixin), the particle queues at the end of each client tick (vanilla moves new particles into
+     * them only in its tick). The same content as the copies; frames share a published list until the next one. Lists
+     * come from a small pool (ring + 2) and are reused once no frame in flight holds them.
+     */
+    public static final boolean PUBLISH = Boolean.getBoolean("lab.frameThread.publish");
+
+    static final class EntList {
+        final java.util.ArrayList<net.minecraft.world.entity.Entity> list = new java.util.ArrayList<>();
+    }
+
+    static final class PartMap {
+        final java.util.LinkedHashMap<net.minecraft.client.particle.ParticleRenderType, java.util.Queue<net.minecraft.client.particle.Particle>> map = new java.util.LinkedHashMap<>();
+    }
+
+    private static final EntList[] ENT_POOL = new EntList[RING + 2];
+    private static final PartMap[] PART_POOL = new PartMap[RING + 2];
+    static {
+        for (int i = 0; i < RING + 2; i++) {
+            ENT_POOL[i] = new EntList();
+            PART_POOL[i] = new PartMap();
+        }
+    }
+    private static EntList pubEnts;
+    private static PartMap pubParts;
+    private static Object pubLevel;
+    private static volatile boolean entsDirty = true;
+    public static long entPublishes, partPublishes;
+
+    /** the main thread: the level's tracked entities changed (FrameThreadTrackingMixin) */
+    public static void entitiesChanged() {
+        entsDirty = true;
+    }
+
+    /** the main thread: o is held by a frame drawing, drawn last (extra frames) or handed over and waiting */
+    private static boolean heldByFrames(Object o) {
+        long d = done, h = handed;
+        int di = drawIdx;
+        if (di >= 0 && (SLOTS[di].ents == o || SLOTS[di].parts == o)) return true;
+        for (long k = d; k < h; k++) {
+            Slot s = SLOTS[JOBQ[(int) (k % RING)]];
+            if (s.ents == o || s.parts == o) return true;
+        }
+        return false;
+    }
+
+    private static EntList freeEnts() {
+        for (EntList e : ENT_POOL) if (e != pubEnts && !heldByFrames(e)) return e;
+        throw new IllegalStateException("frame thread: no free entity list");   // (ring + 2: at most ring held + the published)
+    }
+
+    private static PartMap freeParts() {
+        for (PartMap p : PART_POOL) if (p != pubParts && !heldByFrames(p)) return p;
+        throw new IllegalStateException("frame thread: no free particle map");
+    }
+
+    /** the main thread: the particle queues as the tick left them, published */
+    private static void publishParticles() {
+        PartMap p = freeParts();
+        p.map.clear();
+        for (var en : ((dev.lull.opt.ParticleEngineAccessor) mc.particleEngine).sleep$particles().entrySet())
+            p.map.put(en.getKey(), new java.util.ArrayDeque<>(en.getValue()));
+        pubParts = p;
+        partPublishes++;
+    }
+
+    /** the main thread at a hand-over: the published lists brought up to date (entities if changed) and given to r */
+    private static void publishInto(Slot r) {
+        if (entsDirty || pubLevel != mc.level || pubEnts == null) {
+            entsDirty = false;
+            EntList e = freeEnts();
+            e.list.clear();
+            if (mc.level != null) for (net.minecraft.world.entity.Entity en : mc.level.entitiesForRendering()) e.list.add(en);
+            pubEnts = e;
+            entPublishes++;
+            if (pubLevel != mc.level || pubParts == null) publishParticles();   // (a new level: its particle engine was cleared)
+            pubLevel = mc.level;
+        }
+        r.ents = pubEnts;
+        r.parts = pubParts;
+        r.heldValid = mc.level != null;
     }
     public static long overlapFrames, overlapWaitNs;
 
@@ -494,12 +584,15 @@ public final class FrameThread {
         if (OVERLAP) {   // the world's lists the frame walks, as they are now (the main thread changes them meanwhile)
             // the crosshair's target here, on the main thread (FrameThreadPickMixin: not on the frame thread)
             if (mc.level != null && mc.getCameraEntity() != null) mc.gameRenderer.pick(realTimer.getGameTimeDeltaPartialTick(true));
-            r.held.clear();
-            if (mc.level != null) for (net.minecraft.world.entity.Entity e : mc.level.entitiesForRendering()) r.held.add(e);
-            r.heldParticles.clear();
-            for (var en : ((dev.lull.opt.ParticleEngineAccessor) mc.particleEngine).sleep$particles().entrySet())
-                r.heldParticles.put(en.getKey(), new java.util.ArrayDeque<>(en.getValue()));
-            r.heldValid = mc.level != null;
+            if (PUBLISH) publishInto(r);
+            else {
+                r.held.clear();
+                if (mc.level != null) for (net.minecraft.world.entity.Entity e : mc.level.entitiesForRendering()) r.held.add(e);
+                r.heldParticles.clear();
+                for (var en : ((dev.lull.opt.ParticleEngineAccessor) mc.particleEngine).sleep$particles().entrySet())
+                    r.heldParticles.put(en.getKey(), new java.util.ArrayDeque<>(en.getValue()));
+                r.heldValid = mc.level != null;
+            }
             if (mc.level != null && mc.getConnection() != null && mc.getConnection().getLevel() == mc.level) {   // renderLevel's light point, here (packets and the tick may change the light engine while the frame draws)
                 if (lightPoint != null) lightPoint.accept(mc.level);
                 else {
@@ -1007,7 +1100,46 @@ public final class FrameThread {
         mainTicking = false;
     }
 
+    // ------------------------------------------------------------------ frames in the middle of a client tick
+
+    /** the client tick an entity was last ticked in (FrameThreadEntityMarkMixin) */
+    public interface Marked {
+        int sleep$ftRound();
+
+        void sleep$setFtRound(int r);
+    }
+
+    /**
+     * -Dlab.frameThread.midTick (default on): a frame drawn while the main thread runs a client tick (the overlap, extra
+     * frames) draws each entity the tick has reached at partial tick 0 - its last tick's end (xo..: set first thing in
+     * its tick) - and the others at the frame's own partial tick (from the tick's end: near 1 by now, the same place).
+     * Without it the entities ticked already were drawn a tick ahead until the tick ended, then stepped back: the zoo's
+     * sniffer raised its head for one frame every few ticks (11-16, a frame burst; with every engine path off but the
+     * frame thread too). The same for the camera's entity.
+     */
+    static final boolean MID_TICK = !"false".equals(System.getProperty("lab.frameThread.midTick"));
+    /** the client tick running now (or last), counted at its start on the main thread */
+    private static volatile int tickRound = 1;
+    private static volatile boolean inClientTick;
+    public static long midTickDraws;
+
+    /** the main thread: e is about to tick (ClientLevel.tickNonPassenger / tickPassenger) */
+    public static void ticking(net.minecraft.world.entity.Entity e) {
+        if (MID_TICK && active && inClientTick) ((Marked) e).sleep$setFtRound(tickRound);
+    }
+
+    /** an entity's partial tick in a frame: 0 if the frame is on the frame thread and the client tick running has ticked it */
+    public static float partial(net.minecraft.world.entity.Entity e, float pt) {
+        if (!MID_TICK || !inClientTick || e == null || !drawingHere() || ((Marked) e).sleep$ftRound() != tickRound) return pt;
+        midTickDraws++;
+        return 0f;
+    }
+
     public static void tickStart() {
+        if (MID_TICK) {
+            tickRound++;
+            inClientTick = true;
+        }
         if (!mainTicking) busySince = System.nanoTime();
         mainTicking = true;
         if (turnFrame != frames) {   // (the queued tasks before it already took the turn's reference for this frame)
@@ -1037,7 +1169,9 @@ public final class FrameThread {
 
     public static void tickEnd() {
         mainTicking = false;
+        if (PUBLISH && active && OVERLAP && mc != null && Thread.currentThread() == mainThread) publishParticles();
         tickEndNs = System.nanoTime();
+        inClientTick = false;   // (after the new tick end: the frames' partial tick starts from 0 again)
     }
 
     private static volatile boolean mainHolding;
@@ -1253,6 +1387,8 @@ public final class FrameThread {
         long fr = Math.max(1, frames);
         if (NO_WAIT) b.append("; frames skipped by the main thread (no wait) ").append(skippedFrames);
         b.append(pollGaps());
+        if (MID_TICK) b.append("; entities drawn at their last tick's end (mid-tick) ").append(midTickDraws);
+        if (PUBLISH) b.append("; published lists: entities ").append(entPublishes).append(", particles ").append(partPublishes);
         if (RING > 1) b.append(String.format(java.util.Locale.ROOT, "; ring of %d: the main thread waited for a free slot %d times (%.3f ms each), most frames waiting or drawing %d, dropped at level changes %d",
                 RING, ringWaits, ringWaitNs / 1e6 / Math.max(1, ringWaits), ringQueuedMax, ringDropped));
         if (EVENT_WAIT) b.append("; event waits ").append(eventWaits).append(" (woken by the frame thread ").append(eventWakes).append(")");

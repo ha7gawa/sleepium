@@ -142,6 +142,21 @@ public final class TickPoses {
 
     static final AtomicLong ASYNC_CAPTURES = new AtomicLong();
 
+    /** the pair being captured on this thread (renderWrites) */
+    private static final ThreadLocal<Pair> CAPTURING = new ThreadLocal<>();
+
+    /**
+     * TickPosesAnimationMixin: a render on this thread moved its entity's animation clock. In a capture, its type stays
+     * per frame from now on (the capture's renders and the frame's would move one clock from two threads; the pair's
+     * keys would also be rendered at clock times the frames never see) - learnt by observation, any mod's entity
+     */
+    public static void renderWrites() {
+        Pair p = CAPTURING.get();
+        if (p == null || p.stat == null || p.stat.state == 2) return;
+        p.usable = false;
+        decide(p.stat, 2, "its render moves the entity's animation clock (AnimationState)");
+    }
+
     /** render thread, the walk joined: the spare pair becomes the current one, the old current one the spare */
     static void install(Entity e, Pair p) {
         if (p == null) return;
@@ -222,6 +237,7 @@ public final class TickPoses {
         public void run() {
             if (!claimed.compareAndSet(false, true)) return;
             ParallelRender.Set set = ParallelRender.takeSet();
+            CAPTURING.set(this);
             try {
                 int n = KEYS + (check ? 1 : 0);
                 for (int i = 0; i < n; i++) {
@@ -235,6 +251,7 @@ public final class TickPoses {
             } catch (Throwable t) {
                 usable = false;
             } finally {
+                CAPTURING.remove();
                 for (ParallelRender.Job j : jobs) j.forcedSet = null;
                 ParallelRender.giveSet(set);
                 done = true;
