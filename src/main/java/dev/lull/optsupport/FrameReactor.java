@@ -101,6 +101,10 @@ public final class FrameReactor {
     /** Render thread: a point of the frame. Completions first, then every participant's rule for this point. */
     public static void reach(Point p) {
         drain();
+        // a level change (disconnect, a new level) outside runTick: TickAsync's walk joined first - its workers may wait
+        // for the render thread's answers (ParticleWorkers' shapes), and a participant's wait (the light job, queued
+        // behind them on the same pool) would never end (N100 tour 11-16: the game hung on quitting)
+        if (p == Point.LEVEL_CHANGE) TickAsync.join();
         for (int i = 0; i < PARTICIPANTS.size(); i++) PARTICIPANTS.get(i).reach(p);
         drain();
     }
