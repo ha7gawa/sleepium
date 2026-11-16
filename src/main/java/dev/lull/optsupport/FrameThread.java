@@ -772,6 +772,7 @@ public final class FrameThread {
         if (holdToFrame) {
             holdToFrame = false;
             mainHolding = false;
+            holdDepth = 0;
         }
         if (SELF && OVERLAP) {
             selfOk = mc.screen == null && mc.level != null && !mc.isPaused();
@@ -1408,8 +1409,12 @@ public final class FrameThread {
      * the main thread is about to change what a drawing frame may read (TickAsync's join: its snapshots and pairs): no
      * frame or extra frame drawing from here until releaseForMain (it waits for the one drawing now)
      */
+    /** holds nested (a screen set inside a resize, allChanged inside both): the frames come back after the outermost */
+    private static int holdDepth;
+
     public static void holdForMain() {
         if (!active || Thread.currentThread() != mainThread) return;
+        holdDepth++;
         mainHolding = true;
         mainHolds2++;
         awaitLast();
@@ -1438,7 +1443,8 @@ public final class FrameThread {
     private static boolean mainRecordingReplay;
 
     public static void releaseForMain() {
-        if (!holdToFrame) mainHolding = false;   // (a level change's hold lasts until the next frame)
+        if (Thread.currentThread() != mainThread || holdDepth == 0) return;
+        if (--holdDepth == 0 && !holdToFrame) mainHolding = false;   // (a level change's hold lasts until the next frame)
     }
 
     private static boolean holdToFrame;

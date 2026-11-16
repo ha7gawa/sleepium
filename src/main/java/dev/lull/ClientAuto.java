@@ -565,6 +565,11 @@ public final class ClientAuto {
                 it.remove();
                 log("command at " + ticks + ": /" + c[1]);
                 if ("!resources".equals(c[1])) Minecraft.getInstance().reloadResourcePacks();   // a client action: F3+T
+                // client actions for the frame thread's transitions: a screen opened / closed, the game paused
+                else if ("!inventory".equals(c[1]) && Minecraft.getInstance().player != null)
+                    Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(Minecraft.getInstance().player));
+                else if ("!pause".equals(c[1])) Minecraft.getInstance().pauseGame(false);
+                else if ("!close".equals(c[1])) Minecraft.getInstance().setScreen(null);
                 else command(Minecraft.getInstance(), (String) c[1]);
             }
         }
