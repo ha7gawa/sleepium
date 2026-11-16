@@ -1469,27 +1469,15 @@ public final class PartBatch {
     /** Render thread: whether PartBatch can draw this type from VRAM (checked here: GL queries); published for workers. */
     private static void learnType(RenderType type) {
         ASKED.remove(type);
-        if ((EntityBatch.commutes(type) || ITEMS_ANY_ORDER && anyOrderOk(type)) && type.format() == DefaultVertexFormat.NEW_ENTITY && type.mode() == VertexFormat.Mode.QUADS && typeOk(type) && partsAllowed()) {
+        // (only commuting types: the any-order ones - translucent layers, eyes - became part records too, but no batch
+        // takes them at the merge (EntityBatch draws its batches first: eyes must come after the bodies) - every such
+        // entity was refused at each frame's drain and drawn whole on the frame thread; 1.21.1 2efa0c5)
+        if (EntityBatch.commutes(type) && type.format() == DefaultVertexFormat.NEW_ENTITY && type.mode() == VertexFormat.Mode.QUADS && typeOk(type) && partsAllowed()) {
             java.util.Set<RenderType> s = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
             s.addAll(workerTypes);
             s.add(type);
             workerTypes = s;
         }
-    }
-
-    /**
-     * the non-exact mode (ITEMS_ANY_ORDER): part types whose records may go in any order too - translucent sorted types
-     * (a slime's outer layer: overlapping pixels may blend in another order) and additive ones without depth writes (the
-     * glowing eyes of spiders and endermen: addition commutes, only the depth test against what is drawn before matters)
-     */
-    private static boolean anyOrderOk(RenderType t) {
-        if (ItemGpu.sortedOk(t)) return true;
-        if (!(t instanceof dev.lull.opt.CompositeRenderTypeAccessor a) || t.isOutline()) return false;
-        dev.lull.opt.CompositeStateAccessor st = (dev.lull.opt.CompositeStateAccessor) (Object) a.sleep$state();
-        // (1.20.1: RenderStateShard's constants are protected - by their names, which toString gives)
-        return "additive_transparency".equals(String.valueOf(st.sleep$transparency()))
-                && "no_color_logic".equals(String.valueOf(st.sleep$colorLogic()))
-                && "main_target".equals(String.valueOf(st.sleep$output()));
     }
 
     private static void publishGeo(Object key) {
