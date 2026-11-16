@@ -85,6 +85,23 @@ public final class FrameThread {
     private static volatile long dropBelow;
     public static long ringWaits, ringWaitNs, ringDropped, ringQueuedMax;
 
+    /** TickAsync generations: published by the main thread after a join's swap (TickAsync.GEN) */
+    private static volatile long gen;
+    /** the generation the frame thread's current job or extra frame began in; MAX_VALUE: none drawing */
+    private static volatile long drawGen = Long.MAX_VALUE;
+
+    /** the main thread, after it swapped what frames read: a new generation (frames begun from now on see the new state) */
+    public static long publish() {
+        return ++gen;
+    }
+
+    /** the main thread: no frame begun before generation g still draws (waits by event); true if it waited */
+    public static boolean awaitDrawnSince(long g) {
+        if (!active || drawGen >= g) return false;
+        waitPumping(() -> drawGen >= g);
+        return true;
+    }
+
     /** no frame handed over and not yet done */
     private static boolean idle() {
         return done == handed;
@@ -749,6 +766,7 @@ public final class FrameThread {
             }
             if (taken == handed) continue;
             long job = taken;
+            drawGen = gen;   // (before any read of the world: the gate's Dekker pair with publish)
             wakeNs += System.nanoTime() - handAt;
             Slot s = SLOTS[JOBQ[(int) (job % RING)]];
             drawIdx = JOBQ[(int) (job % RING)];
@@ -812,6 +830,7 @@ public final class FrameThread {
                 failure = t;
             }
             doneAt = System.nanoTime();
+            drawGen = Long.MAX_VALUE;
             taken = job + 1;
             done = taken;
             wakeMain();
@@ -1127,6 +1146,7 @@ public final class FrameThread {
             extraRunning = false;
             return false;
         }
+        drawGen = gen;
         long t0 = System.nanoTime();
         drawing = true;
         extraNow = true;
@@ -1142,6 +1162,7 @@ public final class FrameThread {
         }
         extraFrames++;
         extraNs += System.nanoTime() - t0;
+        drawGen = Long.MAX_VALUE;
         extraRunning = false;
         wakeMain();
         return true;
@@ -1169,6 +1190,58 @@ public final class FrameThread {
                 case UPDATE_DISPLAY -> m.getWindow().updateDisplay();
                 default -> throw new IllegalStateException("frame op " + OPS[k]);
             }
+        }
+        if (burstLeft > 0) burstShot(m);   // (the frame shown: the main target still holds it)
+    }
+
+    // ------------------------------------------------------------------ a burst of shown frames (test: ClientAuto burst)
+
+    private static volatile int burstLeft;
+    private static int burstIdx;
+    private static java.nio.file.Path burstDir;
+    private static String burstLabel;
+    private static java.io.PrintWriter burstCsv;
+    private static java.util.concurrent.ExecutorService burstIo;
+
+    /** the main thread (ClientAuto): the next n frames shown are written to dir as burst-<label>-<k>-<j|x>.png */
+    public static boolean requestBurst(int n, java.nio.file.Path dir, String label) {
+        if (!active || burstLeft > 0) return false;
+        try {
+            java.nio.file.Files.createDirectories(dir);
+            burstCsv = new java.io.PrintWriter(java.nio.file.Files.newBufferedWriter(dir.resolve("burst-" + label + ".csv")));
+            burstCsv.println("k,kind,ns,gen,slot,job");
+        } catch (java.io.IOException e) {
+            return false;
+        }
+        if (burstIo == null) burstIo = java.util.concurrent.Executors.newFixedThreadPool(2, r -> {
+            Thread t = new Thread(r, "Sleepium burst writer");
+            t.setDaemon(true);
+            return t;
+        });
+        burstDir = dir;
+        burstLabel = label;
+        burstIdx = 0;
+        burstLeft = n;
+        return true;
+    }
+
+    /** the frame thread, a frame drawn and about to be shown: its picture (written on another thread) and its timing */
+    private static void burstShot(Minecraft m) {
+        int k = burstIdx++;
+        boolean x = extraNow;
+        com.mojang.blaze3d.platform.NativeImage img = net.minecraft.client.Screenshot.takeScreenshot(m.getMainRenderTarget());
+        java.nio.file.Path out = burstDir.resolve(String.format(java.util.Locale.ROOT, "burst-%s-%03d-%s.png", burstLabel, k, x ? "x" : "j"));
+        burstCsv.println(k + "," + (x ? "x" : "j") + "," + System.nanoTime() + "," + gen + "," + drawIdx + "," + taken);
+        burstIo.execute(() -> {
+            try (img) {
+                img.writeToFile(out);
+            } catch (Exception e) {
+                LOG.warn("[sleep/opt] burst shot {} failed: {}", out.getFileName(), e.toString());
+            }
+        });
+        if (--burstLeft == 0) {
+            burstCsv.close();
+            LOG.info("[sleep/opt] burst: {} frames -> {}", k + 1, burstDir);
         }
     }
 

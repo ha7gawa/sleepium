@@ -379,13 +379,19 @@ public final class ParallelEntities {
     private static Entity[] asyncAll = new Entity[256];
     private static ParallelRender.Job[] asyncSnaps = new ParallelRender.Job[256];
     /** snapshot jobs, reused (render thread hands them out at the split) */
-    private static final java.util.ArrayList<ParallelRender.Job> SNAP_POOL = new java.util.ArrayList<>();
+    private static final java.util.ArrayList<ParallelRender.Job> SNAP_POOL_A = new java.util.ArrayList<>(), SNAP_POOL_B = new java.util.ArrayList<>();
+    /** the walks split so far: their snapshot jobs come from the two pools in turn (a walk's jobs, let go at its join, are
+     * reused by the walk after next - past the generation gate, TickAsync.gate) */
+    private static long splits;
+    /** TickAsync generations: the joined walk's snapshot jobs, let go at the gate (a frame begun before the join may draw them) */
+    private static final java.util.ArrayList<ParallelRender.Job> RETIRED = new java.util.ArrayList<>();
 
     private static boolean asyncSplit(Consumer<Entity> consumer) {
         if (asyncPairs.length < n) asyncPairs = new TickPoses.Pair[Math.max(n, asyncPairs.length * 2)];
         if (asyncAll.length < n) asyncAll = new Entity[Math.max(n, asyncAll.length * 2)];
         if (asyncSnaps.length < n) asyncSnaps = new ParallelRender.Job[Math.max(n, asyncSnaps.length * 2)];
         int m = 0, r = 0, snaps = 0;
+        java.util.ArrayList<ParallelRender.Job> SNAP_POOL = (splits & 1) == 0 ? SNAP_POOL_A : SNAP_POOL_B;
         for (int k = 0; k < n; k++) {
             Entity e = all[k];
             if (mayTickApart(e) && TickAsync.eligible(e)) {
@@ -411,6 +417,7 @@ public final class ParallelEntities {
             } else all[r++] = e;   // (r <= k: that slot is done with)
         }
         if (m == 0) return false;
+        splits++;
         java.util.Arrays.fill(all, r, n, null);
         n = r;   // the rest walks as usual (its runs on the pool, the others in their slots)
         asyncM = m;
@@ -541,12 +548,18 @@ public final class ParallelEntities {
 
     /** the join's second part, what frames read: the pairs swapped, the snapshot jobs let go, the walking set emptied */
     static void joinAsyncRender() {
+        joinAsyncRender(false);
+    }
+
+    /** retire: the snapshot jobs are let go later (releaseRetired, past the generation gate), not here */
+    static void joinAsyncRender(boolean retire) {
         int m = asyncM;
         for (int i = 0; i < m; i++) {
             TickPoses.install(all[i], asyncPairs[i]);
             asyncPairs[i] = null;
             if (asyncSnaps[i] != null) {
-                ParallelRender.snapshotDone(asyncSnaps[i]);
+                if (retire) RETIRED.add(asyncSnaps[i]);
+                else ParallelRender.snapshotDone(asyncSnaps[i]);
                 asyncSnaps[i] = null;
             }
         }
@@ -557,6 +570,12 @@ public final class ParallelEntities {
         Throwable e = error;
         if (e instanceof RuntimeException re) throw re;
         if (e instanceof Error er) throw er;
+    }
+
+    /** the generation gate passed (no frame begun before the join draws): the retired snapshot jobs let go */
+    static void releaseRetired() {
+        for (int i = 0, n = RETIRED.size(); i < n; i++) ParallelRender.snapshotDone(RETIRED.get(i));
+        RETIRED.clear();
     }
 
     private static void workerRun() {

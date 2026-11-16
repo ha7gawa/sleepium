@@ -414,6 +414,7 @@ public final class ParallelRender {
             if (snap == null) held = TickPoses.held(e);
             if (held == null && snap == null) {
                 TickAsync.skipped++;
+                TickAsync.skipNone++;
                 return;
             }
         }
@@ -1115,7 +1116,7 @@ public final class ParallelRender {
                 Job sj = j.snap;
                 j.snap = null;
                 j.hold = false;
-                if (!drawSnapshot(sj, j)) TickAsync.skipped++;
+                if (!drawSnapshot(sj, j)) { TickAsync.skipped++; TickAsync.skipSnap++; }
                 if (clean) leakCheck(j);
                 j.entity = null;
                 continue;
@@ -1132,12 +1133,21 @@ public final class ParallelRender {
                     j.entity = null;
                     continue;
                 }
+                if (j.hold && j.ok && j.gpuTick && TickPoses.heldCpu(tp, j) && PartBatch.mergeJob(j.parts, j.buffers)) {
+                    // (a held pair's GPU records refused here: its keys on the CPU - the entity may not be drawn live)
+                    parallel++;
+                    if (clean) leakCheck(j);
+                    j.entity = null;
+                    continue;
+                }
+                TickPoses.refused(tp);
                 j.parts.clear();
                 j.ok = false;
                 j.parallel = false;   // the usual way, on this thread
                 if (j.hold) {   // (not while a worker ticks it: left out of this frame)
                     j.hold = false;
                     TickAsync.skipped++;
+                    TickAsync.skipMerge++;
                     if (clean) leakCheck(j);
                     j.entity = null;
                     continue;

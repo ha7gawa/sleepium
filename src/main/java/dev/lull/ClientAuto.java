@@ -229,6 +229,7 @@ public final class ClientAuto {
         // -Dsleep.clientAuto.debugScreen=true: the F3 screen open through the measured window (what it costs)
         if (Boolean.getBoolean("sleep.clientAuto.debugScreen") && !Minecraft.getInstance().getDebugOverlay().showDebugScreen())
             Minecraft.getInstance().getDebugOverlay().toggleOverlay();   // (1.21: the overlay keeps its own state)
+        if (BURST != null) shotsBase = ticks;
         if (!SHOTS.isEmpty()) {
             shotsBase = ticks;
             Minecraft.getInstance().options.hideGui = !Boolean.getBoolean("sleep.clientAuto.shotGui");
@@ -277,6 +278,13 @@ public final class ClientAuto {
         }
     }
     private static int shotsBase = -1;
+    /**
+     * -Dsleep.clientAuto.burst=S:N (test, with the frame thread): at S seconds into the measured window the next N frames
+     * shown are written as they leave the frame thread (FrameThread.burstShot: recorded and extra frames, with their
+     * times) - to look at what the frames show from one to the next, not only at one
+     */
+    private static final String BURST = System.getProperty("sleep.clientAuto.burst");
+    private static boolean burstAsked;
     /** told of each shot taken: its index and its time in the run's seconds (a mod's trace can mark it) */
     public static volatile java.util.function.BiConsumer<Integer, Double> onShot;
 
@@ -565,6 +573,17 @@ public final class ClientAuto {
             frameHash(Minecraft.getInstance());
         }
         shotsTick(Minecraft.getInstance());
+        if (BURST != null && !burstAsked && shotsBase >= 0 && ticks >= shotsBase + (int) Math.round(Double.parseDouble(BURST.split(":")[0]) * 20)) {
+            burstAsked = true;
+            Minecraft bm = Minecraft.getInstance();
+            boolean ok;
+            try {
+                ok = dev.lull.optsupport.FrameThread.requestBurst(Integer.parseInt(BURST.split(":")[1]), SleepOut.dir(bm.gameDirectory.toPath(), "frame", LABEL), LABEL);
+            } catch (java.io.IOException e) {
+                ok = false;
+            }
+            log("burst " + BURST + (ok ? " asked" : " not possible (no frame thread)"));
+        }
         if (abAt >= 0 && ticks >= abAt) abTick(Minecraft.getInstance());
         if (FLIP != null && flipFrom >= 0) flipTick();
         if (hashAt >= 0 && ticks >= hashAt) {

@@ -89,7 +89,36 @@ public final class TickPoses {
         Stat st = STATS.get(e.getType());
         if (st == null || st.state != 1) return false;
         Pair p = PAIRS.get(e);
-        return p != null && p.done && p.usable;   // (the GPU records or the CPU interpolation: both hold at the last key)
+        // (and its frames' merges went through lately: a held entity whose merge is refused is left out of the frame -
+        // it blinked in the zoo, 11-16: 23,412 skips; it ticks in the walk then and is drawn live)
+        return p != null && p.done && p.usable && frame - p.refusedFrame > REFUSED_FRAMES;
+    }
+
+    /**
+     * -Dlab.prender.tickPoses.refusedFrames (240): an entity whose pair a frame could not merge (its render types' order
+     * matters, a program that can't take the records) does not tick apart for this many frames after
+     */
+    static final long REFUSED_FRAMES = Long.getLong("lab.prender.tickPoses.refusedFrames", 240);
+    static final AtomicLong HELD_CPU = new AtomicLong(), HELD_REFUSED = new AtomicLong();
+
+    /**
+     * ParallelRender.drain, a held pair's GPU merge refused: its keys interpolated on the CPU into the job's parts
+     * instead (merged the usual way after); false: no CPU parts either (the pair marked refused)
+     */
+    static boolean heldCpu(Pair p, ParallelRender.Job j) {
+        if (!p.usable || p.jobs[0].parts.n == 0) return false;
+        j.gpuTick = false;
+        PartBatch.JobParts out = j.parts;
+        out.copyShape(p.jobs[0].parts);
+        sample(p, j.pt, out.mem, (float) (p.ax - j.camX), (float) (p.ay - j.camY), (float) (p.az - j.camZ));
+        HELD_CPU.incrementAndGet();
+        return true;
+    }
+
+    /** ParallelRender.drain: a frame could not merge this pair (held: the entity was left out of the frame) */
+    static void refused(Pair p) {
+        p.refusedFrame = frame;
+        HELD_REFUSED.incrementAndGet();
     }
 
     /** render thread: the entity's spare pair (made once), its type's statistics given along for the worker */
@@ -179,6 +208,8 @@ public final class TickPoses {
         volatile boolean done;
         final java.util.concurrent.atomic.AtomicBoolean claimed = new java.util.concurrent.atomic.AtomicBoolean();
         long frameUsed;
+        /** the frame (TickPoses' count) a merge of this pair was last refused in */
+        volatile long refusedFrame = -1_000_000;
         /** a scratch record set for the check (this pair's task only) */
         long mid;
         int midCap;
