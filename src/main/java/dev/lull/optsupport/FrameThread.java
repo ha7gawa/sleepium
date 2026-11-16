@@ -224,6 +224,23 @@ public final class FrameThread {
     private static PartMap handedParts;
     public static long selfSkips, selfHands, idleWaits, idleWakesTask, idleWakesMouse, idleWakesDue, idleWakesScreen, selfFrames;
 
+    private static Boolean selfAllowed;
+
+    /**
+     * self-clocked frames only while no other mod's mixin changes Minecraft.runTick (its per-frame work would run at the
+     * main thread's pace instead of the frames'): learnt once from the mixins (MixinTouch), the yielding logged
+     */
+    private static boolean selfAllowed() {
+        Boolean a = selfAllowed;
+        if (a == null) {
+            boolean touched = MixinTouch.touched("net/minecraft/client/Minecraft", "runTick");
+            a = !touched;
+            selfAllowed = a;
+            if (touched) LOG.info("[sleep/opt] frame thread: self-clocked frames off - Minecraft.runTick is changed by {}", MixinTouch.who("net/minecraft/client/Minecraft", "runTick"));
+        }
+        return a;
+    }
+
     /** runTick's frame rate limit is not the main thread's to keep (it waits for events instead) */
     public static boolean selfClocking() {
         return SELF && active && selfOk && Thread.currentThread() == mainThread;
@@ -776,7 +793,7 @@ public final class FrameThread {
             holdDepth = 0;
         }
         if (SELF && OVERLAP) {
-            selfOk = mc.screen == null && mc.level != null && !mc.isPaused();
+            selfOk = mc.screen == null && mc.level != null && !mc.isPaused() && selfAllowed();
             if (selfOk && !pending) selfOk = false;   // (the first frame goes over the usual way)
             if (selfOk) queueSelfCalls(r);
             if (selfOk && !needHand(r)) {   // nothing new: the frame thread keeps drawing the last one; wait for events
