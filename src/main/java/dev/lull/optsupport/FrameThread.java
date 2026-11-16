@@ -132,7 +132,9 @@ public final class FrameThread {
 
     /** LevelRenderer.setSectionDirty on the main thread while a frame draws (OVERLAP): queued (true), else false */
     public static boolean deferDirty(int x, int y, int z, boolean mainThread) {
-        if (!pending || Thread.currentThread() != mainThread() || jobDone) return false;
+        // (queued whenever a frame or an extra frame may be drawing - not only a pending one: an extra frame reads the same
+        // sets; replayed where neither draws - begin, holdForMain; the frame thread audit, 11-16)
+        if (!active || Thread.currentThread() != mainThread() || mainRecording || mainRecordingReplay || mainHolding) return false;
         if (nDirty * 4 + 4 > DIRTY.length) DIRTY = java.util.Arrays.copyOf(DIRTY, DIRTY.length * 2);
         int o = nDirty++ * 4;
         DIRTY[o] = x;
@@ -163,6 +165,9 @@ public final class FrameThread {
      */
     private static final java.util.concurrent.ConcurrentLinkedQueue<Runnable> RENDER_TASKS = new java.util.concurrent.ConcurrentLinkedQueue<>();
     public static long renderTasks, renderTaskFailures, nestedDropped;
+
+    /** particles added on the frame thread, for the main thread's next particle tick (FrameThreadParticleAddMixin) */
+    public static final java.util.concurrent.ConcurrentLinkedQueue<net.minecraft.client.particle.Particle> FRAME_PARTICLES = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
     public static boolean takeRenderTask(Runnable r) {
         if (!active) return false;
@@ -231,15 +236,6 @@ public final class FrameThread {
         }
         pending = false;
         overlapWaitNs += System.nanoTime() - t0;
-        if (nDirty > 0) {   // the marks queued meanwhile, now (the frame done: nothing reads the dirty sets)
-            int n = nDirty;
-            nDirty = 0;
-            net.minecraft.client.renderer.LevelRenderer lr = mc.levelRenderer;
-            for (int i = 0; i < n; i++) {
-                int o = i * 4;
-                ((dev.lull.opt.FrameThreadDirtyInvoker) lr).sleep$setSectionDirty(DIRTY[o], DIRTY[o + 1], DIRTY[o + 2], DIRTY[o + 3] != 0);
-            }
-        }
         Throwable f = failure;
         if (f != null) {
             failure = null;
@@ -261,6 +257,7 @@ public final class FrameThread {
         awaitLast();
         mainRecording = true;   // (before the check: an extra frame starting now sees it and backs off)
         if (extraRunning) waitPumping(() -> !extraRunning);
+        replayDirty();
         nOps = 0;
         fresh = false;
     }
@@ -337,6 +334,8 @@ public final class FrameThread {
         fresh = true;
         long h0 = System.nanoTime();
         if (OVERLAP) {   // the world's lists the frame walks, as they are now (the main thread changes them meanwhile)
+            // the crosshair's target here, on the main thread (FrameThreadPickMixin: not on the frame thread)
+            if (mc.level != null && mc.getCameraEntity() != null) mc.gameRenderer.pick(realTimer.getGameTimeDeltaPartialTick(true));
             HELD.clear();
             if (mc.level != null) for (net.minecraft.world.entity.Entity e : mc.level.entitiesForRendering()) HELD.add(e);
             HELD_PARTICLES.clear();
@@ -825,7 +824,28 @@ public final class FrameThread {
         mainHolds2++;
         awaitLast();
         if (extraRunning) waitPumping(() -> !extraRunning);
+        replayDirty();
     }
+
+    /** the main thread, no frame or extra frame drawing (begin, holdForMain): the marks queued meanwhile, in order */
+    private static void replayDirty() {
+        if (nDirty == 0 || mc == null) return;
+        int n = nDirty;
+        nDirty = 0;
+        net.minecraft.client.renderer.LevelRenderer lr = mc.levelRenderer;
+        mainRecordingReplay = true;
+        try {
+            for (int i = 0; i < n; i++) {
+                int o = i * 4;
+                ((dev.lull.opt.FrameThreadDirtyInvoker) lr).sleep$setSectionDirty(DIRTY[o], DIRTY[o + 1], DIRTY[o + 2], DIRTY[o + 3] != 0);
+            }
+        } finally {
+            mainRecordingReplay = false;
+        }
+    }
+
+    /** replayDirty's calls go through (not queued again) */
+    private static boolean mainRecordingReplay;
 
     public static void releaseForMain() {
         if (!holdToFrame) mainHolding = false;   // (a level change's hold lasts until the next frame)

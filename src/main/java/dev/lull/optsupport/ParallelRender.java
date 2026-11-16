@@ -1024,14 +1024,13 @@ public final class ParallelRender {
     /** merged inside another mod's dispatcher hooks: one job in 16 checked (their per-entity state may reach the bytes) */
     private static final boolean CHECK_DENSE = !DISPATCH_UNTOUCHED;
     /** render thread: per entity type {jobs merged, mismatches}; counted again after a resource reload */
-    private static final java.util.IdentityHashMap<net.minecraft.world.entity.EntityType<?>, int[]> CHECKS = new java.util.IdentityHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<net.minecraft.world.entity.EntityType<?>, int[]> CHECKS = new java.util.concurrent.ConcurrentHashMap<>();   // (a reload clears it on the main thread)
     private static long checked, checkMismatches;
 
     /** Is this merge one of the checked ones? (render thread) */
     private static boolean sampled(Job j) {
         if (!CHECK || j.parts.size() > 0) return false;   // parts: our own path for GeckoLib bones (verify mode checks it)
-        int[] c = CHECKS.get(j.entity.getType());
-        if (c == null) CHECKS.put(j.entity.getType(), c = new int[2]);
+        int[] c = CHECKS.computeIfAbsent(j.entity.getType(), t -> new int[2]);
         int n = c[0]++;
         return n < CHECK_FIRST || n % (CHECK_DENSE ? 16 : CHECK_EVERY) == 0;
     }
@@ -1046,7 +1045,7 @@ public final class ParallelRender {
         if (VERIFY_OUT.sameAs(j.out)) return false;
         checkMismatches++;
         net.minecraft.world.entity.EntityType<?> type = j.entity.getType();
-        if (++CHECKS.get(type)[1] == CHECK_LIMIT) {
+        if (++CHECKS.computeIfAbsent(type, t -> new int[2])[1] == CHECK_LIMIT) {
             WORKER_REFUSED.add(type);
             System.out.println("[sleep/opt] parallel render: " + type + " kept on the render thread: rendered inside the call another mod wraps, it differs from the worker's ("
                     + describe(VERIFY_OUT, j.out).split("\n")[0] + ")");

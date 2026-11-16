@@ -306,7 +306,7 @@ public final class ParallelEntities {
         NEXT.set(t);
         REMAINING.set(runEnd - t);
         ParticleWorkers.renderThread = Thread.currentThread();
-        levelRandom = all[t].level().random;
+        levelRandom = FrameRandom.unwrap(all[t].level().random);
         ParticleWorkers.SHARED.clear();
         ParticleWorkers.active = true;
         try {
@@ -442,7 +442,7 @@ public final class ParallelEntities {
         NEXT.set(0);
         REMAINING.set(m);
         ParticleWorkers.renderThread = Thread.currentThread();
-        levelRandom = all[0].level().random;
+        levelRandom = FrameRandom.unwrap(all[0].level().random);
         ParticleWorkers.SHARED.clear();
         ParticleWorkers.active = true;
         asyncRunning = true;

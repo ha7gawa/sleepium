@@ -36,7 +36,7 @@ public final class FrameReactor {
     private static volatile LabRuntime pool;
     private static final MpmcRing DONE = new MpmcRing(1024);
     private static final ArrayDeque<Runnable> OVERFLOW = new ArrayDeque<>();
-    private static final List<Participant> PARTICIPANTS = new ArrayList<>();
+    private static final List<Participant> PARTICIPANTS = new java.util.concurrent.CopyOnWriteArrayList<>();   // (registered on the main thread, walked on the frame thread too)
     public static long completions, overflows;
 
     public static int threads() {

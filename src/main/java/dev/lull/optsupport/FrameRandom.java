@@ -17,6 +17,15 @@ public final class FrameRandom implements RandomSource {
         this.main = main;
     }
 
+    /**
+     * the level's own source behind the wrapper (ParallelEntities compares draws with it: LegacyRandomSource.next sees the
+     * wrapped source as this - with the wrapper compared, no draw ever matched and random-drawing classes were never
+     * refused from the parallel tick; the frame thread audit, 11-16)
+     */
+    public static Object unwrap(Object r) {
+        return r instanceof FrameRandom f ? f.main : r;
+    }
+
     private RandomSource rs() {
         return FrameThread.onFrameThread() ? frame : main;
     }
