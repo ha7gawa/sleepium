@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class TickAsyncMixin {
     @Inject(method = "runTick", at = @At("HEAD"))
     private void sleep$joinAtFrame(boolean renderLevel, CallbackInfo ci) {
-        if (dev.lull.optsupport.FrameThread.SELF) TickAsync.joinIfDone();   // (self-clocked: woken often - never wait for the walk here)
+        if (dev.lull.optsupport.FrameThread.active) TickAsync.joinIfDone();   // (self-clocked: woken often - never wait for the walk here)
         else TickAsync.join();
     }
 

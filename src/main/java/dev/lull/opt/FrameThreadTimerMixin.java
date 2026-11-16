@@ -6,11 +6,11 @@ import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-/** FrameThread.PT_TICK_END: on the frame thread, while it draws, Minecraft.getFrameTime gives the tick-end partial tick. */
+/** FrameThread: on the frame thread, while it draws, Minecraft.getFrameTime gives the tick-end partial tick. */
 @Mixin(Minecraft.class)
 public abstract class FrameThreadTimerMixin {
     @ModifyReturnValue(method = "getFrameTime", at = @At("RETURN"))
     private float sleep$tickEndPt(float pt) {
-        return FrameThread.PT_TICK_END && FrameThread.drawingHere() ? FrameThread.tickEndPt() : pt;
+        return FrameThread.drawingHere() ? FrameThread.tickEndPt() : pt;
     }
 }

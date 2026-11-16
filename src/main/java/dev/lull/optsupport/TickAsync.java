@@ -96,13 +96,12 @@ public final class TickAsync {
     public static long gaveWay;
 
     /**
-     * -Dlab.tickAsync.gen (an experiment, 11-16): the join's render part without stopping the frame thread. The pairs are
+     * Generations (notes/75; with the frame thread): the join's render part without stopping the frame thread. The pairs are
      * swapped, the walking set emptied and a new generation published (FrameThread.publish); a frame begun before it may
      * still draw from the old pairs and the snapshot jobs - those are written again only by the next walk, so the wait
      * moves to the next walk's start (the gate, tickEnd) and covers only a frame begun before the join that still draws:
      * never the frames queued in the ring behind it. The snapshot jobs come from two pools in turn and are let go there.
      */
-    static final boolean GEN = Boolean.getBoolean("lab.tickAsync.gen");
     /** the generation published at the last join whose gate has not been passed (0: none) */
     private static long gateGen;
     public static long gates, gateWaits, gateWaitNs;
@@ -127,34 +126,16 @@ public final class TickAsync {
             waitEma = 0;
         }
         gate();
-        if (renderPending) {   // the last walk's render part, before the next walk reuses its arrays
-            long t0 = System.nanoTime();
-            finishRender();
-            pendingWaitNs += System.nanoTime() - t0;
-        }
         ParallelEntities.startAsync();
     }
 
-    /**
-     * -Dlab.tickAsync.deferRender (off: lost - the wait moved to the tick's end, 22.8 ms there, DH tour 102 -> 94 fps, p99
-     * 39 -> 56 ms): when the frame thread is drawing at a join, only the walk's world part is
-     * joined; its render part (poses installed, snapshots let go, the walking set cleared) waits until the tick has run
-     * - the frame drawing meanwhile keeps drawing those entities from their snapshots. The join no longer waits for a
-     * whole frame (Distant Horizons tour on the host: frames of ~28 ms, TickAsync cost 110 -> 102 fps, p99 29 -> 39 ms).
-     */
-    static final boolean DEFER = Boolean.getBoolean("lab.tickAsync.deferRender");
-    private static boolean renderPending;
-    public static long deferredJoins, pendingWaitNs;
 
     /** runTick's / Minecraft.tick's start: the walk joined (help, then wait) */
     public static void join() {
-        if (!ParallelEntities.asyncRunning() || renderPending) return;   // (pending: the world part is done already)
+        if (!ParallelEntities.asyncRunning()) return;
         long t0 = System.nanoTime();
         ParallelEntities.joinAsyncWorld();   // (the frame thread may draw meanwhile: nothing it reads changes here)
-        if (DEFER && FrameThread.drawingNow()) {
-            renderPending = true;
-            deferredJoins++;
-        } else finishRender();
+        finishRender();
         joinWaitNs += System.nanoTime() - t0;
         joins++;
     }
@@ -186,7 +167,7 @@ public final class TickAsync {
     /** a level change: the walk joined whole, its render part too */
     public static void joinAll() {
         if (ParallelEntities.asyncRunning()) {
-            if (!renderPending) ParallelEntities.joinAsyncWorld();
+            ParallelEntities.joinAsyncWorld();
             finishRender(false);
         }
         if (gateGen != 0) {   // (a level change: the frames drained first - FrameThread.holdUntilNextFrame)
@@ -205,11 +186,10 @@ public final class TickAsync {
      * and no extra frame starts until it is done
      */
     private static void finishRender() {
-        finishRender(GEN);
+        finishRender(true);
     }
 
     private static void finishRender(boolean gen) {
-        renderPending = false;
         if (gen && FrameThread.active) {   // no hold: swapped, then published (a frame begun from now on reads the new state)
             ParallelEntities.joinAsyncRender(true);
             gateGen = FrameThread.publish();
@@ -238,19 +218,12 @@ public final class TickAsync {
         }
     }
 
-    private static void joinOld() {
-        long t0 = System.nanoTime();
-        ParallelEntities.joinAsync();
-        joinWaitNs += System.nanoTime() - t0;
-        joins++;
-    }
-
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "tick async: walks %d, entities %d (snapshots %d, unseen %d - waited for in a frame %d), frames holding %d (from snapshots %d), skipped %d, joins %d (%.3f ms a join; render part deferred to the tick's end %d, %.3f ms each there; gave way %d times; client tasks waited for the walk %d times)",
+        return String.format(java.util.Locale.ROOT, "tick async: walks %d, entities %d (snapshots %d, unseen %d - waited for in a frame %d), frames holding %d (from snapshots %d), skipped %d, joins %d (%.3f ms a join; gave way %d times; client tasks waited for the walk %d times)",
                 walks, entities, snapshots, unseen, unseenWaits, holdFrames, snapFrames, skipped, joins, joins == 0 ? 0.0 : joinWaitNs / 1e6 / joins,
-                deferredJoins, deferredJoins == 0 ? 0.0 : pendingWaitNs / 1e6 / deferredJoins, gaveWay, tasksDeferred)
+                gaveWay, tasksDeferred)
                 + String.format(java.util.Locale.ROOT, "; skips: no pair %d, snapshot failed %d, pair merge failed %d (held pairs on the CPU after a GPU refusal %d, refusals marked %d)",
                         skipNone, skipSnap, skipMerge, TickPoses.HELD_CPU.get(), TickPoses.HELD_REFUSED.get())
-                + (GEN ? String.format(java.util.Locale.ROOT, "; generation gates %d (waited at %d, %.3f ms a gate)", gates, gateWaits, gates == 0 ? 0.0 : gateWaitNs / 1e6 / gates) : "");
+                + String.format(java.util.Locale.ROOT, "; generation gates %d (waited at %d, %.3f ms a gate)", gates, gateWaits, gates == 0 ? 0.0 : gateWaitNs / 1e6 / gates);
     }
 }

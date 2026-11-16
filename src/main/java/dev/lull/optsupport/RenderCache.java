@@ -586,7 +586,7 @@ public final class RenderCache {
             // (not while the frame thread draws beside the main thread's tick: the main thread counts tickCount up at the
             // same time - the shift could lose a tick or leave 7; renderers aging by tickCount + partial tick are caught by
             // the partial tick probe above; the frame thread audit, 11-16)
-            if (!animated && obj instanceof net.minecraft.world.entity.Entity e && !(FrameThread.active && FrameThread.OVERLAP)) {
+            if (!animated && obj instanceof net.minecraft.world.entity.Entity e && !(FrameThread.active)) {
                 e.tickCount += 7;
                 try {
                     animated = record(d, pt, PROBE) != OK || !PROBE.sameAs(rec);

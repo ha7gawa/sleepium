@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.At;
 public abstract class FrameThreadPickMixin {
     @WrapOperation(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/GameRenderer;pick(F)V"))
     private void sleep$pickOnMain(GameRenderer renderer, float pt, Operation<Void> original) {
-        if (dev.lull.optsupport.FrameThread.onFrameThread() && dev.lull.optsupport.FrameThread.OVERLAP) return;
+        if (dev.lull.optsupport.FrameThread.onFrameThread()) return;
         original.call(renderer, pt);
     }
 }
