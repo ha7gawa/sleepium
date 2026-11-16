@@ -1317,11 +1317,11 @@ public final class ParallelRender {
     // ------------------------------------------------------------------ TickAsync's snapshots
 
     /** render thread: entities a worker drew (the usual job path, merged fine) and the drain they were last drawn in */
-    private static final java.util.IdentityHashMap<Entity, Long> ON_WORKER = new java.util.IdentityHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<Entity, Long> ON_WORKER = new java.util.concurrent.ConcurrentHashMap<>();   // (concurrent: the split reads it on the main thread)
     private static long drainFrame;
 
     /** render thread: every entity a frame queued, and the drain it was queued in */
-    private static final java.util.IdentityHashMap<Entity, Long> DRAWN = new java.util.IdentityHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<Entity, Long> DRAWN = new java.util.concurrent.ConcurrentHashMap<>();
 
     static boolean drawnLately(Entity e) {
         Long f = DRAWN.get(e);

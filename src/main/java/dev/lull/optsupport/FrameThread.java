@@ -73,6 +73,7 @@ public final class FrameThread {
 
     private static void start(Minecraft m) {
         mc = m;
+        OwnerThread.client = Thread.currentThread();   // (the client's ticks stay here; EntitySleep's sides, the memos' owner checks)
         realTimer = m.getTimer();
         mainThread = Thread.currentThread();
         caps = org.lwjgl.opengl.GL.getCapabilities();
@@ -671,8 +672,13 @@ public final class FrameThread {
         double k = Math.abs(turnScale);
         if (MOUSE_ACC) {   // the movement the main thread will apply at its next frame (pumpMotion keeps it current)
             dev.lull.opt.FrameThreadMouseAccessor m = (dev.lull.opt.FrameThreadMouseAccessor) mc.mouseHandler;
-            turnYaw = (float) (m.sleep$accumulatedDX() * k);
-            turnPitch = (float) (m.sleep$accumulatedDY() * turnScale);
+            double dx = m.sleep$accumulatedDX(), dy = m.sleep$accumulatedDY();
+            if (pumpValid) {   // the moves polled inside the tick, queued: GLFW's cursor past what the handler has seen
+                dx += pumpCursorX - m.sleep$xpos();
+                dy += pumpCursorY - m.sleep$ypos();
+            }
+            turnYaw = (float) (dx * k);
+            turnPitch = (float) (dy * turnScale);
             return;
         }
         if (cursorFrame == null) cursorFrame = org.lwjgl.system.windows.POINT.calloc();
@@ -689,8 +695,21 @@ public final class FrameThread {
      */
     static final boolean MOUSE_ACC = !"false".equals(System.getProperty("lab.frameThread.mouseAcc"));
     private static long pumpAt;
+    /**
+     * -Dlab.frameThread.pumpAfterMs (8): the mouse's messages are taken only once a tick has run this long. Taken in every
+     * tick (every 1 ms between entity ticks) they cost the host's horde ~10 % fps and Windows marked the window as not
+     * responding at times (11-16: 1 of 130 s watched vs 0 of 217 s without; with the 30-ms test tick often).
+     */
+    private static final long PUMP_AFTER_NS = (long) (Double.parseDouble(System.getProperty("lab.frameThread.pumpAfterMs", "8")) * 1e6);
+    /** when the main thread's current busy stretch (queued tasks, then the tick) began */
+    private static volatile long busySince;
     public static long pumps;
-    private static org.lwjgl.system.windows.MSG pumpMsg;
+    /** the main thread polls the window inside a long tick: Minecraft.execute queues (FrameThreadPumpQueueMixin) */
+    public static volatile boolean pumping;
+    private static double[] pumpX, pumpY;
+    /** GLFW's cursor after the last poll inside a tick (valid until the queued moves are run: the next tasks) */
+    private static volatile double pumpCursorX, pumpCursorY;
+    private static volatile boolean pumpValid;
 
     /**
      * the main thread inside a long tick (entity ticks, the test load): the window's mouse-movement messages only
@@ -700,14 +719,26 @@ public final class FrameThread {
     public static void pumpMotion() {
         if (!active || !EXTRA_TURN || !MOUSE_ACC || !WINDOWS || !mainTicking || Thread.currentThread() != mainThread) return;
         long now = System.nanoTime();
+        if (now - busySince < PUMP_AFTER_NS) return;   // (only in a long tick: in a normal one the next poll comes soon anyway)
         if (now - pumpAt < 1_000_000L) return;
         pumpAt = now;
-        if (pumpMsg == null) pumpMsg = org.lwjgl.system.windows.MSG.calloc();
-        long hwnd = org.lwjgl.glfw.GLFWNativeWin32.glfwGetWin32Window(window);
-        while (org.lwjgl.system.windows.User32.PeekMessage(pumpMsg, hwnd, 0x00FF, 0x00FF, org.lwjgl.system.windows.User32.PM_REMOVE))
-            org.lwjgl.system.windows.User32.DispatchMessage(pumpMsg);
-        while (org.lwjgl.system.windows.User32.PeekMessage(pumpMsg, hwnd, 0x0200, 0x0200, org.lwjgl.system.windows.User32.PM_REMOVE))
-            org.lwjgl.system.windows.User32.DispatchMessage(pumpMsg);
+        // a whole poll (the mouse's messages alone, taken with a filtered PeekMessage, made Windows mark the window as not
+        // responding: 22 of 131 s watched with a 30-ms tick vs 0) - the input callbacks' work queued meanwhile
+        // (FrameThreadPumpQueueMixin), GLFW's virtual cursor read after it for the extra frames' turn
+        pumping = true;
+        try {
+            org.lwjgl.glfw.GLFW.glfwPollEvents();
+        } finally {
+            pumping = false;
+        }
+        if (pumpX == null) {
+            pumpX = new double[1];
+            pumpY = new double[1];
+        }
+        org.lwjgl.glfw.GLFW.glfwGetCursorPos(window, pumpX, pumpY);
+        pumpCursorX = pumpX[0];
+        pumpCursorY = pumpY[0];
+        pumpValid = true;
         pumps++;
     }
 
@@ -731,7 +762,9 @@ public final class FrameThread {
     public static long tasksSeen;
 
     public static void tasksStart() {
+        pumpValid = false;   // (the queued moves run now: the handler catches up with the cursor)
         if (!EXTRA_TASKS || !EXTRA) return;
+        if (!mainTicking) busySince = System.nanoTime();
         mainTicking = true;
         if (turnFrame != frames) {
             turnStart();
@@ -747,6 +780,7 @@ public final class FrameThread {
     }
 
     public static void tickStart() {
+        if (!mainTicking) busySince = System.nanoTime();
         mainTicking = true;
         if (turnFrame != frames) {   // (the queued tasks before it already took the turn's reference for this frame)
             turnStart();

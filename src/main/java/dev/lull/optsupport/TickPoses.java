@@ -78,10 +78,11 @@ public final class TickPoses {
         }
     }
 
-    private static final Map<EntityType<?>, Stat> STATS = new IdentityHashMap<>();
-    private static final Map<Entity, Pair> PAIRS = new IdentityHashMap<>();
+    // (concurrent: the main thread's split reads and fills them while an overlapped frame does too - the frame thread audit, 11-16)
+    private static final Map<EntityType<?>, Stat> STATS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<Entity, Pair> PAIRS = new java.util.concurrent.ConcurrentHashMap<>();
     /** TickAsync: each walking entity's second pair, written by a worker while frames draw from the first (render thread map) */
-    private static final Map<Entity, Pair> SPARE = new IdentityHashMap<>();
+    private static final Map<Entity, Pair> SPARE = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** render thread: drawn from tick poses now - its type qualified, its current pair done, usable, on the GPU path */
     static boolean asyncReady(Entity e) {

@@ -24,7 +24,8 @@ public final class TickAsync {
     public static boolean enabled = true;
     /** the entities ticking on the pool now (render thread only) */
     /** value: Boolean.TRUE (drawn from its tick pair) or the snapshot job (drawn from its pre-tick snapshot) */
-    static final IdentityHashMap<Entity, Object> WALKING = new IdentityHashMap<>();
+    /** (concurrent: the main thread fills it in the tick while an overlapped frame reads it - the frame thread audit, 11-16) */
+    static final java.util.concurrent.ConcurrentHashMap<Entity, Object> WALKING = new java.util.concurrent.ConcurrentHashMap<>();
     /**
      * -Dlab.tickAsync.snap (default on): stage 2 - entities without tick poses that the last frames drew on a worker:
      * the worker renders a snapshot at partial tick 1 (camera at the entity: parts, vertices, flame, shadow) before it
