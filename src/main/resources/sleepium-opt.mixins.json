@@ -181,6 +181,7 @@
     "TickPosesAnimationMixin",
     "FrameThreadEntityMarkMixin",
     "FrameThreadAnimationLockMixin",
+    "ParallelAnimationMixin",
     "FrameThreadMouseMixin",
     "FrameThreadTaskWakeMixin",
     "FrameThreadRenderEntityMixin",

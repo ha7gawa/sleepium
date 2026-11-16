@@ -50,6 +50,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Integer.getInteger("lab.leaves.cull", 0) > 0;
         if (simple.equals("HalfCloudsMixin"))   // the clouds at half resolution (HalfClouds)
             on = Boolean.getBoolean("lab.clouds.half");
+        if (simple.equals("ParallelAnimationMixin"))   // models animated on several threads: a scratch vector each, the clock read in one step
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntitiesMixin") || Boolean.getBoolean("lab.opt.FrameThreadMixin");
         if (simple.equals("TickPosesAnimationMixin"))   // tick poses: renders that move their entity's animation clock
             on = Boolean.getBoolean("lab.prender.tickPoses");
         if (simple.startsWith("FrameThread"))   // the frame thread's hooks (FrameThread)
