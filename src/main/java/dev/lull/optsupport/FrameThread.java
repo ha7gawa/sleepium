@@ -405,17 +405,23 @@ public final class FrameThread {
      */
     private static final String SIDE = System.getProperty("lab.frameThread.side", "auto");
     private static Boolean sideWanted;
+    /**
+     * mods whose GL work never runs on the main thread with the frame thread on: no side context for them. Distant
+     * Horizons: its render-thread tasks are routed to the frame thread (DhRenderTasksMixin); with the side context its
+     * LOD tour lost 102 -> 87 fps, p99 39 -> 68 ms (two contexts of a share group current at once: the driver locks)
+     */
+    private static final java.util.Set<String> GL_CLEAN = java.util.Set.of("minecraft", "neoforge", "sleepium", "distanthorizons");
 
     private static boolean sideWanted() {
         Boolean w = sideWanted;
         if (w == null) {
             int mods;
-            try {
-                mods = net.neoforged.fml.ModList.get().size();
+            try {   // (minecraft, neoforge, sleepium, and the mods known to make GL calls only where the frame thread runs them)
+                mods = (int) net.neoforged.fml.ModList.get().getMods().stream().filter(m -> !GL_CLEAN.contains(m.getModId())).count();
             } catch (Throwable t) {
                 mods = 99;
             }
-            w = "true".equals(SIDE) || "auto".equals(SIDE) && mods > 3;   // (minecraft, neoforge, sleepium)
+            w = "true".equals(SIDE) || "auto".equals(SIDE) && mods > 0;
             sideWanted = w;
             LOG.info("[sleep/opt] frame thread: side context for the main thread {} ({} mods loaded)", w ? "on" : "off", mods);
         }
@@ -543,6 +549,7 @@ public final class FrameThread {
                     // the main thread's queued GL work first (vanilla's atlas tick queues itself when not on the render
                     // thread): before the frame, where vanilla's tick had it - flipFrame's replay would be a frame late
                     long q0 = System.nanoTime();
+                    if (StallProbe.FRAME) StallProbe.frameStart();
                     long sf = sideFence;
                     if (sf != 0) org.lwjgl.opengl.GL32C.glWaitSync(sf, 0, org.lwjgl.opengl.GL32C.GL_TIMEOUT_IGNORED);
                     long q1 = System.nanoTime();
@@ -650,6 +657,11 @@ public final class FrameThread {
         double k = Math.abs(turnScale);
         turnYaw = (float) ((cursorFrame.x() - tickCursorX) * k);
         turnPitch = (float) ((cursorFrame.y() - tickCursorY) * turnScale);
+    }
+
+    /** a frame or an extra frame is drawing on the frame thread now */
+    public static boolean drawingNow() {
+        return active && (!jobDone || extraRunning);
     }
 
     public static boolean extraNow() {

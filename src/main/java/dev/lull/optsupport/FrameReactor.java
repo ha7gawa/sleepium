@@ -117,7 +117,7 @@ public final class FrameReactor {
         // behind them on the same pool) would never end (N100 tour 11-16: the game hung on quitting)
         if (p == Point.LEVEL_CHANGE) {
             FrameThread.holdUntilNextFrame();   // (no extra frames of the old level while it is taken down)
-            TickAsync.join();
+            TickAsync.joinAll();
         }
         for (int i = 0; i < PARTICIPANTS.size(); i++) PARTICIPANTS.get(i).reach(p);
         drain();

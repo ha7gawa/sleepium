@@ -10,6 +10,8 @@ public final class StallProbe {
     private StallProbe() {}
 
     public static final boolean ON = Boolean.getBoolean("lab.stallProbe");
+    /** -Dlab.stallProbe.frameThread=true: the frame thread's jobs instead (FrameThread), with the lock waited on and its owner */
+    public static final boolean FRAME = Boolean.getBoolean("lab.stallProbe.frameThread");
     private static final long LIMIT = Long.getLong("lab.stallProbe.ms", 120) * 1_000_000L;
     private static volatile long frameStart;
     private static volatile long frameId;
@@ -18,6 +20,7 @@ public final class StallProbe {
     public static volatile long samples, longFrames;
 
     public static void frameStart() {
+        if (FRAME != FrameThread.onFrameThread()) return;   // (the main thread's frames, or the frame thread's jobs)
         if (render == null) {
             render = Thread.currentThread();
             Thread t = new Thread(StallProbe::run, "sleep-stall-probe");
@@ -54,6 +57,11 @@ public final class StallProbe {
             for (StackTraceElement e : st) {
                 if (n++ >= 14) break;
                 sb.append("\n      ").append(e.getClassName().substring(e.getClassName().lastIndexOf('.') + 1)).append('.').append(e.getMethodName()).append(':').append(e.getLineNumber());
+            }
+            if (FRAME) {
+                java.lang.management.ThreadInfo ti = java.lang.management.ManagementFactory.getThreadMXBean().getThreadInfo(render.getId());
+                if (ti != null) sb.insert(0, "\n      [" + ti.getThreadState() + (ti.getLockName() != null ? " on " + ti.getLockName() : "")
+                        + (ti.getLockOwnerName() != null ? " held by " + ti.getLockOwnerName() : "") + "]");
             }
             SEEN.computeIfAbsent(sb.toString(), k -> new int[1])[0]++;
             samples++;
