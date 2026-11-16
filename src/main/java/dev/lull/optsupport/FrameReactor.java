@@ -56,7 +56,11 @@ public final class FrameReactor {
                 // finished more sections a frame than the render thread uploads smoothly (11-14 host: stutters 0.58 -> 0.84 %,
                 // with 4: 0.49-0.69 %); the server's pool takes Worker-Main's workers (generation)
                 int n = THREADS;
-                pool = LabRuntime.Config.of("Frame-Worker", n).withPriority(OsThreads.BELOW_NORMAL).withDaemon(true).withTickPriority(OsThreads.NORMAL);
+                // -Dlab.clientPool.workPriority (0 = normal; 1 above normal): the frame's own work on the pool (entity
+                // jobs, the tick walk: TICK / CHUNK lanes) - the pipeline's priorities (notes/75): above the server's
+                // generation, which runs at normal too
+                pool = LabRuntime.Config.of("Frame-Worker", n).withPriority(OsThreads.BELOW_NORMAL).withDaemon(true)
+                        .withTickPriority(Integer.getInteger("lab.clientPool.workPriority", OsThreads.NORMAL));
                 System.out.println("[sleep/opt] frame reactor: " + n + " workers (one pool: the client's background work too)");
                 return pool;
             }

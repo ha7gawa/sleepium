@@ -1072,7 +1072,19 @@ public final class FrameThread {
 
     // ------------------------------------------------------------------ the frame thread
 
+    /**
+     * -Dlab.frameThread.osPriority (2 = Windows' HIGHEST; 0 = leave Java's): the pipeline's priorities (notes/75) - the
+     * frame first: the frame thread above the main thread and the server (above normal) and the pools (below normal).
+     * It sleeps to its due time most of the frame, so it takes a core only while drawing; on the N100 a woken frame
+     * thread waited for a core the generation and the render pool held (the stall probe, 11-16).
+     */
+    static final int OS_PRIORITY = Integer.getInteger("lab.frameThread.osPriority", 2);
+
     private static void loop() {
+        if (OS_PRIORITY != 0 && RenderPriority.OS_OK) {
+            boolean ok = dev.lab.runtime.OsThreads.setCurrentPriority(OS_PRIORITY);
+            LOG.info("[sleep/opt] frame thread: OS priority {} {}", OS_PRIORITY, ok ? "set" : "not taken (stays as it was)");
+        }
         while (true) {
             long spinUntil = System.nanoTime() + SPIN_NS;   // (bounded: the main thread's next frame usually comes soon)
             while (taken == handed && !borrowAsked) {
