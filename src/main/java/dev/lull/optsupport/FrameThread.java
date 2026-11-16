@@ -1549,6 +1549,7 @@ public final class FrameThread {
             UploadRing.frameBegin();
             if (self) {   // (a frame of its own: the queued GL work and mods' render-thread tasks too, as a job's start)
                 selfFrames++;
+                if (StallProbe.FRAME) StallProbe.frameStart();
                 com.mojang.blaze3d.systems.RenderSystem.replayQueue();
                 drainSelfCalls();
                 runRenderTasks();

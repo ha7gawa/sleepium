@@ -13,6 +13,8 @@ public final class StallProbe {
     /** -Dlab.stallProbe.frameThread=true: the frame thread's jobs instead (FrameThread), with the lock waited on and its owner */
     public static final boolean FRAME = Boolean.getBoolean("lab.stallProbe.frameThread");
     private static final long LIMIT = Long.getLong("lab.stallProbe.ms", 120) * 1_000_000L;
+    /** -Dlab.stallProbe.periodMs (20): how often the probe looks (short stalls need a short period) */
+    private static final long PERIOD = Long.getLong("lab.stallProbe.periodMs", 20);
     private static volatile long frameStart;
     private static volatile long frameId;
     private static volatile Thread render;
@@ -38,7 +40,7 @@ public final class StallProbe {
         int taken = 0;
         while (true) {
             try {
-                Thread.sleep(20);
+                Thread.sleep(PERIOD);
             } catch (InterruptedException e) {
                 return;
             }
@@ -55,7 +57,7 @@ public final class StallProbe {
             StringBuilder sb = new StringBuilder();
             int n = 0;
             for (StackTraceElement e : st) {
-                if (n++ >= 14) break;
+                if (n++ >= 20) break;
                 sb.append("\n      ").append(e.getClassName().substring(e.getClassName().lastIndexOf('.') + 1)).append('.').append(e.getMethodName()).append(':').append(e.getLineNumber());
             }
             if (FRAME) {
