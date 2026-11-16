@@ -182,6 +182,7 @@
     "FrameThreadEntityMarkMixin",
     "FrameThreadAnimationLockMixin",
     "FrameThreadMouseMixin",
+    "FrameThreadTaskWakeMixin",
     "FrameThreadRenderEntityMixin",
     "HalfCloudsMixin",
     "LeafCullMixin",

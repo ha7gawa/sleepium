@@ -203,6 +203,149 @@ public final class FrameThread {
      */
     public static final boolean PUBLISH = Boolean.getBoolean("lab.frameThread.publish");
 
+    // ------------------------------------------------------------------ self-clocked frames (notes/75, stage 3)
+
+    /**
+     * -Dlab.frameThread.selfClock (with the ring): with no screen open, the frame thread draws on its own clock (the
+     * frame rate limit, vsync, or as fast as it can) from the last recorded frame and the latest published lists - every
+     * frame at the partial tick from the tick's end, its camera turned by the mouse not yet applied (latchTurn) - and
+     * the main thread no longer runs once a frame: it hands a new recorded frame over only when it carries something
+     * (renderer calls, section marks, a tick ran, new published lists, or 50 ms passed) and otherwise waits for events
+     * until the next tick is due - woken earlier by a task from another thread (FrameThreadTaskWakeMixin), the mouse
+     * (at most every 2 ms) or a screen. Keys and clicks are handled in the tick, as in vanilla.
+     */
+    public static final boolean SELF = Boolean.getBoolean("lab.frameThread.selfClock") && RING > 1;
+    /** the main thread's view: frames may run on their own now (no screen, a level, not paused) */
+    private static volatile boolean selfOk;
+    private static volatile boolean taskPending, mainIdle;
+    private static long lastHandNs, lastTickStartNs, runTickAt;
+    private static boolean tickedSinceHand;
+    private static EntList handedEnts;
+    private static PartMap handedParts;
+    public static long selfSkips, selfHands, idleWaits, idleWakesTask, idleWakesMouse, idleWakesDue, idleWakesScreen, selfFrames;
+
+    /** runTick's frame rate limit is not the main thread's to keep (it waits for events instead) */
+    public static boolean selfClocking() {
+        return SELF && active && selfOk && Thread.currentThread() == mainThread;
+    }
+
+    /** another thread handed Minecraft a task (FrameThreadTaskWakeMixin): the main thread woken from its wait (once) */
+    public static void taskPosted() {
+        if (!SELF || !active || Thread.currentThread() == mainThread || taskPending) return;
+        taskPending = true;
+        if (mainIdle) org.lwjgl.glfw.GLFW.glfwPostEmptyEvent();
+    }
+
+    /**
+     * self-clocked: the main thread's renderer calls and section marks, made by the frame thread at the start of its
+     * next frame (a handed one or one of its own) - they no longer need a recorded frame handed over
+     */
+    private static final java.util.concurrent.ConcurrentLinkedQueue<Object[]> SELF_CALLS = new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+    /** the frame thread at a frame's start: the queued calls, in order */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void drainSelfCalls() {
+        Object[] c;
+        while ((c = SELF_CALLS.poll()) != null) ((com.llamalad7.mixinextras.injector.wrapoperation.Operation) c[0]).call((Object[]) c[1]);
+    }
+
+    /** the main thread (self-clocked): this frame's calls and marks into the queue instead of the slot */
+    private static void queueSelfCalls(Slot r) {
+        for (int i = 0; i < r.calls.size(); i++) SELF_CALLS.add(new Object[] {r.calls.get(i), r.callArgs.get(i)});
+        r.calls.clear();
+        r.callArgs.clear();
+        if (r.nDirty > 0) {
+            final int[] d = java.util.Arrays.copyOf(r.dirty, r.nDirty * 4);
+            final int n = r.nDirty;
+            r.nDirty = 0;
+            Runnable marks = () -> {
+                net.minecraft.client.renderer.LevelRenderer lr = mc.levelRenderer;
+                for (int i = 0; i < n; i++)
+                    ((dev.lull.opt.FrameThreadDirtyInvoker) lr).sleep$setSectionDirty(d[i * 4], d[i * 4 + 1], d[i * 4 + 2], d[i * 4 + 3] != 0);
+            };
+            SELF_CALLS.add(new Object[] {RUN_OP, new Object[] {marks}});
+        }
+    }
+
+    private static volatile boolean walkReady;
+    public static long idleWakesWalk;
+
+    /** TickAsync's walk done (a worker): the main thread woken to join it - the frames draw its new poses at once */
+    public static void walkDone() {
+        if (!SELF || !active) return;
+        walkReady = true;
+        if (mainIdle) org.lwjgl.glfw.GLFW.glfwPostEmptyEvent();
+    }
+
+    /** the main thread at a hand-over (self-clocked): whether this recorded frame must go to the frame thread */
+    private static boolean needHand(Slot r) {
+        int why = holdToFrame ? 0 : !r.calls.isEmpty() ? 1 : r.nDirty > 0 ? 2 : tickedSinceHand ? 3 : r.ents != handedEnts || r.parts != handedParts ? 4
+                : System.nanoTime() - lastHandNs > 50_000_000L ? 5 : -1;
+        if (why >= 0) HAND_WHY[why]++;
+        return why >= 0;
+    }
+
+    /** the hand-overs by their first reason: level change, renderer calls, section marks, a tick, new lists, 50 ms */
+    private static final long[] HAND_WHY = new long[6];
+    /** when the frame thread last began a frame; when the next one is due at the limit (self-clocked pacing, drift-free) */
+    private static long frameStartAt, nextDue;
+
+    /** the frame thread, a frame beginning now (self-clocked): the next one's due time moved on by the interval */
+    private static void paced(long now, long iv) {
+        frameStartAt = now;
+        nextDue = iv <= 0 || now - nextDue > iv ? now + iv : nextDue + iv;
+    }
+
+    private static long capInterval() {
+        int cap = mc != null ? mc.getWindow().getFramerateLimit() : 260;
+        return cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0;
+    }
+
+    /** the main thread, nothing to hand over: asleep in the window's event wait until the next tick is due (or woken) */
+    private static void mainIdleWait() {
+        idleWaits++;
+        float ms = mc.level != null ? mc.level.tickRateManager().millisecondsPerTick() : 50f;
+        long due = lastTickStartNs + (long) (ms * 1e6);
+        dev.lull.opt.FrameThreadMouseAccessor m = (dev.lull.opt.FrameThreadMouseAccessor) mc.mouseHandler;
+        mainIdle = true;
+        try {
+            while (true) {
+                if (taskPending && System.nanoTime() - runTickAt >= 2_000_000L) {   // (packets coalesced: at most every 2 ms)
+                    idleWakesTask++;
+                    break;
+                }
+                if (walkReady) {
+                    idleWakesWalk++;
+                    break;
+                }
+                if (mc.screen != null || !selfOk) {
+                    idleWakesScreen++;
+                    break;
+                }
+                long now = System.nanoTime();
+                if (now >= due) {
+                    idleWakesDue++;
+                    break;
+                }
+                if ((m.sleep$accumulatedDX() != 0 || m.sleep$accumulatedDY() != 0) && now - runTickAt >= 2_000_000L) {
+                    idleWakesMouse++;
+                    break;
+                }
+                boolean was = inGlfw;
+                inGlfw = true;
+                try {
+                    long slice = taskPending ? Math.max(100_000L, runTickAt + 2_000_000L - now) : 2_000_000L;
+                    org.lwjgl.glfw.GLFW.glfwWaitEventsTimeout(Math.min(slice, due - now) / 1e9);
+                } finally {
+                    inGlfw = was;
+                }
+                polled();
+            }
+        } finally {
+            mainIdle = false;
+        }
+    }
+
     static final class EntList {
         final java.util.ArrayList<net.minecraft.world.entity.Entity> list = new java.util.ArrayList<>();
     }
@@ -609,6 +752,25 @@ public final class FrameThread {
             holdToFrame = false;
             mainHolding = false;
         }
+        if (SELF && OVERLAP) {
+            selfOk = mc.screen == null && mc.level != null && !mc.isPaused();
+            if (selfOk && !pending) selfOk = false;   // (the first frame goes over the usual way)
+            if (selfOk) queueSelfCalls(r);
+            if (selfOk && !needHand(r)) {   // nothing new: the frame thread keeps drawing the last one; wait for events
+                selfSkips++;
+                mainRecording = false;
+                pollWindow();
+                polled();
+                mainIdleWait();
+                return;
+            }
+            selfHands++;
+            lastHandNs = System.nanoTime();
+            tickedSinceHand = false;
+            handedEnts = r.ents;
+            handedParts = r.parts;
+            if (selfOk) LockSupport.unpark(thread);
+        }
         long h = handed;
         JOBQ[(int) (h % RING)] = recIdx;
         handed = h + 1;   // (the slot's contents published with it)
@@ -839,14 +1001,17 @@ public final class FrameThread {
             while (taken == handed && !borrowAsked) {
                 Slot c = cur;
                 if (System.nanoTime() < spinUntil) Thread.onSpinWait();
-                else if (EXTRA && (mainTicking || EXTRA_ANY && !mainRecording && System.nanoTime() - handAt < 1_000_000_000L) && frameHolds && c != null && c.nOps > 0) {
+                else if (EXTRA && (SELF && selfOk || mainTicking || EXTRA_ANY && !mainRecording && System.nanoTime() - handAt < 1_000_000_000L) && frameHolds && c != null && c.nOps > 0) {
                     // (no sooner than the frame rate limit allows: extra frames are frames the player asked to cap; when
-                    // the main thread is not known to be busy, only once it is half a frame late)
+                    // the main thread is not known to be busy, only once it is half a frame late; self-clocked: at the
+                    // limit, or back to back)
                     int cap = mc != null ? mc.getWindow().getFramerateLimit() : 260;
-                    long iv = Math.max(lastFrameNs, cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0);
-                    long due = doneAt + (mainTicking ? iv : iv * 3 / 2) - System.nanoTime();
+                    long capIv = cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0;
+                    long iv = SELF && selfOk ? capIv : Math.max(lastFrameNs, capIv);
+                    long due = SELF && selfOk ? nextDue - System.nanoTime() : doneAt + (mainTicking ? iv : iv * 3 / 2) - System.nanoTime();
                     if (due > 0) LockSupport.parkNanos(due);
                     else if (extraFrame()) doneAt = System.nanoTime();
+                    else LockSupport.parkNanos(500_000L);   // (held by the main thread: look again soon, never spin)
                 } else LockSupport.park();
             }
             if (taken == handed && borrowAsked) {   // a borrow: release, wait until handed back (the next job)
@@ -859,6 +1024,14 @@ public final class FrameThread {
                 while (taken == handed) LockSupport.park();
             }
             if (taken == handed) continue;
+            if (SELF && selfOk && !borrowAsked && mc != null) {   // (self-clocked: a handed frame waits for its turn at the limit too)
+                long iv = capInterval(), now = System.nanoTime();
+                if (iv > 0 && nextDue - now > 0 && now - nextDue < iv) {
+                    LockSupport.parkNanos(nextDue - now);
+                    continue;
+                }
+                paced(now, iv);
+            } else frameStartAt = System.nanoTime();
             long job = taken;
             drawGen = gen;   // (before any read of the world: the gate's Dekker pair with publish)
             wakeNs += System.nanoTime() - handAt;
@@ -893,6 +1066,7 @@ public final class FrameThread {
                             ((dev.lull.opt.FrameThreadDirtyInvoker) lr).sleep$setSectionDirty(d[i * 4], d[i * 4 + 1], d[i * 4 + 2], d[i * 4 + 3] != 0);
                         s.nDirty = 0;
                     }
+                    if (SELF) drainSelfCalls();
                     int nCalls = s.calls.size();
                     for (int i = 0; i < nCalls; i++) s.calls.get(i).call(s.callArgs.get(i));   // the main thread's renderer calls, in order
                     s.calls.clear();
@@ -1110,6 +1284,9 @@ public final class FrameThread {
 
     public static void tasksStart() {
         pumpValid = false;   // (the queued moves run now: the handler catches up with the cursor)
+        taskPending = false;
+        walkReady = false;
+        runTickAt = System.nanoTime();
         if (!EXTRA_TASKS || !EXTRA) return;
         if (!mainTicking) busySince = System.nanoTime();
         mainTicking = true;
@@ -1162,6 +1339,7 @@ public final class FrameThread {
     }
 
     public static void tickStart() {
+        lastTickStartNs = System.nanoTime();
         if (MID_TICK) {
             tickRound++;
             inClientTick = true;
@@ -1194,6 +1372,7 @@ public final class FrameThread {
     }
 
     public static void tickEnd() {
+        tickedSinceHand = true;
         mainTicking = false;
         if (PUBLISH && active && OVERLAP && mc != null && Thread.currentThread() == mainThread) publishParticles();
         tickEndNs = System.nanoTime();
@@ -1300,7 +1479,8 @@ public final class FrameThread {
         // (ring: the slot drawn last is never recorded into - the main thread's recording does not stop it)
         Slot c = cur;
         boolean rec1 = RING == 1 && mainRecording;
-        if (!EXTRA || !OVERLAP || !(mainTicking || EXTRA_ANY) || rec1 || borrowAsked || mainHolding || c == null || c.nOps == 0 || taken != handed) return false;
+        boolean self = SELF && selfOk;
+        if (!EXTRA || !OVERLAP || !(self || mainTicking || EXTRA_ANY) || rec1 || borrowAsked || mainHolding || c == null || c.nOps == 0 || taken != handed) return false;
         extraRunning = true;
         if (taken != handed || borrowAsked || mainHolding || RING == 1 && mainRecording) {   // (a job or a borrow came meanwhile)
             extraRunning = false;
@@ -1308,10 +1488,18 @@ public final class FrameThread {
         }
         drawGen = gen;
         long t0 = System.nanoTime();
+        if (self) paced(t0, capInterval());
+        else frameStartAt = t0;
         drawing = true;
         extraNow = true;
         try {
             UploadRing.frameBegin();
+            if (self) {   // (a frame of its own: the queued GL work and mods' render-thread tasks too, as a job's start)
+                selfFrames++;
+                com.mojang.blaze3d.systems.RenderSystem.replayQueue();
+                drainSelfCalls();
+                runRenderTasks();
+            }
             runOps(c);
         } catch (Throwable t) {
             failure = t;
@@ -1413,6 +1601,8 @@ public final class FrameThread {
         if (NO_WAIT) b.append("; frames skipped by the main thread (no wait) ").append(skippedFrames);
         b.append(pollGaps());
         if (MID_TICK) b.append("; entities drawn at their last tick's end (mid-tick) ").append(midTickDraws);
+        if (SELF) b.append(String.format(java.util.Locale.ROOT, "; self-clocked: frames of its own %d, hand-overs %d (level %d, calls %d, marks %d, tick %d, lists %d, 50 ms %d), skipped %d; main idle waits %d (woken: task %d, walk %d, mouse %d, tick due %d, screen %d)",
+                selfFrames, selfHands, HAND_WHY[0], HAND_WHY[1], HAND_WHY[2], HAND_WHY[3], HAND_WHY[4], HAND_WHY[5], selfSkips, idleWaits, idleWakesTask, idleWakesWalk, idleWakesMouse, idleWakesDue, idleWakesScreen));
         if (PUBLISH) b.append("; published lists: entities ").append(entPublishes).append(", particles ").append(partPublishes);
         if (RING > 1) b.append(String.format(java.util.Locale.ROOT, "; ring of %d: the main thread waited for a free slot %d times (%.3f ms each), most frames waiting or drawing %d, dropped at level changes %d",
                 RING, ringWaits, ringWaitNs / 1e6 / Math.max(1, ringWaits), ringQueuedMax, ringDropped));

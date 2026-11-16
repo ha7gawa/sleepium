@@ -82,6 +82,12 @@ public abstract class FrameThreadMixin {
         } else op.call(w);
     }
 
+    /** self-clocked frames: the main thread does not wait for a frame interval - it waits for events (FrameThread.present) */
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;limitDisplayFPS(I)V"))
+    private void sleep$limit(int fps, Operation<Void> op) {
+        if (!FrameThread.selfClocking()) op.call(fps);
+    }
+
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;runAllTasks()V"))
     private void sleep$tasksStart(boolean renderLevel, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
         FrameThread.tasksStart();

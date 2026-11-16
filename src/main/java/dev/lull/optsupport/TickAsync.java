@@ -159,6 +159,14 @@ public final class TickAsync {
         joins++;
     }
 
+    /**
+     * runTick's start with self-clocked frames: joined only if the walk is done (the main thread wakes every few ms for
+     * packets - a join there waited for a walk just begun; the walk's end wakes it instead: FrameThread.walkDone)
+     */
+    public static void joinIfDone() {
+        if (ParallelEntities.asyncRunning() && ParallelEntities.asyncFinished()) join();
+    }
+
     /** a level change: the walk joined whole, its render part too */
     public static void joinAll() {
         if (ParallelEntities.asyncRunning()) {

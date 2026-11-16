@@ -372,6 +372,11 @@ public final class ParallelEntities {
         return asyncRunning;
     }
 
+    /** the walk's entities all ticked (a join would not wait) */
+    static boolean asyncFinished() {
+        return REMAINING.get() == 0;
+    }
+
     /**
      * The walk with TickAsync: entities drawn from tick poses left out (kept at the front of all[], in the walk's order,
      * each with its spare pair), every other one ticked here in its slot. False: none left out - the usual walk.
@@ -501,7 +506,7 @@ public final class ParallelEntities {
             done += e0 - s0;
         }
         cur[0] = -1;
-        if (done > 0 && REMAINING.addAndGet(-done) == 0 && !render) LockSupport.unpark(ParticleWorkers.renderThread);
+        if (done > 0 && REMAINING.addAndGet(-done) == 0 && !render) { LockSupport.unpark(ParticleWorkers.renderThread); FrameThread.walkDone(); }
     }
 
     /** render thread: the walk finished (helping first), its deferred moves and removals applied, the pairs swapped */
