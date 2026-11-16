@@ -155,6 +155,34 @@ public final class FrameThread {
      * thread at the start of the next frame, before that frame draws (vanilla made it before the frame too): the
      * renderer's side - vanilla's, Sodium's (its RenderAsserts want the render thread) - only ever runs there
      */
+    /**
+     * other mods' render-thread tasks (Distant Horizons: its GL work through Minecraft.execute, DhRenderTasksMixin), from
+     * any thread: run at the frame thread's next job start
+     */
+    private static final java.util.concurrent.ConcurrentLinkedQueue<Runnable> RENDER_TASKS = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    public static long renderTasks, renderTaskFailures;
+
+    public static boolean takeRenderTask(Runnable r) {
+        if (!active) return false;
+        RENDER_TASKS.add(r);
+        return true;
+    }
+
+    private static void runRenderTasks() {
+        Runnable t;
+        while ((t = RENDER_TASKS.poll()) != null) {
+            renderTasks++;
+            try {
+                t.run();
+            } catch (Throwable e) {
+                if (renderTaskFailures++ < 5) {
+                    System.out.println("[sleep/opt] frame thread: a mod's render-thread task failed: " + e);
+                    e.printStackTrace(System.out);
+                }
+            }
+        }
+    }
+
     private static final com.llamalad7.mixinextras.injector.wrapoperation.Operation<Object> RUN_OP = a -> {
         ((Runnable) a[0]).run();
         return null;
@@ -527,6 +555,7 @@ public final class FrameThread {
                     for (int i = 0; i < JOB_CALLS.size(); i++) JOB_CALLS.get(i).call(JOB_CALL_ARGS.get(i));   // the main thread's renderer calls, in order
                     JOB_CALLS.clear();
                     JOB_CALL_ARGS.clear();
+                    runRenderTasks();
                     long q3 = System.nanoTime();
                     tCalls += q3 - q2;
                     recordedAt = System.nanoTime();
@@ -788,6 +817,7 @@ public final class FrameThread {
                 extraFrames, extraNs / 1e6 / Math.max(1, extraFrames), ticksSeen, ticksWhileFrameBusy, ticksWhileIdle));
         b.append(String.format(java.util.Locale.ROOT, "; per frame (us): main present: polls %.1f, side fence %.1f, held lists + light %.1f; frame thread: side wait %.1f, frameBegin + queue %.1f, calls %.1f, ops %.1f",
                 tPoll / 1e3 / fr, tFence / 1e3 / fr, tHeld / 1e3 / fr, tSideWait / 1e3 / fr, tReplay / 1e3 / fr, tCalls / 1e3 / fr, tOps / 1e3 / fr));
+        if (renderTasks > 0) b.append("; mods' render-thread tasks run here ").append(renderTasks).append(" (failed ").append(renderTaskFailures).append(")");
         if (slowJobs > 0) b.append(String.format(java.util.Locale.ROOT, "; frame jobs over 10 ms: %d (%.1f ms each, longest %.1f; frameBegin + queue %.1f, calls %.1f (%d calls each), ops %.1f)",
                 slowJobs, slowJobNs / 1e6 / slowJobs, slowJobMax / 1e6, slowReplayNs / 1e6 / slowJobs, slowCallsNs / 1e6 / slowJobs, slowCallsN / slowJobs, slowOpsNs / 1e6 / slowJobs));
         BORROW_SITES.entrySet().stream().sorted((x, y) -> Long.compare(y.getValue()[0], x.getValue()[0])).limit(8)
