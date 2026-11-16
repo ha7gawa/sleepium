@@ -13,37 +13,56 @@ import org.spongepowered.asm.mixin.Unique;
 /**
  * exp/client-biome-memo (client): the render thread's noise-biome lookups (fog colour: 216 per frame, sky colour, the
  * ambient particles of animateTick: ~1300 per tick) answered from a per-level memo of quart position -> biome holder.
- * The answer is what LevelReader.getNoiseBiome gives for the chunk data at hand; ClientChunkCacheBiomeMixin clears the
- * memo whenever that data can change (chunk loaded, updated, dropped, biomes replaced, view centre or radius moved).
- * Other threads (section compiles ask for tints) go the vanilla way.
+ * The answer is what LevelReader.getNoiseBiome gives for the chunk data at hand; ClientChunkCacheBiomeMixin marks the
+ * memo stale whenever that data can change (chunk loaded, updated, dropped, biomes replaced, view centre or radius
+ * moved). Other threads (section compiles ask for tints) go the vanilla way.
+ * <p>
+ * With the frame thread (FrameThread) two threads ask - the main thread's tick (animateTick) and the frame thread's fog
+ * and sky - at the same time: each has its own memo, and a change only raises an epoch that each memo checks on its
+ * own thread (11-16, Distant Horizons tour: the one shared map was corrupted, a crash in its rehash).
  */
 @Mixin(ClientLevel.class)
 public abstract class ClientBiomeMemoMixin implements LevelReader, dev.lull.optsupport.BiomeMemo {
     @Unique private final Long2ObjectOpenHashMap<Holder<Biome>> sleep$biomes = new Long2ObjectOpenHashMap<>();
+    @Unique private final Long2ObjectOpenHashMap<Holder<Biome>> sleep$biomesFrame = new Long2ObjectOpenHashMap<>();
+    @Unique private volatile int sleep$epoch;
+    @Unique private int sleep$seen, sleep$seenFrame;
     @Unique private static long sleep$hits, sleep$misses, sleep$clears;
 
     @Override
     public Holder<Biome> getNoiseBiome(int x, int y, int z) {
-        if (!RenderSystem.isOnRenderThread()) return LevelReader.super.getNoiseBiome(x, y, z);
+        Long2ObjectOpenHashMap<Holder<Biome>> memo;
+        int e = sleep$epoch;
+        if (dev.lull.optsupport.FrameThread.onFrameThread()) {
+            memo = sleep$biomesFrame;
+            if (sleep$seenFrame != e) {
+                memo.clear();
+                sleep$seenFrame = e;
+            }
+        } else if (RenderSystem.isOnRenderThread() || dev.lull.optsupport.FrameThread.active && net.minecraft.client.Minecraft.getInstance().isSameThread()) {
+            memo = sleep$biomes;
+            if (sleep$seen != e) {
+                memo.clear();
+                sleep$seen = e;
+            }
+        } else return LevelReader.super.getNoiseBiome(x, y, z);
         long k = BlockPos.asLong(x, y, z);
-        Holder<Biome> h = sleep$biomes.get(k);
+        Holder<Biome> h = memo.get(k);
         if (h != null) {
             sleep$hits++;
             return h;
         }
         h = LevelReader.super.getNoiseBiome(x, y, z);
-        if (sleep$biomes.size() >= 65536) sleep$biomes.clear();
-        sleep$biomes.put(k, h);
+        if (memo.size() >= 65536) memo.clear();
+        memo.put(k, h);
         sleep$misses++;
         return h;
     }
 
     @Override
     public void sleep$biomesChanged() {
-        if (!sleep$biomes.isEmpty()) {
-            sleep$biomes.clear();
-            sleep$clears++;
-        }
+        sleep$epoch++;   // (each memo clears itself on its own thread at its next lookup)
+        sleep$clears++;
     }
 
     @Override
