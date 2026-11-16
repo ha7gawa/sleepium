@@ -432,6 +432,7 @@ public final class ParallelRender {
             if (snap == null) held = TickPoses.held(e);
             if (held == null && snap == null) {
                 TickAsync.skipped++;
+                TickAsync.skipNone++;
                 return;
             }
         }
@@ -455,7 +456,7 @@ public final class ParallelRender {
         j.camX = camX;
         j.camY = camY;
         j.camZ = camZ;
-        j.pt = TickSlice.ON ? TickSlice.partial(e, pt) : pt;
+        j.pt = TickSlice.ON ? TickSlice.partial(e, pt) : FrameThread.partial(e, pt);
         j.pose = pose;
         j.basePose.set(pose.last().pose());
         j.baseNormal.set(pose.last().normal());
@@ -1200,7 +1201,25 @@ public final class ParallelRender {
 
 
     /** After the loop: every job in order. */
+    /** -Dlab.prender.drainTime (measuring): the drain's whole time and its merges' per frame, timed directly */
+    static final boolean DRAIN_TIME = Boolean.getBoolean("lab.prender.drainTime");
+    public static long drainNs, mergeNs, drains, merges;
+
     public static void drain(LevelRenderer lr) {
+        if (DRAIN_TIME) {
+            long t0 = System.nanoTime();
+            try {
+                drain0(lr);
+            } finally {
+                drainNs += System.nanoTime() - t0;
+                drains++;
+            }
+            return;
+        }
+        drain0(lr);
+    }
+
+    private static void drain0(LevelRenderer lr) {
         LevelRendererInvoker inv = (LevelRendererInvoker) lr;
         for (int i = 0; i < size; i++) {
             Job j = QUEUE.get(i);
@@ -1209,7 +1228,7 @@ public final class ParallelRender {
                 Job sj = j.snap;
                 j.snap = null;
                 j.hold = false;
-                if (!drawSnapshot(sj, j)) TickAsync.skipped++;
+                if (!drawSnapshot(sj, j)) { TickAsync.skipped++; TickAsync.skipSnap++; }
                 if (clean) leakCheck(j);
                 j.entity = null;
                 continue;
@@ -1219,19 +1238,34 @@ public final class ParallelRender {
                 j.run();   // (not taken by a worker yet: here)
                 j.await();
                 j.tick = null;
-                if (j.ok && (j.gpuTick ? TickPoses.mergeGpu(tp, j) : PartBatch.mergeJob(j.parts, j.buffers))) {
+                long m0 = DRAIN_TIME ? System.nanoTime() : 0;
+                boolean merged = j.ok && (j.gpuTick ? TickPoses.mergeGpu(tp, j) : PartBatch.mergeJob(j.parts, j.buffers));
+                if (DRAIN_TIME) {
+                    mergeNs += System.nanoTime() - m0;
+                    merges++;
+                }
+                if (merged) {
                     RenderCache.append(j.out, j.buffers);   // (the flame and the shadow the job recorded)
                     parallel++;
                     if (clean) leakCheck(j);
                     j.entity = null;
                     continue;
                 }
+                if (j.hold && j.ok && j.gpuTick && TickPoses.heldCpu(tp, j) && PartBatch.mergeJob(j.parts, j.buffers)) {
+                    // (a held pair's GPU records refused here: its keys on the CPU - the entity may not be drawn live)
+                    parallel++;
+                    if (clean) leakCheck(j);
+                    j.entity = null;
+                    continue;
+                }
+                TickPoses.refused(tp);
                 j.parts.clear();
                 j.ok = false;
                 j.parallel = false;   // the usual way, on this thread
                 if (j.hold) {   // (not while a worker ticks it: left out of this frame)
                     j.hold = false;
                     TickAsync.skipped++;
+                    TickAsync.skipMerge++;
                     if (clean) leakCheck(j);
                     j.entity = null;
                     continue;
@@ -1410,11 +1444,11 @@ public final class ParallelRender {
     // ------------------------------------------------------------------ TickAsync's snapshots
 
     /** render thread: entities a worker drew (the usual job path, merged fine) and the drain they were last drawn in */
-    private static final java.util.IdentityHashMap<Entity, Long> ON_WORKER = new java.util.IdentityHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<Entity, Long> ON_WORKER = new java.util.concurrent.ConcurrentHashMap<>();   // (concurrent: the split reads it on the main thread)
     private static long drainFrame;
 
     /** render thread: every entity a frame queued, and the drain it was queued in */
-    private static final java.util.IdentityHashMap<Entity, Long> DRAWN = new java.util.IdentityHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<Entity, Long> DRAWN = new java.util.concurrent.ConcurrentHashMap<>();
 
     static boolean drawnLately(Entity e) {
         Long f = DRAWN.get(e);
@@ -1504,6 +1538,10 @@ public final class ParallelRender {
         pose.pushPose();
         if (j.hold && j.tick != null)   // TickAsync: where the held pair stands (the entity itself is being ticked)
             pose.translate(j.tick.ax - j.camX + off.x(), j.tick.ay - j.camY + off.y(), j.tick.az - j.camZ + off.z());
+        else if (j.tick != null)   // the pair's own motion (the models come from it too: the flame and shadow go with them, not
+            // with the live entity the main thread may be ticking on - full decoupling, 11-16)
+            pose.translate(Mth.lerp((double) pt, j.tick.ox, j.tick.ax) - j.camX + off.x(), Mth.lerp((double) pt, j.tick.oy, j.tick.ay) - j.camY + off.y(),
+                    Mth.lerp((double) pt, j.tick.oz, j.tick.az) - j.camZ + off.z());
         else pose.translate(Mth.lerp((double) pt, e.xOld, e.getX()) - j.camX + off.x(), Mth.lerp((double) pt, e.yOld, e.getY()) - j.camY + off.y(),
                 Mth.lerp((double) pt, e.zOld, e.getZ()) - j.camZ + off.z());
         EntityRenderDispatcher d = Minecraft.getInstance().getEntityRenderDispatcher();
@@ -1598,7 +1636,9 @@ public final class ParallelRender {
             for (int i = 0; i < WHY_N.length; i++) if (WHY_N[i] > 0) w.append(' ').append(WHY_NAMES[i]).append(' ').append(WHY_N[i]).append(';');
             System.out.println(w);
         }
-        return String.format(java.util.Locale.ROOT, "parallel render: %d workers, jobs %d, on workers %d (render thread helped %d), on the render thread %d (of them merges that fell back %d), failed %d, refused %d, journaled calls %d, part records merged in %.0f ms%s", THREADS, jobs, parallel,
+        String drainTime = DRAIN_TIME && drains > 0 ? String.format(java.util.Locale.ROOT, "parallel render drain time: %.1f us a frame, merges %.1f us a frame (%d a frame, %.2f us each); ",
+                drainNs / 1e3 / drains, mergeNs / 1e3 / drains, merges / drains, mergeNs / 1e3 / Math.max(1, merges)) : "";
+        return drainTime + String.format(java.util.Locale.ROOT, "parallel render: %d workers, jobs %d, on workers %d (render thread helped %d), on the render thread %d (of them merges that fell back %d), failed %d, refused %d, journaled calls %d, part records merged in %.0f ms%s", THREADS, jobs, parallel,
                 helped, sequential, mergeFallbacks, failed, refused, journaled, mergeNanos / 1e6, (CPU_STATS ? cpuReport() : "") + (WORKER_REFUSED.isEmpty() ? "" : ", kept on the render thread " + WORKER_REFUSED) + (CHECK ? ", checked in place " + checked + (checkMismatches > 0 ? " (differed " + checkMismatches + ")" : "") + (checkClose > 0 ? " (close, EMF " + checkClose + ")" : "") : "") + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches + (MISMATCH_TYPES.isEmpty() ? "" : " " + MISMATCH_TYPES) + (SELF_TYPES.isEmpty() ? "" : ", of them also between two render-thread renders " + SELF_TYPES) : ""))
                 + (TickPoses.ON ? "; " + TickPoses.report() : "") + (TickAsync.ON ? "; " + TickAsync.report() : "");
     }

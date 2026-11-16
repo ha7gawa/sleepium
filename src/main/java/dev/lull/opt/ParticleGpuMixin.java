@@ -37,7 +37,8 @@ public abstract class ParticleGpuMixin {
     @Redirect(method = RENDER, remap = false, at = @At(value = "INVOKE", remap = true, target = "Lnet/minecraft/client/particle/ParticleRenderType;begin(Lcom/mojang/blaze3d/vertex/BufferBuilder;Lnet/minecraft/client/renderer/texture/TextureManager;)V"))
     private void sleep$begin(ParticleRenderType type, BufferBuilder bb, TextureManager textures) {
         type.begin(bb, textures);
-        ParticleGpu.begin(type, ((BufferBuilderAccessor) bb).sleep$building() ? bb : null, ((ParticleEngineAccessor) this).sleep$particles().get(type));
+        java.util.Map<ParticleRenderType, java.util.Queue<Particle>> held = dev.lull.optsupport.FrameThread.heldParticles();   // (a frame drawn while the main thread ticks: the queues held for it)
+        ParticleGpu.begin(type, ((BufferBuilderAccessor) bb).sleep$building() ? bb : null, (held != null ? held : ((ParticleEngineAccessor) this).sleep$particles()).get(type));
     }
 
     @Redirect(method = RENDER, remap = false, at = @At(value = "INVOKE", remap = true, target = "Lnet/minecraft/client/particle/Particle;render(Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/minecraft/client/Camera;F)V"))

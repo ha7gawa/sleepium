@@ -235,7 +235,8 @@ public final class ClientMeter {
     }
 
     private static void onPre() {
-        dev.lull.optsupport.OwnerThread.client = Thread.currentThread();
+        // (the client's logic thread: with the frame thread the frame event comes there - the main thread stays the owner)
+        if (!dev.lull.optsupport.FrameThread.onFrameThread()) dev.lull.optsupport.OwnerThread.client = Thread.currentThread();
         long now = System.nanoTime();
         if (stopAtNanos < 0) {
             return;

@@ -83,17 +83,47 @@ public final class TickPoses {
         }
     }
 
-    private static final Map<EntityType<?>, Stat> STATS = new IdentityHashMap<>();
-    private static final Map<Entity, Pair> PAIRS = new IdentityHashMap<>();
+    // (concurrent: the main thread's split reads and fills them while an overlapped frame does too - the frame thread audit, 11-16)
+    private static final Map<EntityType<?>, Stat> STATS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<Entity, Pair> PAIRS = new java.util.concurrent.ConcurrentHashMap<>();
     /** TickAsync: each walking entity's second pair, written by a worker while frames draw from the first (render thread map) */
-    private static final Map<Entity, Pair> SPARE = new IdentityHashMap<>();
+    private static final Map<Entity, Pair> SPARE = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** render thread: drawn from tick poses now - its type qualified, its current pair done, usable, on the GPU path */
     static boolean asyncReady(Entity e) {
         Stat st = STATS.get(e.getType());
         if (st == null || st.state != 1) return false;
         Pair p = PAIRS.get(e);
-        return p != null && p.done && p.usable;   // (the GPU records or the CPU interpolation: both hold at the last key)
+        // (and its frames' merges went through lately: a held entity whose merge is refused is left out of the frame -
+        // it blinked in the zoo, 11-16: 23,412 skips; it ticks in the walk then and is drawn live)
+        return p != null && p.done && p.usable && frame - p.refusedFrame > REFUSED_FRAMES;
+    }
+
+    /**
+     * -Dlab.prender.tickPoses.refusedFrames (240): an entity whose pair a frame could not merge (its render types' order
+     * matters, a program that can't take the records) does not tick apart for this many frames after
+     */
+    static final long REFUSED_FRAMES = Long.getLong("lab.prender.tickPoses.refusedFrames", 240);
+    static final AtomicLong HELD_CPU = new AtomicLong(), HELD_REFUSED = new AtomicLong();
+
+    /**
+     * ParallelRender.drain, a held pair's GPU merge refused: its keys interpolated on the CPU into the job's parts
+     * instead (merged the usual way after); false: no CPU parts either (the pair marked refused)
+     */
+    static boolean heldCpu(Pair p, ParallelRender.Job j) {
+        if (!p.usable || p.jobs[0].parts.n == 0) return false;
+        j.gpuTick = false;
+        PartBatch.JobParts out = j.parts;
+        out.copyShape(p.jobs[0].parts);
+        sample(p, j.pt, out.mem, (float) (p.ax - j.camX), (float) (p.ay - j.camY), (float) (p.az - j.camZ));
+        HELD_CPU.incrementAndGet();
+        return true;
+    }
+
+    /** ParallelRender.drain: a frame could not merge this pair (held: the entity was left out of the frame) */
+    static void refused(Pair p) {
+        p.refusedFrame = frame;
+        HELD_REFUSED.incrementAndGet();
     }
 
     /** render thread: the entity's spare pair (made once), its type's statistics given along for the worker */
@@ -117,6 +147,21 @@ public final class TickPoses {
 
     static final AtomicLong ASYNC_CAPTURES = new AtomicLong();
 
+    /** the pair being captured on this thread (renderWrites) */
+    private static final ThreadLocal<Pair> CAPTURING = new ThreadLocal<>();
+
+    /**
+     * TickPosesAnimationMixin: a render on this thread moved its entity's animation clock. In a capture, its type stays
+     * per frame from now on (the capture's renders and the frame's would move one clock from two threads; the pair's
+     * keys would also be rendered at clock times the frames never see) - learnt by observation, any mod's entity
+     */
+    public static void renderWrites() {
+        Pair p = CAPTURING.get();
+        if (p == null || p.stat == null || p.stat.state == 2) return;
+        p.usable = false;
+        decide(p.stat, 2, "its render moves the entity's animation clock (AnimationState)");
+    }
+
     /** render thread, the walk joined: the spare pair becomes the current one, the old current one the spare */
     static void install(Entity e, Pair p) {
         if (p == null) return;
@@ -124,8 +169,15 @@ public final class TickPoses {
         SPARE.remove(e);
         if (old != null && old != p) SPARE.put(e, old);
         p.frameUsed = frame;
-        runPrep(p);
+        // the preparations are GL work (a type's program looked at, geometry uploaded): with the frame thread they run there,
+        // at its next job's start (the join runs on the main thread, which has no context: a native abort, 11-16)
+        if (!FrameThread.deferCall(RUN_PREP, p)) runPrep(p);
     }
+
+    private static final com.llamalad7.mixinextras.injector.wrapoperation.Operation<Void> RUN_PREP = a -> {
+        runPrep((Pair) a[0]);
+        return null;
+    };
 
     /** render thread: a walking entity's pair as frames hold it (null: none to draw from) */
     static Pair held(Entity e) {
@@ -143,6 +195,9 @@ public final class TickPoses {
         p.ax = e.getX();
         p.ay = e.getY();
         p.az = e.getZ();
+        p.ox = e.xOld;
+        p.oy = e.yOld;
+        p.oz = e.zOld;
         for (int i = 0; i < 4; i++) {
             ParallelRender.Job j = p.jobs[i];
             j.entity = e;
@@ -168,9 +223,13 @@ public final class TickPoses {
         /** the two sets usable for frames (after the run) */
         volatile boolean usable;
         double ax, ay, az;
+        /** the entity's previous tick's position at the capture (with ax..az: the tick's motion, for the flame and the shadow) */
+        double ox, oy, oz;
         volatile boolean done;
         final java.util.concurrent.atomic.AtomicBoolean claimed = new java.util.concurrent.atomic.AtomicBoolean();
         long frameUsed;
+        /** the frame (TickPoses' count) a merge of this pair was last refused in */
+        volatile long refusedFrame = -1_000_000;
         /** a scratch record set for the check (this pair's task only) */
         long mid;
         int midCap;
@@ -183,6 +242,7 @@ public final class TickPoses {
         public void run() {
             if (!claimed.compareAndSet(false, true)) return;
             ParallelRender.Set set = ParallelRender.takeSet();
+            CAPTURING.set(this);
             try {
                 int n = KEYS + (check ? 1 : 0);
                 for (int i = 0; i < n; i++) {
@@ -196,6 +256,7 @@ public final class TickPoses {
             } catch (Throwable t) {
                 usable = false;
             } finally {
+                CAPTURING.remove();
                 for (ParallelRender.Job j : jobs) j.forcedSet = null;
                 ParallelRender.giveSet(set);
                 done = true;
@@ -312,6 +373,9 @@ public final class TickPoses {
         p.ax = e.getX();
         p.ay = e.getY();
         p.az = e.getZ();
+        p.ox = e.xOld;
+        p.oy = e.yOld;
+        p.oz = e.zOld;
         for (int i = 0; i < 4; i++) {
             ParallelRender.Job j = p.jobs[i];
             j.entity = e;

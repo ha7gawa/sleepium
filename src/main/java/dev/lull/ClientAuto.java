@@ -66,6 +66,7 @@ public final class ClientAuto {
     private static final int FPS_CAP = Integer.getInteger("sleep.clientAuto.fps", 260);
     /** -Dsleep.clientAuto.steady=true: after the initial terrain, 30 s (steadySeconds) of frames standing still, no teleports */
     private static final boolean STEADY = Boolean.getBoolean("sleep.clientAuto.steady");
+    private static final boolean SEC_LOG = Boolean.getBoolean("sleep.clientAuto.secLog");
     private static final int SETTLE_S = Integer.getInteger("sleep.clientAuto.settle", 0);
     /** -Dsleep.clientAuto.scene=client_entities: run that probe function after the terrain is ready, then look at it */
     private static final String SCENE = System.getProperty("sleep.clientAuto.scene");
@@ -258,6 +259,7 @@ public final class ClientAuto {
         if (Boolean.getBoolean("sleep.clientAuto.thirdPerson")) Minecraft.getInstance().options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK);
         // -Dsleep.clientAuto.debugScreen=true: the F3 screen open through the measured window (what it costs)
         if (Boolean.getBoolean("sleep.clientAuto.debugScreen")) Minecraft.getInstance().options.renderDebug = true;
+        if (BURST != null) shotsBase = ticks;
         if (!SHOTS.isEmpty()) {
             shotsBase = ticks;
             Minecraft.getInstance().options.hideGui = !Boolean.getBoolean("sleep.clientAuto.shotGui");
@@ -306,6 +308,34 @@ public final class ClientAuto {
         }
     }
     private static int shotsBase = -1;
+    /**
+     * -Dsleep.clientAuto.burst=S:N (test, with the frame thread): at S seconds into the measured window the next N frames
+     * shown are written as they leave the frame thread (FrameThread.burstShot: recorded and extra frames, with their
+     * times) - to look at what the frames show from one to the next, not only at one
+     */
+    private static final String BURST = System.getProperty("sleep.clientAuto.burst");
+    private static boolean burstAsked;
+    /** the render thread's own burst (no frame thread) */
+    private static int burstLeft, burstIdx;
+    private static Path burstDir;
+    private static java.util.concurrent.ExecutorService burstIo;
+
+    private static void burstFrame() {
+        if (burstLeft <= 0) return;
+        Minecraft mc = Minecraft.getInstance();
+        int k = burstIdx++;
+        com.mojang.blaze3d.platform.NativeImage img = net.minecraft.client.Screenshot.takeScreenshot(mc.getMainRenderTarget());
+        Path out = burstDir.resolve(String.format(Locale.ROOT, "burst-%s-%03d-j.png", LABEL, k));
+        if (burstIo == null) burstIo = java.util.concurrent.Executors.newFixedThreadPool(2);
+        burstIo.execute(() -> {
+            try (img) {
+                img.writeToFile(out);
+            } catch (Exception e) {
+                log("burst frame " + k + " failed: " + e);
+            }
+        });
+        if (--burstLeft == 0) log("burst: " + (k + 1) + " frames (render thread) -> " + burstDir);
+    }
     /** told of each shot taken: its index and its time in the run's seconds (a mod's trace can mark it) */
     public static volatile java.util.function.BiConsumer<Integer, Double> onShot;
 
@@ -481,6 +511,9 @@ public final class ClientAuto {
         bus.addListener(EventPriority.NORMAL, false, TickEvent.ClientTickEvent.class, e -> {
             if (e.phase == TickEvent.Phase.END) tick();   // 1.21.1: ClientTickEvent.Post
         });
+        if (BURST != null) bus.addListener(EventPriority.LOWEST, false, TickEvent.RenderTickEvent.class, e -> {
+            if (e.phase == TickEvent.Phase.END) burstFrame();   // 1.21.1: RenderFrameEvent.Post
+        });
         if (SPIN != 0) bus.addListener(EventPriority.NORMAL, false, TickEvent.RenderTickEvent.class, e -> {
             if (e.phase == TickEvent.Phase.START) spin();   // 1.21.1: RenderFrameEvent.Pre
         });
@@ -516,9 +549,29 @@ public final class ClientAuto {
         var d = mc.levelRenderer.getChunkRenderDispatcher();
         // 1.21.1: GenTrace's client counters here (what keeps the view from being stable): GenTrace is the world
         // generation step's measurement, not on 1.20.1 yet (port-pending.txt)
-        boolean idle = d != null && mc.levelRenderer.hasRenderedAllChunks() && d.getToUpload() == 0 && d.getToBatchCount() == 0;
+        boolean idle = d != null && mc.levelRenderer.hasRenderedAllChunks() && d.getToUpload() == 0 && d.getToBatchCount() == 0
+                && (!ALL_CHUNKS || allChunksIn(mc));
         stableTicks = idle ? stableTicks + 1 : 0;
         return stableTicks >= 40;
+    }
+
+    /**
+     * -Dsleep.clientAuto.allChunks (default on): "meshed" also needs every chunk within the view distance (less one, a
+     * circle as the server sends them) on the client - on the N100 a generating server sometimes sends nothing for 2 s,
+     * and the idle renderer alone called a teleport done with 4 sections in view (11-16: the tours of two modes then
+     * measured different phases)
+     */
+    private static final boolean ALL_CHUNKS = !"false".equals(System.getProperty("sleep.clientAuto.allChunks"));
+
+    private static boolean allChunksIn(Minecraft mc) {
+        if (mc.level == null || mc.player == null) return false;
+        int r = Math.max(1, mc.options.getEffectiveRenderDistance() - 1);
+        int cx = mc.player.chunkPosition().x, cz = mc.player.chunkPosition().z;
+        var src = mc.level.getChunkSource();
+        for (int dx = -r; dx <= r; dx++)
+            for (int dz = -r; dz <= r; dz++)
+                if (dx * dx + dz * dz <= r * r && !src.hasChunk(cx + dx, cz + dz)) return false;
+        return true;
     }
 
     private static boolean queueBusy(Minecraft mc) {
@@ -546,6 +599,11 @@ public final class ClientAuto {
                 it.remove();
                 log("command at " + ticks + ": /" + c[1]);
                 if ("!resources".equals(c[1])) Minecraft.getInstance().reloadResourcePacks();   // a client action: F3+T
+                // client actions for the frame thread's transitions: a screen opened / closed, the game paused
+                else if ("!inventory".equals(c[1]) && Minecraft.getInstance().player != null)
+                    Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(Minecraft.getInstance().player));
+                else if ("!pause".equals(c[1])) Minecraft.getInstance().pauseGame(false);
+                else if ("!close".equals(c[1])) Minecraft.getInstance().setScreen(null);
                 else command(Minecraft.getInstance(), (String) c[1]);
             }
         }
@@ -554,6 +612,27 @@ public final class ClientAuto {
             frameHash(Minecraft.getInstance());
         }
         shotsTick(Minecraft.getInstance());
+        if (BURST != null && !burstAsked && shotsBase >= 0 && ticks >= shotsBase + (int) Math.round(Double.parseDouble(BURST.split(":")[0]) * 20)) {
+            burstAsked = true;
+            Minecraft bm = Minecraft.getInstance();
+            boolean ok;
+            try {
+                ok = dev.lull.optsupport.FrameThread.requestBurst(Integer.parseInt(BURST.split(":")[1]), SleepOut.dir(bm.gameDirectory.toPath(), "frame", LABEL), LABEL);
+            } catch (java.io.IOException e) {
+                ok = false;
+            }
+            if (!ok) {   // no frame thread: the render thread takes the frames itself (RenderTickEvent END, the main target)
+                burstLeft = Integer.parseInt(BURST.split(":")[1]);
+                try {
+                    burstDir = SleepOut.dir(bm.gameDirectory.toPath(), "frame", LABEL);
+                    Files.createDirectories(burstDir);
+                    ok = true;
+                } catch (java.io.IOException e) {
+                    burstLeft = 0;
+                }
+            }
+            log("burst " + BURST + (ok ? " asked" : " not possible"));
+        }
         if (abAt >= 0 && ticks >= abAt) abTick(Minecraft.getInstance());
         if (FLIP != null && flipFrom >= 0) flipTick();
         if (hashAt >= 0 && ticks >= hashAt) {
@@ -570,6 +649,17 @@ public final class ClientAuto {
         }
         Minecraft mc = Minecraft.getInstance();
         ticks++;
+        // -Dsleep.clientAuto.secLog=true: the renderer's sections and the client's chunks once a second (a tour's loading
+        // progress, comparable between modes - the end's snapshot alone misled 11-16)
+        if (SEC_LOG && mc.level != null && ticks % 20 == 0) {
+            dev.lull.optsupport.FrameThread.holdForMain();
+            try {
+                log(String.format(Locale.ROOT, "sections at tick %d: %s, chunks %d", ticks, mc.levelRenderer.getChunkStatistics(),
+                        mc.level.getChunkSource().getLoadedChunksCount()));
+            } finally {
+                dev.lull.optsupport.FrameThread.releaseForMain();
+            }
+        }
         // a screen over the world (a pack's welcome, a mod's notice - MCA's DestinyScreen comes back until it is
         // accepted; the game pauses under it): after 10 s answered as a player would - its confirming button
         // pressed, else closed (Esc); ClientMeter counts the ticks a screen was open in a measured window

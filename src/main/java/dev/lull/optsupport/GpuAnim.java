@@ -58,14 +58,14 @@ public final class GpuAnim {
     private static final boolean VERIFY = Boolean.getBoolean("lab.gpuAnim.verify");
     /** the atlas cycleAnimationFrames is ticking (0 outside it: the first frames at stitching go vanilla's way) */
     public static int atlas;
-    private static final Map<SpriteContents, Integer> SHEETS = new IdentityHashMap<>();
+    private static final Map<SpriteContents, Integer> SHEETS = new java.util.concurrent.ConcurrentHashMap<>();   // (concurrent: the frame thread's atlas ticks and the main thread's release during a reload; the audit 11-16)
     /** an interpolated sprite's staging texture (its size, every mip level): the ring uploads there, a GPU copy takes it on
      *  into the atlas - an upload from a buffer straight into the atlas made the N100's (Intel) drawing from it slower (1.20.1: 104 -> 40 fps) */
     /**
      * per sprite: its staging textures, -Dlab.gpuAnim.stages (default 1) of them taken in turn by tick (tried 11-15: 3 made the
      * N100 worse - the ring part 0.73 -> 1.25 ms a tick: the wait is not the last copy of the same texture)
      */
-    private static final Map<SpriteContents, int[]> STAGING = new IdentityHashMap<>();
+    private static final Map<SpriteContents, int[]> STAGING = new java.util.concurrent.ConcurrentHashMap<>();
     private static final int STAGES = Math.max(1, Integer.getInteger("lab.gpuAnim.stages", 1));
     private static int stageTick;
     public static long copies, sheetsMade, verified, mismatches, copyNs, ticks, tickNs, interpolated, emptyAtlasTicks;

@@ -82,6 +82,7 @@ public final class ParticleWorkers {
             Req r = new Req(state, level, x, y, z, entity);
             REQUESTS.offer(r);
             LockSupport.unpark(renderThread);
+            FrameThread.workerAsked();
             VoxelShape s;
             long until = SPIN_NS > 0 ? System.nanoTime() + SPIN_NS : 0;
             while ((s = r.result) == null && SPIN_NS > 0 && System.nanoTime() < until) Thread.onSpinWait();
@@ -98,6 +99,7 @@ public final class ParticleWorkers {
         long w0 = WAIT_LOG ? System.nanoTime() : 0;
         REQUESTS.offer(r);
         LockSupport.unpark(renderThread);
+        FrameThread.workerAsked();
         VoxelShape s;
         // a short bounded wait first: the answer usually comes within microseconds, a park and its wake-up cost more
         long until = SPIN_NS > 0 ? System.nanoTime() + SPIN_NS : 0;

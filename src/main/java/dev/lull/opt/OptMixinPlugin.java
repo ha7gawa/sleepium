@@ -35,7 +35,11 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.equals("NeighborReactStateMixin") || simple.equals("NeighborReactMultiMixin"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NeighborReactMixin");
         if (simple.equals("ParallelAnimationMixin"))   // models animated on several threads: a scratch vector each
-            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntitiesMixin");
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntitiesMixin") || Boolean.getBoolean("lab.opt.FrameThreadMixin");
+        if (simple.equals("TickPosesAnimationMixin"))   // tick poses: renders that move their entity's animation clock
+            on = Boolean.getBoolean("lab.prender.tickPoses");
+        if (simple.startsWith("FrameThread"))   // the frame thread's hooks (FrameThread)
+            on = Boolean.getBoolean("lab.opt.FrameThreadMixin");
         if (simple.startsWith("AllocTrim"))   // one feature: temporary objects of hot paths reused (AllocTrim)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.AllocTrim");
         if (simple.startsWith("LightSnapshot"))   // one feature: light snapshots as base + delta (LightSnapshot)

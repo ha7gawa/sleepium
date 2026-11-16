@@ -14,10 +14,37 @@ public final class GameDefaults {
 
     private static boolean done;
 
+    /**
+     * -Dlab.decoupled=true (1.3.0 research, non-exact - the user's call 11-15; port of 1.21.1's preset): the frame on its
+     * own thread drawing while the main thread ticks, extra frames during a long tick, entities ticked on the pool after
+     * the tick and drawn from tick-rate poses, the frames-in-flight limiter, the partial tick from the tick's end, a ring
+     * of 3 recorded frames, and the pipeline's stages 1-3 (notes/75: the tick's generations, published lists, the view
+     * latched at every frame, self-clocked frames). Not here (1.21.1 only so far): the one pool, the leaf cull. Each flag
+     * can still be given on its own (a given value wins).
+     */
+    private static void decoupledPreset() {
+        if (!Boolean.getBoolean("lab.decoupled")) return;
+        String[] set = {"lab.opt.FrameThreadMixin=true", "lab.frameThread.overlap=true", "lab.frameThread.extra=true", "lab.frameThread.extraTurn=true",
+                "lab.opt.TickAsyncMixin=true", "lab.prender.tickPoses=true", "lab.pentities.living=true", "lab.partbatch.itemsAnyOrder=true",
+                "lab.prender.tickPoses.tolerance=0.1",
+                "lab.gpu.framesInFlight.auto=true", "lab.frameThread.ptFromTickEnd=true", "lab.frameThread.ring=3",
+                "lab.tickAsync.gen=true", "lab.frameThread.publish=true", "lab.frameThread.latchTurn=true", "lab.frameThread.selfClock=true"};
+        int n = 0;
+        for (String kv : set) {
+            int eq = kv.indexOf('=');
+            if (System.getProperty(kv.substring(0, eq)) == null) {
+                System.setProperty(kv.substring(0, eq), kv.substring(eq + 1));
+                n++;
+            }
+        }
+        System.out.println("[sleep/opt] decoupled mode (lab.decoupled): " + n + " flags set");
+    }
+
     public static synchronized void ensure() {
         if (done) return;
         done = true;
         SleepConfig.load();   // the player's settings first: they win over the defaults
+        decoupledPreset();
         try {
             defaults();
         } finally {

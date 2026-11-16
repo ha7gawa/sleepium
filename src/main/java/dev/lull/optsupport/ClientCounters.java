@@ -29,6 +29,17 @@ public final class ClientCounters {
     private ClientCounters() {}
 
     public static String report() {
+        // the counters walk render-side state (EntityBatch's maps ...) the frame thread changes while it draws: no frame
+        // drawing while the report is made (FrameThread; nothing without it)
+        FrameThread.holdForMain();
+        try {
+            return report0();
+        } finally {
+            FrameThread.releaseForMain();
+        }
+    }
+
+    private static String report0() {
         // 1.20.1: the event sites' report (the event bus step) comes over with its part (port-pending.txt)
         return String.format(Locale.ROOT, "client opts: ambient biome lookups skipped %d, sampler locations from cache %d; collision memo hits %d, misses %d; " + CollisionMask.report() + "; " + CollideKernel.report() + "; " + ParticleStats.report() + "; " + ParallelParticles.report() + "; " + ParticleGpu.report() + "; " + ParticleLightMemo.report() + "; " + ParallelEntities.report(),
                 biomeSkips, samplerHits, BlockCollisionMemo.hits, BlockCollisionMemo.misses)
@@ -43,6 +54,8 @@ public final class ClientCounters {
                 + (Boolean.getBoolean("lab.opt.SectionListsMixin") ? "; " + SectionLists.report() : "")
                 + (TickSlice.ON ? "; " + TickSlice.report() : "")
                 + (GlInbox.ON ? "; " + GlInbox.report() : "")
+                + FrameThread.report()
+                + (StallProbe.ON ? "; " + StallProbe.report() : "")
                 + (ClientTickProfile.ON ? "; " + ClientTickProfile.report() : "")
                 + (UploadRing.ON || UploadRing.RECORDS || Integer.getInteger("lab.gpu.framesInFlight", 0) > 0 || Boolean.getBoolean("lab.gpu.framesInFlight.auto") ? "; " + UploadRing.report() : "")
                 + (Boolean.getBoolean("lab.opt.FrustumRegionMixin") ? "; " + FrustumRegions.report() : "")

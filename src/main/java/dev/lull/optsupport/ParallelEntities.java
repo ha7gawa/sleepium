@@ -123,7 +123,7 @@ public final class ParallelEntities {
 
     private static boolean mayTickApart(Entity e) {
         if (LIVING && e instanceof LivingEntity)
-            return !(e instanceof net.minecraft.world.entity.player.Player) && !e.isPassenger() && !e.isVehicle() && !e.canBeCollidedWith() && !REFUSED.contains(e.getClass());
+            return !(e instanceof net.minecraft.world.entity.player.Player) && !livingTickListened() && !e.isPassenger() && !e.isVehicle() && !e.canBeCollidedWith() && !REFUSED.contains(e.getClass());
         return !(e instanceof LivingEntity) && !e.isPassenger() && !e.isVehicle() && !e.canBeCollidedWith() && !REFUSED.contains(e.getClass());
     }
 
@@ -135,6 +135,16 @@ public final class ParallelEntities {
      */
     private static boolean tickListeners() {
         return false;
+    }
+
+    /**
+     * 1.20.1: a living entity's tick posts Forge's LivingTickEvent (LivingEntity.tick's first line) - with listeners a
+     * living entity ticked on a worker would run a mod's code there: living entities stay on the main thread then (a bus
+     * not ours: unknown, the same)
+     */
+    private static boolean livingTickListened() {
+        var bus = net.minecraftforge.common.MinecraftForge.EVENT_BUS;
+        return !(bus instanceof CompositeEventBus cb) || cb.hasListeners(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent.class);
     }
 
     // ------------------------------------------------------------------ the tail
@@ -159,7 +169,7 @@ public final class ParallelEntities {
         NEXT.set(t);
         REMAINING.set(runEnd - t);
         ParticleWorkers.renderThread = Thread.currentThread();
-        levelRandom = all[t].level().random;
+        levelRandom = FrameRandom.unwrap(all[t].level().random);
         ParticleWorkers.SHARED.clear();
         ParticleWorkers.active = true;
         try {
@@ -224,6 +234,11 @@ public final class ParallelEntities {
         return asyncRunning;
     }
 
+    /** the walk's entities all ticked (a join would not wait) */
+    static boolean asyncFinished() {
+        return REMAINING.get() == 0;
+    }
+
     /**
      * The walk with TickAsync: entities drawn from tick poses left out (kept at the front of all[], in the walk's order,
      * each with its spare pair), every other one ticked here in its slot. False: none left out - the usual walk.
@@ -231,13 +246,19 @@ public final class ParallelEntities {
     private static Entity[] asyncAll = new Entity[256];
     private static ParallelRender.Job[] asyncSnaps = new ParallelRender.Job[256];
     /** snapshot jobs, reused (render thread hands them out at the split) */
-    private static final java.util.ArrayList<ParallelRender.Job> SNAP_POOL = new java.util.ArrayList<>();
+    private static final java.util.ArrayList<ParallelRender.Job> SNAP_POOL_A = new java.util.ArrayList<>(), SNAP_POOL_B = new java.util.ArrayList<>();
+    /** the walks split so far: their snapshot jobs come from the two pools in turn (a walk's jobs, let go at its join, are
+     * reused by the walk after next - past the generation gate, TickAsync.gate) */
+    private static long splits;
+    /** TickAsync generations: the joined walk's snapshot jobs, let go at the gate (a frame begun before the join may draw them) */
+    private static final java.util.ArrayList<ParallelRender.Job> RETIRED = new java.util.ArrayList<>();
 
     private static boolean asyncSplit(Consumer<Entity> consumer) {
         if (asyncPairs.length < n) asyncPairs = new TickPoses.Pair[Math.max(n, asyncPairs.length * 2)];
         if (asyncAll.length < n) asyncAll = new Entity[Math.max(n, asyncAll.length * 2)];
         if (asyncSnaps.length < n) asyncSnaps = new ParallelRender.Job[Math.max(n, asyncSnaps.length * 2)];
         int m = 0, r = 0, snaps = 0;
+        java.util.ArrayList<ParallelRender.Job> SNAP_POOL = (splits & 1) == 0 ? SNAP_POOL_A : SNAP_POOL_B;
         for (int k = 0; k < n; k++) {
             Entity e = all[k];
             if (mayTickApart(e) && TickAsync.eligible(e)) {
@@ -263,6 +284,7 @@ public final class ParallelEntities {
             } else all[r++] = e;   // (r <= k: that slot is done with)
         }
         if (m == 0) return false;
+        splits++;
         java.util.Arrays.fill(all, r, n, null);
         n = r;   // the rest walks as usual (its runs on the pool, the others in their slots)
         asyncM = m;
@@ -294,7 +316,7 @@ public final class ParallelEntities {
         NEXT.set(0);
         REMAINING.set(m);
         ParticleWorkers.renderThread = Thread.currentThread();
-        levelRandom = all[0].level().random;
+        levelRandom = FrameRandom.unwrap(all[0].level().random);
         ParticleWorkers.SHARED.clear();
         ParticleWorkers.active = true;
         asyncRunning = true;
@@ -345,11 +367,20 @@ public final class ParallelEntities {
             done += e0 - s0;
         }
         cur[0] = -1;
-        if (done > 0 && REMAINING.addAndGet(-done) == 0 && !render) LockSupport.unpark(ParticleWorkers.renderThread);
+        if (done > 0 && REMAINING.addAndGet(-done) == 0 && !render) { LockSupport.unpark(ParticleWorkers.renderThread); FrameThread.walkDone(); }
     }
 
     /** render thread: the walk finished (helping first), its deferred moves and removals applied, the pairs swapped */
     static void joinAsync() {
+        joinAsyncWorld();
+        joinAsyncRender();
+    }
+
+    /**
+     * the join's first part, the main thread's own state: the walk finished (helping), the deferred section moves and
+     * removals applied - nothing a drawing frame reads (the frame thread draws meanwhile: FrameThread)
+     */
+    static void joinAsyncWorld() {
         try {
             asyncDrain(true);
             long spinUntil = System.nanoTime() + 20_000;
@@ -379,11 +410,22 @@ public final class ParallelEntities {
                 removedWhy[i] = null;
             }
         }
+    }
+
+    /** the join's second part, what frames read: the pairs swapped, the snapshot jobs let go, the walking set emptied */
+    static void joinAsyncRender() {
+        joinAsyncRender(false);
+    }
+
+    /** retire: the snapshot jobs are let go later (releaseRetired, past the generation gate), not here */
+    static void joinAsyncRender(boolean retire) {
+        int m = asyncM;
         for (int i = 0; i < m; i++) {
             TickPoses.install(all[i], asyncPairs[i]);
             asyncPairs[i] = null;
             if (asyncSnaps[i] != null) {
-                ParallelRender.snapshotDone(asyncSnaps[i]);
+                if (retire) RETIRED.add(asyncSnaps[i]);
+                else ParallelRender.snapshotDone(asyncSnaps[i]);
                 asyncSnaps[i] = null;
             }
         }
@@ -394,6 +436,12 @@ public final class ParallelEntities {
         Throwable e = error;
         if (e instanceof RuntimeException re) throw re;
         if (e instanceof Error er) throw er;
+    }
+
+    /** the generation gate passed (no frame begun before the join draws): the retired snapshot jobs let go */
+    static void releaseRetired() {
+        for (int i = 0, n = RETIRED.size(); i < n; i++) ParallelRender.snapshotDone(RETIRED.get(i));
+        RETIRED.clear();
     }
 
     private static void workerRun() {

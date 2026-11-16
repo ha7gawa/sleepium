@@ -36,7 +36,7 @@ public final class FrameReactor {
     private static LabRuntime pool;
     private static final MpmcRing DONE = new MpmcRing(1024);
     private static final ArrayDeque<Runnable> OVERFLOW = new ArrayDeque<>();
-    private static final List<Participant> PARTICIPANTS = new ArrayList<>();
+    private static final List<Participant> PARTICIPANTS = new java.util.concurrent.CopyOnWriteArrayList<>();   // (registered on the main thread, walked on the frame thread too)
     public static long completions, overflows;
 
     public static int threads() {
@@ -65,6 +65,17 @@ public final class FrameReactor {
         }
     }
 
+    /**
+     * From any thread: r makes GL calls - on the render thread at its next point, or, with the frame thread
+     * (FrameThread: the context lives there), at that thread's next frame job (N100 tour 11-16: LightVolumes' upload
+     * drained on the main thread without a context, a native abort)
+     */
+    public static void completeGl(Runnable r) {
+        complete(() -> {
+            if (!FrameThread.deferRun(r)) r.run();
+        });
+    }
+
     /** Render thread: the completions handed back so far. */
     public static void drain() {
         Object r;
@@ -86,6 +97,13 @@ public final class FrameReactor {
     /** Render thread: a point of the frame. Completions first, then every participant's rule for this point. */
     public static void reach(Point p) {
         drain();
+        // a level change (disconnect, a new level) outside runTick: TickAsync's walk joined first - its workers may wait
+        // for the render thread's answers (ParticleWorkers' shapes), and a participant's wait (the light job, queued
+        // behind them on the same pool) would never end (N100 tour 11-16: the game hung on quitting)
+        if (p == Point.LEVEL_CHANGE) {
+            FrameThread.holdUntilNextFrame();   // (no extra frames of the old level while it is taken down)
+            TickAsync.joinAll();
+        }
         for (int i = 0; i < PARTICIPANTS.size(); i++) PARTICIPANTS.get(i).reach(p);
         drain();
     }
