@@ -59,14 +59,14 @@ public final class FrameThread {
     }
 
     /**
-     * -Dlab.frameThread.ring=N (1: off): N recorded frames in a ring. The main thread records into a free slot and goes on
+     * -Dlab.frameThread.ring=N (3; at least 2 - the pipeline records the next frame while one is drawn): N recorded frames in a ring. The main thread records into a free slot and goes on
      * (its next tasks and tick); it waits - by event, not a spin - only when every slot is taken: the one the frame thread
      * draws (or drew last: the extra frames redraw it), and the ones handed over and not yet drawn. The frame thread takes
      * them in order. With 1 the main thread waits for the last frame before it records the next (A2 overlap as before).
      * A frame drawn later than recorded reads the world as it is then (the partial tick from the clock, ptFromTickEnd);
      * the input is at most N-2 frames older than it was.
      */
-    static final int RING = Math.max(1, Math.min(8, Integer.getInteger("lab.frameThread.ring", 1)));
+    static final int RING = Math.max(2, Math.min(8, Integer.getInteger("lab.frameThread.ring", 3)));
     private static final Slot[] SLOTS = new Slot[RING];
     static {
         for (int i = 0; i < RING; i++) SLOTS[i] = new Slot();
@@ -168,7 +168,7 @@ public final class FrameThread {
      * the main thread's next tasks, packets and tick run while the frame thread draws; the next frame's first recorded
      * op waits for it. Flippable (ClientAuto).
      */
-    public static volatile boolean OVERLAP = Boolean.getBoolean("lab.frameThread.overlap");
+    public static volatile boolean OVERLAP = !"false".equals(System.getProperty("lab.frameThread.overlap"));
     private static boolean pending;
 
     /** the light point (ClientLightAsyncMixin's, set when that mixin's class loads) - null: vanilla's two calls */
@@ -201,7 +201,7 @@ public final class FrameThread {
      * them only in its tick). The same content as the copies; frames share a published list until the next one. Lists
      * come from a small pool (ring + 2) and are reused once no frame in flight holds them.
      */
-    public static final boolean PUBLISH = Boolean.getBoolean("lab.frameThread.publish");
+    public static final boolean PUBLISH = !"false".equals(System.getProperty("lab.frameThread.publish"));
 
     // ------------------------------------------------------------------ self-clocked frames (notes/75, stage 3)
 
@@ -214,7 +214,7 @@ public final class FrameThread {
      * until the next tick is due - woken earlier by a task from another thread (FrameThreadTaskWakeMixin), the mouse
      * (at most every 2 ms) or a screen. Keys and clicks are handled in the tick, as in vanilla.
      */
-    public static final boolean SELF = Boolean.getBoolean("lab.frameThread.selfClock") && RING > 1;
+    public static final boolean SELF = !"false".equals(System.getProperty("lab.frameThread.selfClock"));
     /** the main thread's view: frames may run on their own now (no screen, a level, not paused) */
     private static volatile boolean selfOk;
     private static volatile boolean taskPending, mainIdle;
@@ -334,28 +334,9 @@ public final class FrameThread {
         nextDue = iv <= 0 || now - nextDue > iv ? now + iv : nextDue + iv;
     }
 
-    /**
-     * -Dlab.frameThread.hiResPace: the frame thread's waits for a frame's due time as one Thread.sleep (a high-resolution
-     * timer on Windows) of the time left minus 0.5 ms, a frame less than PACE_EARLY early drawn at once - not
-     * LockSupport.parkNanos: standalone, parkNanos(0.5 / 2 / 6 ms) took 15.7 ms on the N100 and the host (the system
-     * timer's step), Thread.sleep 1.1 / 2.1 / 6.1 ms. Sleeps of 1-ms slices lost (each at least 1.1 ms: the N100's
-     * stall probe 231 -> 519 long frames, 11-16).
-     */
-    static final boolean HI_RES_PACE = Boolean.getBoolean("lab.frameThread.hiResPace");
-    /** a due time nearer than this: the frame is drawn now (no sleep is that short) */
-    static final long PACE_EARLY = HI_RES_PACE ? 1_500_000L : 0;
-
+    /** the frame thread's wait for a due time (in-game parkNanos keeps time: 11-16; Thread.sleep pacing lost on the N100) */
     private static void paceSleep(long nanos) {
-        if (!HI_RES_PACE) {
-            LockSupport.parkNanos(nanos);
-            return;
-        }
-        long n = Math.max(1_000_000L, nanos - 500_000L);
-        try {
-            Thread.sleep(n / 1_000_000L, (int) (n % 1_000_000L));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        LockSupport.parkNanos(nanos);
     }
 
     private static long capInterval() {
@@ -627,15 +608,6 @@ public final class FrameThread {
     /** frames begun so far: present() sees whether its own poll ran a nested runTick (recordSeq moved) */
     private static long recordSeq;
 
-    /**
-     * -Dlab.frameThread.noWait (full decoupling, an experiment): the main thread never waits for the frame thread - when
-     * the last frame is still drawing, this runTick's frame is skipped (nothing recorded, the op list left as it is: the
-     * frame thread draws extra frames from it meanwhile) and the main thread goes on to its input, tasks and ticks.
-     */
-    public static final boolean NO_WAIT = Boolean.getBoolean("lab.frameThread.noWait");
-    /** this runTick's frame is skipped (NO_WAIT) */
-    private static boolean skipping;
-    public static long skippedFrames;
     /** the main thread's window polls: the gaps between them (input latency's floor), 0.1-ms buckets up to 100 ms */
     private static final long[] POLL_GAPS = new long[1001];
     private static long lastPollNs;
@@ -664,12 +636,6 @@ public final class FrameThread {
     }
 
     private static void begin() {
-        if (NO_WAIT && pending && !idle()) {
-            skipping = true;
-            fresh = false;
-            skippedFrames++;
-            return;
-        }
         recordSeq++;
         if (RING > 1) {   // a free slot (waited for by event only when the ring is full); the frame thread may draw meanwhile
             checkFailure();
@@ -712,7 +678,6 @@ public final class FrameThread {
 
     public static void record(com.llamalad7.mixinextras.injector.wrapoperation.Operation<?> operation, Object... args) {
         if (fresh) begin();
-        if (skipping) return;
         Slot r = rec;
         r.operations[r.nOps] = operation;
         r.args[r.nOps] = args;
@@ -721,14 +686,12 @@ public final class FrameThread {
 
     public static void op(int code) {
         if (fresh) begin();
-        if (skipping) return;
         Slot r = rec;
         r.ops[r.nOps++] = code;
     }
 
     public static void op(int code, int i, int j, boolean z) {
         if (fresh) begin();
-        if (skipping) return;
         Slot r = rec;
         r.argI[r.nOps] = i;
         r.argJ[r.nOps] = j;
@@ -756,15 +719,6 @@ public final class FrameThread {
     public static long tPoll, tFence, tHeld, tLight, tSideWait, tReplay, tCalls, tOps;
 
     public static void present() {
-        if (skipping) {   // NO_WAIT: no frame this time - the window polled, a short wait for the frame thread (bounded)
-            skipping = false;
-            fresh = true;
-            pollWindow();
-            polled();
-            long until = System.nanoTime() + 1_000_000L;
-            waitPumping(() -> idle() || System.nanoTime() > until);
-            return;
-        }
         Slot r = rec;
         long p0 = System.nanoTime();
         long seq = recordSeq;
@@ -987,20 +941,16 @@ public final class FrameThread {
     }
 
     private static final boolean WINDOWS = org.lwjgl.system.Platform.get() == org.lwjgl.system.Platform.WINDOWS;
-    /** -Dlab.frameThread.spinUs (0; tried 100 on the host: no gain - wake-ups are 6-15 us): how long either side spins before it parks, waiting for the other */
-    private static final long SPIN_NS = Long.getLong("lab.frameThread.spinUs", 0) * 1000L;
     /** the hand-over's cost: the frame thread's wake-up after a job is handed over, the main thread's after a frame */
     private static volatile long handAt, doneAt;
     public static long wakeNs, mainWakeNs, mainWakes;
-    private static org.lwjgl.system.windows.MSG msg;
 
     /**
-     * -Dlab.frameThread.eventWait (default on): the main thread waits for the frame thread inside glfwWaitEventsTimeout -
+     * The main thread waits for the frame thread inside glfwWaitEventsTimeout -
      * asleep until the frame thread's glfwPostEmptyEvent (wakeMain) or the window's own events, on every platform; the
      * window's queue is taken whole meanwhile (Windows never marks it hung) with the input callbacks' work queued as
      * tasks (pumping: FrameThreadPumpQueueMixin). Before: a park of 100 us at a time and a look at sent messages only.
      */
-    static final boolean EVENT_WAIT = !"false".equals(System.getProperty("lab.frameThread.eventWait"));
     /** the main thread is inside GLFW's event processing (a callback may borrow the context: no nested wait there) */
     private static boolean inGlfw;
     public static long eventWaits, eventWakes;
@@ -1019,7 +969,7 @@ public final class FrameThread {
     /** the frame thread (any thread but main): the main thread woken - parked or inside glfwWaitEventsTimeout */
     private static void wakeMain() {
         LockSupport.unpark(mainThread);
-        if (EVENT_WAIT && mainWaiting) {
+        if (mainWaiting) {
             org.lwjgl.glfw.GLFW.glfwPostEmptyEvent();
             eventWakes++;
         }
@@ -1028,46 +978,26 @@ public final class FrameThread {
     private static volatile boolean mainWaiting;
 
     private static void waitPumping(java.util.function.BooleanSupplier until) {
-        if (EVENT_WAIT && !inGlfw && Thread.currentThread() == mainThread) {
-            eventWaits++;
-            while (!until.getAsBoolean()) {
-                serveWorkers();
-                mainWaiting = true;
-                if (until.getAsBoolean()) break;   // (after the flag: a wake from now on posts an event)
-                inGlfw = true;
-                boolean was = pumping;
-                pumping = true;
-                try {
-                    org.lwjgl.glfw.GLFW.glfwWaitEventsTimeout(0.002);
-                } finally {
-                    pumping = was;
-                    inGlfw = false;
-                    mainWaiting = false;
-                }
-                polled();
-            }
-            return;
-        }
-        if (!WINDOWS) {
+        if (inGlfw || Thread.currentThread() != mainThread) {   // (inside a GLFW callback, or not the main thread: parked)
             while (!until.getAsBoolean()) LockSupport.parkNanos(100_000L);
             return;
         }
-        if (msg == null) msg = org.lwjgl.system.windows.MSG.calloc();
-        // a bounded spin first (the hand-over's wake-up is the cost at high frame rates), the window's sent messages
-        // looked at every ~50 us and before each park - never a spin without end
-        long now = System.nanoTime(), spinUntil = now + SPIN_NS, peekAt = now;
+        eventWaits++;
         while (!until.getAsBoolean()) {
-            now = System.nanoTime();
-            if (now >= peekAt) {
-                org.lwjgl.system.windows.User32.PeekMessage(msg, 0L, 0, 0, org.lwjgl.system.windows.User32.PM_NOREMOVE | 0x00400000 /* PM_QS_SENDMESSAGE */);
-                peekAt = now + 50_000;
-                if (until.getAsBoolean()) break;
+            serveWorkers();
+            mainWaiting = true;
+            if (until.getAsBoolean()) break;   // (after the flag: a wake from now on posts an event)
+            inGlfw = true;
+            boolean was = pumping;
+            pumping = true;
+            try {
+                org.lwjgl.glfw.GLFW.glfwWaitEventsTimeout(0.002);
+            } finally {
+                pumping = was;
+                inGlfw = false;
+                mainWaiting = false;
             }
-            if (now < spinUntil) Thread.onSpinWait();
-            else {
-                LockSupport.parkNanos(100_000L);
-                peekAt = 0;
-            }
+            polled();
         }
     }
 
@@ -1087,11 +1017,9 @@ public final class FrameThread {
             LOG.info("[sleep/opt] frame thread: OS priority {} {}", OS_PRIORITY, ok ? "set" : "not taken (stays as it was)");
         }
         while (true) {
-            long spinUntil = System.nanoTime() + SPIN_NS;   // (bounded: the main thread's next frame usually comes soon)
             while (taken == handed && !borrowAsked) {
                 Slot c = cur;
-                if (System.nanoTime() < spinUntil) Thread.onSpinWait();
-                else if (EXTRA && (SELF && selfOk || mainTicking || EXTRA_ANY && !mainRecording && System.nanoTime() - handAt < 1_000_000_000L) && frameHolds && c != null && c.nOps > 0) {
+                if (EXTRA && (SELF && selfOk || mainTicking) && frameHolds && c != null && c.nOps > 0) {
                     // (no sooner than the frame rate limit allows: extra frames are frames the player asked to cap; when
                     // the main thread is not known to be busy, only once it is half a frame late; self-clocked: at the
                     // limit, or back to back)
@@ -1099,7 +1027,7 @@ public final class FrameThread {
                     long capIv = cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0;
                     long iv = SELF && selfOk ? capInterval() : Math.max(lastFrameNs, capIv);
                     long due = SELF && selfOk ? nextDue - System.nanoTime() : doneAt + (mainTicking ? iv : iv * 3 / 2) - System.nanoTime();
-                    if (due > PACE_EARLY) paceSleep(due);
+                    if (due > 0) paceSleep(due);
                     else if (extraFrame()) doneAt = System.nanoTime();
                     else paceSleep(500_000L);   // (held by the main thread: look again soon, never spin)
                 } else LockSupport.park();
@@ -1162,10 +1090,10 @@ public final class FrameThread {
                         // the calls) ran at once, in the idle time before its due time; the drawing waits for it (N100
                         // 11-16: the frame after a tick took 2-3 ms more - 1.4 ms of queued work before its drawing)
                         long iv = capInterval(), w = nextDue - System.nanoTime();
-                        if (iv > 0 && w > PACE_EARLY) {
+                        if (iv > 0 && w > 0) {
                             prepAhead++;
                             drawGen = Long.MAX_VALUE;   // (nothing of the world read while asleep: the tick's gate need not wait)
-                            while ((w = nextDue - System.nanoTime()) > PACE_EARLY && !borrowAsked && !mainHolding) paceSleep(w);
+                            while ((w = nextDue - System.nanoTime()) > 0 && !borrowAsked && !mainHolding) paceSleep(w);
                             drawGen = gen;
                             waited = System.nanoTime() - q3;
                         }
@@ -1211,16 +1139,10 @@ public final class FrameThread {
      * frame was recorded after, up to 1) - motion goes on interpolating, the camera's turn waits for the main thread's
      * next poll. A long tick no longer stops the frames.
      */
-    public static volatile boolean EXTRA = Boolean.getBoolean("lab.frameThread.extra");
+    public static volatile boolean EXTRA = !"false".equals(System.getProperty("lab.frameThread.extra"));
     private static volatile boolean mainTicking, extraRunning;
     /** the main thread records a frame (begin .. present): no extra frame may start (they share the op list) */
     private static volatile boolean mainRecording;
-    /**
-     * -Dlab.frameThread.extraAny (off): an extra frame whenever the main thread is half a frame late, whatever holds it
-     * (a light job's join, a mod's work) - not only in a tick or the queued tasks. Lost on the N100 (tour at 120 fps:
-     * p99 15.6 -> 37 ms): an extra frame there takes 6-8 ms, and a main thread only a little late then waits for it.
-     */
-    public static final boolean EXTRA_ANY = Boolean.getBoolean("lab.frameThread.extraAny");
     private static boolean extraNow;
     private static long recordedAt, lastFrameNs = 500_000;
     private static float recordedPt;
@@ -1234,7 +1156,7 @@ public final class FrameThread {
      * tick began (GetCursorPos - the window's input is only read by the main thread, which is busy) through vanilla's
      * sensitivity formula; the player itself turns when the main thread polls after the tick (first person only)
      */
-    public static final boolean EXTRA_TURN = Boolean.getBoolean("lab.frameThread.extraTurn");
+    public static final boolean EXTRA_TURN = !"false".equals(System.getProperty("lab.frameThread.extraTurn"));
     private static volatile int tickCursorX, tickCursorY;
     private static volatile double turnScale;
     private static volatile boolean turnOk;
@@ -1269,7 +1191,7 @@ public final class FrameThread {
      * rotation as one step against the main thread's apply (TURN_LOCK): the view as fresh as the frame's start, however
      * busy the main thread is or deep the ring.
      */
-    public static final boolean LATCH = Boolean.getBoolean("lab.frameThread.latchTurn");
+    public static final boolean LATCH = !"false".equals(System.getProperty("lab.frameThread.latchTurn"));
     /** MouseHandler.handleAccumulatedMovement (main) and Camera.setup on the frame thread */
     public static final java.util.concurrent.locks.ReentrantLock TURN_LOCK = new java.util.concurrent.locks.ReentrantLock();
 
@@ -1561,7 +1483,7 @@ public final class FrameThread {
      * tick's own length (~1 ms in vanilla, 30 in the test). Every lerp by the partial tick follows (mods' entities too:
      * Minecraft.getTimer answers with it on the frame thread, FrameThreadTimerMixin).
      */
-    public static final boolean PT_TICK_END = Boolean.getBoolean("lab.frameThread.ptFromTickEnd");
+    public static final boolean PT_TICK_END = !"false".equals(System.getProperty("lab.frameThread.ptFromTickEnd"));
     private static volatile long tickEndNs;
     public static final net.minecraft.client.DeltaTracker TICK_END = new net.minecraft.client.DeltaTracker() {
         @Override public float getGameTimeDeltaTicks() { return realTimer.getGameTimeDeltaTicks(); }
@@ -1584,7 +1506,7 @@ public final class FrameThread {
         Slot c = cur;
         boolean rec1 = RING == 1 && mainRecording;
         boolean self = SELF && selfOk;
-        if (!EXTRA || !OVERLAP || !(self || mainTicking || EXTRA_ANY) || rec1 || borrowAsked || mainHolding || c == null || c.nOps == 0 || taken != handed) return false;
+        if (!EXTRA || !OVERLAP || !(self || mainTicking) || rec1 || borrowAsked || mainHolding || c == null || c.nOps == 0 || taken != handed) return false;
         extraRunning = true;
         if (taken != handed || borrowAsked || mainHolding || RING == 1 && mainRecording) {   // (a job or a borrow came meanwhile)
             extraRunning = false;
@@ -1731,7 +1653,6 @@ public final class FrameThread {
                 frames + extraFrames, waitNs / 1e6 / Math.max(1, frames), overlapFrames, overlapWaitNs / 1e6 / Math.max(1, overlapFrames), wakeNs / 1e3 / Math.max(1, frames),
                 mainWakeNs / 1e3 / Math.max(1, mainWakes), borrows, borrowWaitNs / 1e6 / Math.max(1, borrows), failures));
         long fr = Math.max(1, frames);
-        if (NO_WAIT) b.append("; frames skipped by the main thread (no wait) ").append(skippedFrames);
         b.append(pollGaps());
         if (MID_TICK) b.append("; entities drawn at their last tick's end (mid-tick) ").append(midTickDraws);
         if (cpuMain0 >= 0 && thread != null) {
@@ -1745,7 +1666,7 @@ public final class FrameThread {
         if (PUBLISH) b.append("; published lists: entities ").append(entPublishes).append(", particles ").append(partPublishes);
         if (RING > 1) b.append(String.format(java.util.Locale.ROOT, "; ring of %d: the main thread waited for a free slot %d times (%.3f ms each), most frames waiting or drawing %d, dropped at level changes %d",
                 RING, ringWaits, ringWaitNs / 1e6 / Math.max(1, ringWaits), ringQueuedMax, ringDropped));
-        if (EVENT_WAIT) b.append("; event waits ").append(eventWaits).append(" (woken by the frame thread ").append(eventWakes).append(")");
+        b.append("; event waits ").append(eventWaits).append(" (woken by the frame thread ").append(eventWakes).append(")");
         if (EXTRA) b.append(String.format(java.util.Locale.ROOT, "; extra frames during ticks %d (%.3f ms each); ticks %d (the frame thread busy at their start %d, idle %d)",
                 extraFrames, extraNs / 1e6 / Math.max(1, extraFrames), ticksSeen, ticksWhileFrameBusy, ticksWhileIdle));
         b.append(String.format(java.util.Locale.ROOT, "; per frame (us): main present: polls %.1f, side fence %.1f, held lists + light %.1f; frame thread: side wait %.1f, frameBegin + queue %.1f, calls %.1f, ops %.1f",

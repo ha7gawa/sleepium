@@ -29,11 +29,12 @@ public final class GameDefaults {
      */
     private static void decoupledPreset() {
         if (!Boolean.getBoolean("lab.decoupled")) return;
-        String[] set = {"lab.opt.FrameThreadMixin=true", "lab.frameThread.overlap=true", "lab.frameThread.extra=true", "lab.frameThread.extraTurn=true",
+        // (the pipeline's stages - overlap, extra frames and their turn, the tick-end partial tick, the ring of 3,
+        // generations, published lists, the latch, self-clocked frames - are the frame thread's own defaults since 11-17)
+        String[] set = {"lab.opt.FrameThreadMixin=true",
                 "lab.opt.TickAsyncMixin=true", "lab.prender.tickPoses=true", "lab.pentities.living=true", "lab.partbatch.itemsAnyOrder=true",
                 "lab.prender.tickPoses.tolerance=0.1", "lab.opt.OnePool=true", "lab.leaves.cull=2",
-                "lab.gpu.framesInFlight.auto=true", "lab.frameThread.ptFromTickEnd=true", "lab.frameThread.ring=3",
-                "lab.tickAsync.gen=true", "lab.frameThread.publish=true", "lab.frameThread.latchTurn=true", "lab.frameThread.selfClock=true"};
+                "lab.gpu.framesInFlight.auto=true"};
         int n = 0;
         for (String kv : set) {
             int eq = kv.indexOf('=');
