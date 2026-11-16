@@ -285,6 +285,27 @@ public final class ClientAuto {
      */
     private static final String BURST = System.getProperty("sleep.clientAuto.burst");
     private static boolean burstAsked;
+    /** the render thread's own burst (no frame thread) */
+    private static int burstLeft, burstIdx;
+    private static Path burstDir;
+    private static java.util.concurrent.ExecutorService burstIo;
+
+    private static void burstFrame() {
+        if (burstLeft <= 0) return;
+        Minecraft mc = Minecraft.getInstance();
+        int k = burstIdx++;
+        com.mojang.blaze3d.platform.NativeImage img = net.minecraft.client.Screenshot.takeScreenshot(mc.getMainRenderTarget());
+        Path out = burstDir.resolve(String.format(Locale.ROOT, "burst-%s-%03d-j.png", LABEL, k));
+        if (burstIo == null) burstIo = java.util.concurrent.Executors.newFixedThreadPool(2);
+        burstIo.execute(() -> {
+            try (img) {
+                img.writeToFile(out);
+            } catch (Exception e) {
+                log("burst frame " + k + " failed: " + e);
+            }
+        });
+        if (--burstLeft == 0) log("burst: " + (k + 1) + " frames (render thread) -> " + burstDir);
+    }
     /** told of each shot taken: its index and its time in the run's seconds (a mod's trace can mark it) */
     public static volatile java.util.function.BiConsumer<Integer, Double> onShot;
 
@@ -477,6 +498,7 @@ public final class ClientAuto {
 
     static void register(IEventBus bus) {
         bus.addListener(ClientTickEvent.Post.class, e -> tick());
+        if (BURST != null) bus.addListener(net.neoforged.bus.api.EventPriority.LOWEST, net.neoforged.neoforge.client.event.RenderFrameEvent.Post.class, e -> burstFrame());
         if (SPIN != 0) bus.addListener(net.neoforged.neoforge.client.event.RenderFrameEvent.Pre.class, e -> spin());
         log("enabled, label '" + LABEL + "'");
         // -Dsleep.clientAuto.asPlayers=true: vanilla's development-only paths off, as in a player's game (e.g. the
@@ -587,7 +609,17 @@ public final class ClientAuto {
             } catch (java.io.IOException e) {
                 ok = false;
             }
-            log("burst " + BURST + (ok ? " asked" : " not possible (no frame thread)"));
+            if (!ok) {   // no frame thread: the render thread takes the frames itself (RenderFrameEvent.Post, the main target)
+                burstLeft = Integer.parseInt(BURST.split(":")[1]);
+                try {
+                    burstDir = SleepOut.dir(bm.gameDirectory.toPath(), "frame", LABEL);
+                    Files.createDirectories(burstDir);
+                    ok = true;
+                } catch (java.io.IOException e) {
+                    burstLeft = 0;
+                }
+            }
+            log("burst " + BURST + (ok ? " asked" : " not possible"));
         }
         if (abAt >= 0 && ticks >= abAt) abTick(Minecraft.getInstance());
         if (FLIP != null && flipFrom >= 0) flipTick();
