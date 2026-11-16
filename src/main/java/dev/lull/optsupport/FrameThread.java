@@ -311,6 +311,9 @@ public final class FrameThread {
     public static void present() {
         long p0 = System.nanoTime();
         long seq = recordSeq;
+        // this frame's op list is complete: a runTick nested in the poll below begins a list of its own (begin: recordSeq
+        // moves) - without this its ops were appended to this frame's and handed over with it (the exit crash, 11-16)
+        fresh = true;
         org.lwjgl.glfw.GLFW.glfwPollEvents();
         if (recordSeq != seq) {
             // the poll ran a runTick of its own (a click on "Save and Quit": Minecraft.disconnect's forced frames) - it
