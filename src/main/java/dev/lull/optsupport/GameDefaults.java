@@ -23,14 +23,17 @@ public final class GameDefaults {
      * the N100 for 700-850 ms with Distant Horizons without it). The clouds at half resolution are no longer in it (the
      * user 11-16: blurry; -Dlab.clouds.half=true for weak GPUs). Each flag can still be given on its own (a given value
      * wins). A ring of 3 recorded frames (11-16: the main thread records the next frame while the frame thread draws -
-     * N100 tour 427 -> 471 fps uncapped, p99 18.4 -> 16.3 ms at 120 fps).
+     * N100 tour 427 -> 471 fps uncapped, p99 18.4 -> 16.3 ms at 120 fps). The pipeline's stages 1-3 (notes/75, 11-16
+     * evening, the user's hand test "very smooth"): the tick's generations, published lists, the view latched at every
+     * frame, self-clocked frames (N100 tour at 120 fps p99 15.6 -> 12.2 ms, stutters halved).
      */
     private static void decoupledPreset() {
         if (!Boolean.getBoolean("lab.decoupled")) return;
         String[] set = {"lab.opt.FrameThreadMixin=true", "lab.frameThread.overlap=true", "lab.frameThread.extra=true", "lab.frameThread.extraTurn=true",
                 "lab.opt.TickAsyncMixin=true", "lab.prender.tickPoses=true", "lab.pentities.living=true", "lab.partbatch.itemsAnyOrder=true",
                 "lab.prender.tickPoses.tolerance=0.1", "lab.opt.OnePool=true", "lab.leaves.cull=2",
-                "lab.gpu.framesInFlight.auto=true", "lab.frameThread.ptFromTickEnd=true", "lab.frameThread.ring=3"};
+                "lab.gpu.framesInFlight.auto=true", "lab.frameThread.ptFromTickEnd=true", "lab.frameThread.ring=3",
+                "lab.tickAsync.gen=true", "lab.frameThread.publish=true", "lab.frameThread.latchTurn=true", "lab.frameThread.selfClock=true"};
         int n = 0;
         for (String kv : set) {
             int eq = kv.indexOf('=');
