@@ -181,6 +181,7 @@
     "TickPosesAnimationMixin",
     "FrameThreadEntityMarkMixin",
     "FrameThreadAnimationLockMixin",
+    "FrameThreadMouseMixin",
     "FrameThreadRenderEntityMixin",
     "HalfCloudsMixin",
     "LeafCullMixin",

@@ -22,15 +22,22 @@ public abstract class FrameThreadCameraMixin {
     @Shadow public abstract float getXRot();
     @Shadow public abstract boolean isDetached();
 
+    /** the player's rotation read and the turn not yet applied added as one step against the main thread's apply */
+    @Inject(method = "setup", at = @At("HEAD"))
+    private void sleep$setupLock(CallbackInfo ci) {
+        if (FrameThread.onFrameThread()) FrameThread.TURN_LOCK.lock();
+    }
+
     @Inject(method = "setup", at = @At("TAIL"))
     private void sleep$extraTurn(CallbackInfo ci) {
         boolean extra = FrameThread.extraNow();
         float dy = 0f;
-        if (FrameThread.EXTRA_TURN && extra && !isDetached()) {
+        if (!isDetached() && FrameThread.turnHere(extra)) {
             dy = FrameThread.turnYaw;
             float dp = FrameThread.turnPitch;
             if (dy != 0f || dp != 0f) setRotation(getYRot() + dy, net.minecraft.util.Mth.clamp(getXRot() + dp, -90f, 90f));
         }
         if (dev.lull.optsupport.TurnLog.ON && FrameThread.onFrameThread()) dev.lull.optsupport.TurnLog.add(extra, getYRot(), getXRot(), dy);
+        if (FrameThread.onFrameThread() && FrameThread.TURN_LOCK.isHeldByCurrentThread()) FrameThread.TURN_LOCK.unlock();
     }
 }

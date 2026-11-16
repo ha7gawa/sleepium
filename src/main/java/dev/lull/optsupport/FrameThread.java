@@ -563,6 +563,7 @@ public final class FrameThread {
             return;
         }
         if (mainHolds) giveBack();
+        if (LATCH) turnParams();
         long p1 = System.nanoTime();
         tPoll += p1 - p0;
         sideFence(r);
@@ -968,21 +969,46 @@ public final class FrameThread {
     public static volatile float turnYaw, turnPitch;
     private static org.lwjgl.system.windows.POINT cursorMain, cursorFrame;
 
-    /** main thread at a tick's start: the cursor and the turn factors now */
+    /** main thread at a tick's start: the turn factors now (and the cursor, for the old GetCursorPos way) */
     private static void turnStart() {
-        if (!EXTRA_TURN || !WINDOWS || mc == null || mc.player == null) {
-            turnOk = false;
-            return;
-        }
+        turnParams();
+        if (!turnOk || MOUSE_ACC || !WINDOWS) return;
         if (cursorMain == null) cursorMain = org.lwjgl.system.windows.POINT.calloc();
         org.lwjgl.system.windows.User32.GetCursorPos(cursorMain);
         tickCursorX = cursorMain.x();
         tickCursorY = cursorMain.y();
-        double d2 = mc.options.sensitivity().get() * 0.6 + 0.2;
-        turnScale = d2 * d2 * d2 * 8.0 * 0.15;
-        turnOk = mc.mouseHandler.isMouseGrabbed() && !mc.options.smoothCamera && mc.options.getCameraType().isFirstPerson() && !mc.player.isScoping();
-        if (mc.options.invertYMouse().get()) turnScale = -turnScale;   // (the sign of the pitch only: undone for yaw below)
     }
+
+    /** main thread: vanilla's turn factors (sensitivity, inverted pitch) and whether the camera turns with the mouse now */
+    private static void turnParams() {
+        if (!(EXTRA_TURN || LATCH) || mc == null || mc.player == null) {
+            turnOk = false;
+            return;
+        }
+        double d2 = mc.options.sensitivity().get() * 0.6 + 0.2;
+        double s = d2 * d2 * d2 * 8.0 * 0.15;
+        turnScale = mc.options.invertYMouse().get() ? -s : s;   // (the sign of the pitch only: undone for yaw in turnNow)
+        turnOk = mc.mouseHandler.isMouseGrabbed() && !mc.options.smoothCamera && mc.options.getCameraType().isFirstPerson() && !mc.player.isScoping();
+    }
+
+    /**
+     * -Dlab.frameThread.latchTurn (notes/75 stage 2): every frame the frame thread draws turns its camera by the mouse
+     * movement the main thread has taken in and not yet applied (not only the extra frames) - read with the player's
+     * rotation as one step against the main thread's apply (TURN_LOCK): the view as fresh as the frame's start, however
+     * busy the main thread is or deep the ring.
+     */
+    public static final boolean LATCH = Boolean.getBoolean("lab.frameThread.latchTurn");
+    /** MouseHandler.handleAccumulatedMovement (main) and Camera.setup on the frame thread */
+    public static final java.util.concurrent.locks.ReentrantLock TURN_LOCK = new java.util.concurrent.locks.ReentrantLock();
+
+    /** the frame thread, Camera.setup's end (under TURN_LOCK): this frame's turn into turnYaw / turnPitch; false: none */
+    public static boolean turnHere(boolean extra) {
+        if (!(extra && EXTRA_TURN || LATCH && onFrameThread())) return false;
+        turnNow();
+        return true;
+    }
+
+
 
     /** frame thread, an extra frame: the camera turn since the tick began (degrees), into turnYaw / turnPitch */
     private static void turnNow() {
@@ -1037,7 +1063,7 @@ public final class FrameThread {
      * which adds them to the accumulated delta. Keys, clicks, the window's own messages wait for the usual poll.
      */
     public static void pumpMotion() {
-        if (!active || !EXTRA_TURN || !MOUSE_ACC || !WINDOWS || !mainTicking || Thread.currentThread() != mainThread) return;
+        if (!active || !(EXTRA_TURN || LATCH) || !MOUSE_ACC || !mainTicking || Thread.currentThread() != mainThread) return;
         long now = System.nanoTime();
         if (now - busySince < PUMP_AFTER_NS) return;   // (only in a long tick: in a normal one the next poll comes soon anyway)
         if (now - pumpAt < 1_000_000L) return;
@@ -1284,7 +1310,6 @@ public final class FrameThread {
         long t0 = System.nanoTime();
         drawing = true;
         extraNow = true;
-        turnNow();
         try {
             UploadRing.frameBegin();
             runOps(c);
