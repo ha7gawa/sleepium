@@ -466,7 +466,9 @@ public final class FrameThread {
             while (jobDone && !borrowAsked) {
                 if (System.nanoTime() < spinUntil) Thread.onSpinWait();
                 else if (EXTRA && mainTicking && frameHolds && nOps > 0) {
-                    long due = doneAt + lastFrameNs - System.nanoTime();
+                    // (no sooner than the frame rate limit allows: extra frames are frames the player asked to cap)
+                    int cap = mc != null ? mc.getWindow().getFramerateLimit() : 260;
+                    long due = doneAt + Math.max(lastFrameNs, cap > 0 && cap < 260 ? 1_000_000_000L / cap : 0) - System.nanoTime();
                     if (due > 0) LockSupport.parkNanos(due);
                     else if (extraFrame()) doneAt = System.nanoTime();
                 } else LockSupport.park();
@@ -586,9 +588,38 @@ public final class FrameThread {
         return extraNow && Thread.currentThread() == thread;
     }
 
+    /**
+     * -Dlab.frameThread.extraTasks (default on with extra frames): extra frames also while the main thread runs the
+     * queued tasks (runAllTasks: the packets - chunk data on the N100 takes 20-40 ms in a frame while terrain loads).
+     * The overlapped frame already draws while those tasks run (A2); an extra frame is that frame again, later.
+     */
+    public static final boolean EXTRA_TASKS = !"false".equals(System.getProperty("lab.frameThread.extraTasks"));
+    /** the frame count when the camera turn's reference was taken (once per stretch the main thread is busy) */
+    private static long turnFrame = -1;
+    public static long tasksSeen;
+
+    public static void tasksStart() {
+        if (!EXTRA_TASKS || !EXTRA) return;
+        mainTicking = true;
+        if (turnFrame != frames) {
+            turnStart();
+            turnFrame = frames;
+        }
+        tasksSeen++;
+        if (active) LockSupport.unpark(thread);
+    }
+
+    public static void tasksEnd() {
+        if (!EXTRA_TASKS || !EXTRA) return;
+        mainTicking = false;
+    }
+
     public static void tickStart() {
         mainTicking = true;
-        turnStart();
+        if (turnFrame != frames) {   // (the queued tasks before it already took the turn's reference for this frame)
+            turnStart();
+            turnFrame = frames;
+        }
         ticksSeen++;
         if (jobDone) ticksWhileIdle++;
         else ticksWhileFrameBusy++;

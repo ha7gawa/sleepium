@@ -65,6 +65,7 @@ public final class ClientAuto {
     private static final int FPS_CAP = Integer.getInteger("sleep.clientAuto.fps", 260);
     /** -Dsleep.clientAuto.steady=true: after the initial terrain, 30 s (steadySeconds) of frames standing still, no teleports */
     private static final boolean STEADY = Boolean.getBoolean("sleep.clientAuto.steady");
+    private static final boolean SEC_LOG = Boolean.getBoolean("sleep.clientAuto.secLog");
     private static final int SETTLE_S = Integer.getInteger("sleep.clientAuto.settle", 0);
     /** -Dsleep.clientAuto.scene=client_entities: run that probe function after the terrain is ready, then look at it */
     private static final String SCENE = System.getProperty("sleep.clientAuto.scene");
@@ -506,9 +507,29 @@ public final class ClientAuto {
             if (d.getToUpload() > 0) dev.lull.optsupport.GenTrace.uploading.increment();
             dev.lull.optsupport.GenTrace.toBatchMax = Math.max(dev.lull.optsupport.GenTrace.toBatchMax, d.getToBatchCount());
         }
-        boolean idle = d != null && mc.levelRenderer.hasRenderedAllSections() && d.getToUpload() == 0 && d.getToBatchCount() == 0;
+        boolean idle = d != null && mc.levelRenderer.hasRenderedAllSections() && d.getToUpload() == 0 && d.getToBatchCount() == 0
+                && (!ALL_CHUNKS || allChunksIn(mc));
         stableTicks = idle ? stableTicks + 1 : 0;
         return stableTicks >= 40;
+    }
+
+    /**
+     * -Dsleep.clientAuto.allChunks (default on): "meshed" also needs every chunk within the view distance (less one, a
+     * circle as the server sends them) on the client - on the N100 a generating server sometimes sends nothing for 2 s,
+     * and the idle renderer alone called a teleport done with 4 sections in view (11-16: the tours of two modes then
+     * measured different phases)
+     */
+    private static final boolean ALL_CHUNKS = !"false".equals(System.getProperty("sleep.clientAuto.allChunks"));
+
+    private static boolean allChunksIn(Minecraft mc) {
+        if (mc.level == null || mc.player == null) return false;
+        int r = Math.max(1, mc.options.getEffectiveRenderDistance() - 1);
+        int cx = mc.player.chunkPosition().x, cz = mc.player.chunkPosition().z;
+        var src = mc.level.getChunkSource();
+        for (int dx = -r; dx <= r; dx++)
+            for (int dz = -r; dz <= r; dz++)
+                if (dx * dx + dz * dz <= r * r && !src.hasChunk(cx + dx, cz + dz)) return false;
+        return true;
     }
 
     private static boolean queueBusy(Minecraft mc) {
@@ -560,6 +581,17 @@ public final class ClientAuto {
         }
         Minecraft mc = Minecraft.getInstance();
         ticks++;
+        // -Dsleep.clientAuto.secLog=true: the renderer's sections and the client's chunks once a second (a tour's loading
+        // progress, comparable between modes - the end's snapshot alone misled 11-16)
+        if (SEC_LOG && mc.level != null && ticks % 20 == 0) {
+            dev.lull.optsupport.FrameThread.holdForMain();
+            try {
+                log(String.format(Locale.ROOT, "sections at tick %d: %s, chunks %d", ticks, mc.levelRenderer.getSectionStatistics(),
+                        mc.level.getChunkSource().getLoadedChunksCount()));
+            } finally {
+                dev.lull.optsupport.FrameThread.releaseForMain();
+            }
+        }
         // a screen over the world (a pack's welcome, a mod's notice - MCA's DestinyScreen comes back until it is
         // accepted; the game pauses under it): after 10 s answered as a player would - its confirming button
         // pressed, else closed (Esc); ClientMeter counts the ticks a screen was open in a measured window

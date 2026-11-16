@@ -82,6 +82,16 @@ public abstract class FrameThreadMixin {
         } else op.call(w);
     }
 
+    @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;runAllTasks()V"))
+    private void sleep$tasksStart(boolean renderLevel, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        FrameThread.tasksStart();
+    }
+
+    @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;runAllTasks()V", shift = At.Shift.AFTER))
+    private void sleep$tasksEnd(boolean renderLevel, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        FrameThread.tasksEnd();
+    }
+
     @Inject(method = "tick", at = @At("HEAD"))
     private void sleep$tickStart(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
         FrameThread.tickStart();
