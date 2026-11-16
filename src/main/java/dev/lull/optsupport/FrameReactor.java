@@ -80,6 +80,17 @@ public final class FrameReactor {
         }
     }
 
+    /**
+     * From any thread: r makes GL calls - on the render thread at its next point, or, with the frame thread
+     * (FrameThread: the context lives there), at that thread's next frame job (N100 tour 11-16: LightVolumes' upload
+     * drained on the main thread without a context, a native abort)
+     */
+    public static void completeGl(Runnable r) {
+        complete(() -> {
+            if (!FrameThread.deferRun(r)) r.run();
+        });
+    }
+
     /** Render thread: the completions handed back so far. */
     public static void drain() {
         Object r;

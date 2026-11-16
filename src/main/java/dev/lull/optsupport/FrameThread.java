@@ -153,6 +153,16 @@ public final class FrameThread {
      * thread at the start of the next frame, before that frame draws (vanilla made it before the frame too): the
      * renderer's side - vanilla's, Sodium's (its RenderAsserts want the render thread) - only ever runs there
      */
+    private static final com.llamalad7.mixinextras.injector.wrapoperation.Operation<Object> RUN_OP = a -> {
+        ((Runnable) a[0]).run();
+        return null;
+    };
+
+    /** the main thread: r (GL work) at the frame thread's next job start; false: not deferred, run it here */
+    public static boolean deferRun(Runnable r) {
+        return deferCall(RUN_OP, r);
+    }
+
     public static boolean deferCall(com.llamalad7.mixinextras.injector.wrapoperation.Operation<?> op, Object... args) {
         if (!active || Thread.currentThread() != mainThread || mainHolds) return false;
         for (int i = 0; i < args.length; i++)   // (a caller may reuse its mutable position after the call)

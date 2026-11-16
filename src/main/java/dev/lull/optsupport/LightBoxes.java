@@ -194,7 +194,7 @@ public final class LightBoxes {
             long mem = MemoryUtil.nmemAlloc(b.bytes);
             FrameReactor.pool().execute(() -> {
                 compute(cl, b, mem);
-                FrameReactor.complete(() -> {
+                FrameReactor.completeGl(() -> {
                     if (b.seq == seq && LIVE.contains(b)) upload(b, mem);
                     MemoryUtil.nmemFree(mem);
                 });

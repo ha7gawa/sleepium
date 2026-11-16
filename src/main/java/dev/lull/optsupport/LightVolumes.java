@@ -478,7 +478,7 @@ public final class LightVolumes {
         if (level == null) return;
         FrameReactor.pool().execute(() -> {
             compute(level, origin, buf);
-            FrameReactor.complete(() -> {
+            FrameReactor.completeGl(() -> {
                 if (SECS.get(k) == sec && sec.vol == vol && sec.seq == seq) {
                     upload(vol, buf);
                     if (!sec.ready && section != null) {
