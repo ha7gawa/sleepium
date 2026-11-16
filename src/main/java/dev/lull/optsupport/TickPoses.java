@@ -146,6 +146,9 @@ public final class TickPoses {
         p.ax = e.getX();
         p.ay = e.getY();
         p.az = e.getZ();
+        p.ox = e.xOld;
+        p.oy = e.yOld;
+        p.oz = e.zOld;
         for (int i = 0; i < 4; i++) {
             ParallelRender.Job j = p.jobs[i];
             j.entity = e;
@@ -171,6 +174,8 @@ public final class TickPoses {
         /** the two sets usable for frames (after the run) */
         volatile boolean usable;
         double ax, ay, az;
+        /** the entity's previous tick's position at the capture (with ax..az: the tick's motion, for the flame and the shadow) */
+        double ox, oy, oz;
         volatile boolean done;
         final java.util.concurrent.atomic.AtomicBoolean claimed = new java.util.concurrent.atomic.AtomicBoolean();
         long frameUsed;
@@ -315,6 +320,9 @@ public final class TickPoses {
         p.ax = e.getX();
         p.ay = e.getY();
         p.az = e.getZ();
+        p.ox = e.xOld;
+        p.oy = e.yOld;
+        p.oz = e.zOld;
         for (int i = 0; i < 4; i++) {
             ParallelRender.Job j = p.jobs[i];
             j.entity = e;

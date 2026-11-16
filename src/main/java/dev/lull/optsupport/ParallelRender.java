@@ -1407,6 +1407,10 @@ public final class ParallelRender {
         pose.pushPose();
         if (j.hold && j.tick != null)   // TickAsync: where the held pair stands (the entity itself is being ticked)
             pose.translate(j.tick.ax - j.camX + off.x(), j.tick.ay - j.camY + off.y(), j.tick.az - j.camZ + off.z());
+        else if (j.tick != null)   // the pair's own motion (the models come from it too: the flame and shadow go with them, not
+            // with the live entity the main thread may be ticking on - full decoupling, 11-16)
+            pose.translate(Mth.lerp((double) pt, j.tick.ox, j.tick.ax) - j.camX + off.x(), Mth.lerp((double) pt, j.tick.oy, j.tick.ay) - j.camY + off.y(),
+                    Mth.lerp((double) pt, j.tick.oz, j.tick.az) - j.camZ + off.z());
         else pose.translate(Mth.lerp((double) pt, e.xOld, e.getX()) - j.camX + off.x(), Mth.lerp((double) pt, e.yOld, e.getY()) - j.camY + off.y(),
                 Mth.lerp((double) pt, e.zOld, e.getZ()) - j.camZ + off.z());
         EntityRenderDispatcher d = Minecraft.getInstance().getEntityRenderDispatcher();
