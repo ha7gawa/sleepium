@@ -1591,6 +1591,7 @@ public final class FrameThread {
                 default -> throw new IllegalStateException("frame op " + OPS[k]);
             }
         }
+        shownFrames++;
         if (burstLeft > 0) burstShot(m);   // (the frame shown: the main target still holds it)
     }
 
@@ -1654,6 +1655,22 @@ public final class FrameThread {
         cpuMain0 = mx.getThreadCpuTime(mainThread.threadId());
         cpuFrame0 = mx.getThreadCpuTime(thread.threadId());
         cpuAt0 = System.nanoTime();
+    }
+
+    /** frames the frame thread drew (recorded, extra, its own), for Minecraft's FPS counter */
+    private static volatile long shownFrames;
+    private static long shownRead;
+
+    /**
+     * runTick's once-a-second FPS (FrameThreadFpsMixin): the frames drawn since the last time - not the main thread's
+     * loops, which with self-clocked frames come only for ticks, packets and the mouse (the HUD showed 68 at ~1100 fps)
+     */
+    public static int fpsFrames(int loops) {
+        if (!active) return loops;
+        long n = shownFrames;
+        int d = (int) (n - shownRead);
+        shownRead = n;
+        return d;
     }
 
     public static String report() {

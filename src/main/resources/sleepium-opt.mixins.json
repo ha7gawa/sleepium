@@ -185,6 +185,7 @@
     "FrameThreadMouseMixin",
     "FrameThreadTaskWakeMixin",
     "FrameThreadScreenMixin",
+    "FrameThreadFpsMixin",
     "FrameThreadRenderEntityMixin",
     "HalfCloudsMixin",
     "LeafCullMixin",
