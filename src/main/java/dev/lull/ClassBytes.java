@@ -118,6 +118,34 @@ public final class ClassBytes {
      * transformer is not at hand, or the transformer fails.
      */
     public static ClassNode readRunning(ClassLoader loader, String internalName) {
+        // each class through Mixin's transformer once: the analyses ask for the same superclasses (LivingEntity, Mob)
+        // again and again, and every pass made Mixin print other mods' warnings again (issue #8: Critters and
+        // Companions' Shift.BY warning 21 more times, from our analysis thread); a copy each time, the analyses change it
+        ClassNode cached;
+        synchronized (RUN_CACHE) {
+            cached = RUN_CACHE.get(internalName);
+        }
+        if (cached == null) {
+            cached = readRunning0(loader, internalName);
+            if (cached == null) return null;
+            synchronized (RUN_CACHE) {
+                RUN_CACHE.put(internalName, cached);
+            }
+        }
+        ClassNode copy = new ClassNode();
+        cached.accept(copy);
+        return copy;
+    }
+
+    /** the classes read as they run, the last 32 (the shared superclasses stay; a class's node can be large) */
+    private static final java.util.LinkedHashMap<String, ClassNode> RUN_CACHE = new java.util.LinkedHashMap<>(64, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(java.util.Map.Entry<String, ClassNode> e) {
+            return size() > 32;
+        }
+    };
+
+    private static ClassNode readRunning0(ClassLoader loader, String internalName) {
         try (InputStream in = (loader != null ? loader : ClassLoader.getSystemClassLoader()).getResourceAsStream(internalName + ".class")) {
             if (in == null) return null;
             org.spongepowered.asm.mixin.MixinEnvironment env = org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment();
