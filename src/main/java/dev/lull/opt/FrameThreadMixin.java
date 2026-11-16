@@ -109,9 +109,13 @@ public abstract class FrameThreadMixin {
         FrameThread.tickEnd();
     }
 
-    /** the event loop's thread as each thread sees it: the frame thread counts as Minecraft's own while it draws */
-    @Inject(method = "getRunningThread", at = @At("HEAD"), cancellable = true)
-    private void sleep$frameIsSame(CallbackInfoReturnable<Thread> cir) {
-        if (FrameThread.drawingHere()) cir.setReturnValue(Thread.currentThread());
+    /**
+     * the event loop's thread as each thread sees it: the frame thread counts as Minecraft's own while it draws (a return
+     * value modified, not a cancellable inject: that made a CallbackInfoReturnable at every call - 30 % of all the
+     * allocation at distance 32, the section compiles' biome lookups asking isSameThread, 11-16)
+     */
+    @com.llamalad7.mixinextras.injector.ModifyReturnValue(method = "getRunningThread", at = @At("RETURN"))
+    private Thread sleep$frameIsSame(Thread running) {
+        return FrameThread.drawingHere() ? Thread.currentThread() : running;
     }
 }

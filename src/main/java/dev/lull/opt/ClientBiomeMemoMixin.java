@@ -39,7 +39,7 @@ public abstract class ClientBiomeMemoMixin implements LevelReader, dev.lull.opts
                 memo.clear();
                 sleep$seenFrame = e;
             }
-        } else if (RenderSystem.isOnRenderThread() || dev.lull.optsupport.FrameThread.active && net.minecraft.client.Minecraft.getInstance().isSameThread()) {
+        } else if (RenderSystem.isOnRenderThread() || dev.lull.optsupport.FrameThread.onMainThread()) {
             memo = sleep$biomes;
             if (sleep$seen != e) {
                 memo.clear();

@@ -560,6 +560,11 @@ public final class FrameThread {
         if (!deferCall(SECTION_DIRTY, lr, x, y, z)) lr.setSectionDirty(x, y, z);
     }
 
+    /** this is the main thread while the frame thread runs (a plain identity check: no isSameThread on hot paths) */
+    public static boolean onMainThread() {
+        return active && Thread.currentThread() == mainThread;
+    }
+
     private static Thread mainThread() {
         return mainThread;
     }
