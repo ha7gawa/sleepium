@@ -18,16 +18,17 @@ public final class GameDefaults {
      * -Dlab.decoupled=true (1.3.0 research, non-exact - the user's call 11-15): the decoupled mode in one switch - the
      * frame on its own thread drawing while the main thread ticks, extra frames during a long tick (the camera turning
      * with the cursor), entities ticked on the pool after the tick and drawn from tick-rate poses (held items and
-     * translucent / additive layers in any order, the pose check's tolerance 0.1 blocks), the clouds at half resolution,
-     * no leaf faces deep in canopies, the frames-in-flight limiter (Intel's driver queues far ahead: Distant Horizons on
-     * the N100 stalled 700-850 ms in the swap every second without it). Each flag can still be given on its own (a
-     * given value wins).
+     * translucent / additive layers in any order, the pose check's tolerance 0.1 blocks), no leaf faces deep in
+     * canopies, the frames-in-flight limiter (Intel's driver queues far ahead: this jar's own per-frame buffers stalled
+     * the N100 for 700-850 ms with Distant Horizons without it). The clouds at half resolution are no longer in it (the
+     * user 11-16: blurry; -Dlab.clouds.half=true for weak GPUs). Each flag can still be given on its own (a given value
+     * wins).
      */
     private static void decoupledPreset() {
         if (!Boolean.getBoolean("lab.decoupled")) return;
         String[] set = {"lab.opt.FrameThreadMixin=true", "lab.frameThread.overlap=true", "lab.frameThread.extra=true", "lab.frameThread.extraTurn=true",
                 "lab.opt.TickAsyncMixin=true", "lab.prender.tickPoses=true", "lab.pentities.living=true", "lab.partbatch.itemsAnyOrder=true",
-                "lab.prender.tickPoses.tolerance=0.1", "lab.opt.OnePool=true", "lab.clouds.half=true", "lab.leaves.cull=2",
+                "lab.prender.tickPoses.tolerance=0.1", "lab.opt.OnePool=true", "lab.leaves.cull=2",
                 "lab.gpu.framesInFlight.auto=true", "lab.frameThread.ptFromTickEnd=true"};
         int n = 0;
         for (String kv : set) {

@@ -12,4 +12,10 @@ public interface FrameThreadMouseAccessor {
 
     @Accessor("accumulatedDY")
     double sleep$accumulatedDY();
+
+    @Accessor("xpos")
+    double sleep$xpos();
+
+    @Accessor("ypos")
+    double sleep$ypos();
 }
