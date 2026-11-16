@@ -73,6 +73,7 @@ public final class FrameThread {
 
     private static void start(Minecraft m) {
         mc = m;
+        realTimer = m.getTimer();
         mainThread = Thread.currentThread();
         caps = org.lwjgl.opengl.GL.getCapabilities();
         window = m.getWindow().getWindow();
@@ -160,7 +161,7 @@ public final class FrameThread {
      * any thread: run at the frame thread's next job start
      */
     private static final java.util.concurrent.ConcurrentLinkedQueue<Runnable> RENDER_TASKS = new java.util.concurrent.ConcurrentLinkedQueue<>();
-    public static long renderTasks, renderTaskFailures;
+    public static long renderTasks, renderTaskFailures, nestedDropped;
 
     public static boolean takeRenderTask(Runnable r) {
         if (!active) return false;
@@ -251,7 +252,11 @@ public final class FrameThread {
     /** the next op begins a new frame (set by present): the last one waited for, the list started over */
     private static boolean fresh = true;
 
+    /** frames begun so far: present() sees whether its own poll ran a nested runTick (recordSeq moved) */
+    private static long recordSeq;
+
     private static void begin() {
+        recordSeq++;
         awaitLast();
         mainRecording = true;   // (before the check: an extra frame starting now sees it and backs off)
         if (extraRunning) waitPumping(() -> !extraRunning);
@@ -305,7 +310,15 @@ public final class FrameThread {
 
     public static void present() {
         long p0 = System.nanoTime();
+        long seq = recordSeq;
         org.lwjgl.glfw.GLFW.glfwPollEvents();
+        if (recordSeq != seq) {
+            // the poll ran a runTick of its own (a click on "Save and Quit": Minecraft.disconnect's forced frames) - it
+            // recorded over this frame's ops and handed its frames over; this one, of the world before, is dropped
+            // (11-16 hand test: it was drawn after gameMode was gone, an NPE in renderItemInHand)
+            nestedDropped++;
+            return;
+        }
         if (mainHolds) giveBack();
         long p1 = System.nanoTime();
         tPoll += p1 - p0;
@@ -566,7 +579,7 @@ public final class FrameThread {
                     long q3 = System.nanoTime();
                     tCalls += q3 - q2;
                     recordedAt = System.nanoTime();
-                    recordedPt = mc.getTimer().getGameTimeDeltaPartialTick(true);
+                    recordedPt = realTimer.getGameTimeDeltaPartialTick(true);
                     runOps();
                     long dt = System.nanoTime() - q3;
                     tOps += dt;
@@ -652,11 +665,47 @@ public final class FrameThread {
         turnYaw = 0f;
         turnPitch = 0f;
         if (!turnOk) return;
+        double k = Math.abs(turnScale);
+        if (MOUSE_ACC) {   // the movement the main thread will apply at its next frame (pumpMotion keeps it current)
+            dev.lull.opt.FrameThreadMouseAccessor m = (dev.lull.opt.FrameThreadMouseAccessor) mc.mouseHandler;
+            turnYaw = (float) (m.sleep$accumulatedDX() * k);
+            turnPitch = (float) (m.sleep$accumulatedDY() * turnScale);
+            return;
+        }
         if (cursorFrame == null) cursorFrame = org.lwjgl.system.windows.POINT.calloc();
         org.lwjgl.system.windows.User32.GetCursorPos(cursorFrame);
-        double k = Math.abs(turnScale);
         turnYaw = (float) ((cursorFrame.x() - tickCursorX) * k);
         turnPitch = (float) ((cursorFrame.y() - tickCursorY) * turnScale);
+    }
+
+    /**
+     * -Dlab.frameThread.mouseAcc (default on): an extra frame's turn from the mouse movement Minecraft has taken in and not
+     * yet applied (MouseHandler's accumulated delta), kept current during a long tick by pumpMotion. The cursor position
+     * (GetCursorPos) barely moves under GLFW's captured cursor with raw input: the hand test 11-16 showed 2.7 degrees in
+     * the extra frames, then a jump of 32-39 at the next recorded frame - the camera turned in steps at the tick rate.
+     */
+    static final boolean MOUSE_ACC = !"false".equals(System.getProperty("lab.frameThread.mouseAcc"));
+    private static long pumpAt;
+    public static long pumps;
+    private static org.lwjgl.system.windows.MSG pumpMsg;
+
+    /**
+     * the main thread inside a long tick (entity ticks, the test load): the window's mouse-movement messages only
+     * (WM_INPUT, WM_MOUSEMOVE) taken from the queue at most every 1 ms - GLFW's handler passes them to MouseHandler.onMove,
+     * which adds them to the accumulated delta. Keys, clicks, the window's own messages wait for the usual poll.
+     */
+    public static void pumpMotion() {
+        if (!active || !EXTRA_TURN || !MOUSE_ACC || !WINDOWS || !mainTicking || Thread.currentThread() != mainThread) return;
+        long now = System.nanoTime();
+        if (now - pumpAt < 1_000_000L) return;
+        pumpAt = now;
+        if (pumpMsg == null) pumpMsg = org.lwjgl.system.windows.MSG.calloc();
+        long hwnd = org.lwjgl.glfw.GLFWNativeWin32.glfwGetWin32Window(window);
+        while (org.lwjgl.system.windows.User32.PeekMessage(pumpMsg, hwnd, 0x00FF, 0x00FF, org.lwjgl.system.windows.User32.PM_REMOVE))
+            org.lwjgl.system.windows.User32.DispatchMessage(pumpMsg);
+        while (org.lwjgl.system.windows.User32.PeekMessage(pumpMsg, hwnd, 0x0200, 0x0200, org.lwjgl.system.windows.User32.PM_REMOVE))
+            org.lwjgl.system.windows.User32.DispatchMessage(pumpMsg);
+        pumps++;
     }
 
     /** a frame or an extra frame is drawing on the frame thread now */
@@ -715,11 +764,15 @@ public final class FrameThread {
     public static void testTickLoad() {
         if (TEST_TICK_MS <= 0 || mc == null && Minecraft.getInstance().level == null) return;
         long until = System.nanoTime() + (long) (TEST_TICK_MS * 1e6);
-        while (System.nanoTime() < until) Thread.onSpinWait();
+        while (System.nanoTime() < until) {
+            pumpMotion();
+            Thread.onSpinWait();
+        }
     }
 
     public static void tickEnd() {
         mainTicking = false;
+        tickEndNs = System.nanoTime();
     }
 
     private static volatile boolean mainHolding;
@@ -764,9 +817,36 @@ public final class FrameThread {
 
     private static Object[] live(Object[] args) {
         Object[] a = args.clone();
-        for (int i = 0; i < a.length; i++) if (a[i] instanceof net.minecraft.client.DeltaTracker) a[i] = LIVE;
+        net.minecraft.client.DeltaTracker t = PT_TICK_END ? TICK_END : LIVE;
+        for (int i = 0; i < a.length; i++) if (a[i] instanceof net.minecraft.client.DeltaTracker) a[i] = t;
         return a;
     }
+
+    /**
+     * -Dlab.frameThread.ptFromTickEnd (non-exact, in lab.decoupled): every frame drawn on the frame thread takes its
+     * partial tick from the END of the last client tick, not its start: (now - tick end) / ms per tick, capped at 1.
+     * Vanilla's (from the start) reaches 1 as the next tick begins and stays there while it runs - with a long tick the
+     * world stood still in the extra frames, then jumped (hand test 11-16, a 30-ms tick). From the end, the frames keep
+     * interpolating the two known states while the next tick runs and reach 1 as it ends; the world is shown later by the
+     * tick's own length (~1 ms in vanilla, 30 in the test). Every lerp by the partial tick follows (mods' entities too:
+     * Minecraft.getTimer answers with it on the frame thread, FrameThreadTimerMixin).
+     */
+    public static final boolean PT_TICK_END = Boolean.getBoolean("lab.frameThread.ptFromTickEnd");
+    private static volatile long tickEndNs;
+    public static final net.minecraft.client.DeltaTracker TICK_END = new net.minecraft.client.DeltaTracker() {
+        @Override public float getGameTimeDeltaTicks() { return realTimer.getGameTimeDeltaTicks(); }
+        @Override public float getGameTimeDeltaPartialTick(boolean runsNormally) {
+            net.minecraft.client.DeltaTracker base = realTimer;
+            long end = tickEndNs;
+            if (end == 0 || mc.isPaused() || !runsNormally && mc.level != null && mc.level.tickRateManager().isFrozen())
+                return base.getGameTimeDeltaPartialTick(runsNormally);
+            float ms = mc.level != null ? mc.level.tickRateManager().millisecondsPerTick() : 50f;
+            return Math.max(0f, Math.min(1f, (System.nanoTime() - end) / (ms * 1_000_000f)));
+        }
+        @Override public float getRealtimeDeltaTicks() { return realTimer.getRealtimeDeltaTicks(); }
+    };
+    /** Minecraft's own timer, taken on the main thread at start (on the frame thread getTimer answers with TICK_END) */
+    private static net.minecraft.client.DeltaTracker realTimer;
 
     /** the frame thread, idle: an extra frame if the main thread is in a tick and the last frame is older than one frame */
     private static boolean extraFrame() {
@@ -800,7 +880,7 @@ public final class FrameThread {
         Minecraft m = mc;
         for (int k = 0; k < nOps; k++) {
             if (OPS[k] == 0) {   // a wrapped call: its Operation with the recorded arguments
-                OPERATIONS[k].call(extraNow ? live(ARGS[k]) : ARGS[k]);
+                OPERATIONS[k].call(extraNow || PT_TICK_END ? live(ARGS[k]) : ARGS[k]);
                 continue;
             }
             switch (OPS[k]) {
@@ -808,9 +888,9 @@ public final class FrameThread {
                 case BIND_WRITE -> m.getMainRenderTarget().bindWrite(ARG_Z[k]);
                 case SETUP_NO_FOG -> net.minecraft.client.renderer.FogRenderer.setupNoFog();
                 case ENABLE_CULL -> com.mojang.blaze3d.systems.RenderSystem.enableCull();
-                case FRAME_PRE -> net.neoforged.neoforge.client.ClientHooks.fireRenderFramePre(m.getTimer());
-                case RENDER -> m.gameRenderer.render(m.getTimer(), ARG_Z[k]);
-                case FRAME_POST -> net.neoforged.neoforge.client.ClientHooks.fireRenderFramePost(m.getTimer());
+                case FRAME_PRE -> net.neoforged.neoforge.client.ClientHooks.fireRenderFramePre(PT_TICK_END ? TICK_END : realTimer);
+                case RENDER -> m.gameRenderer.render(PT_TICK_END ? TICK_END : realTimer, ARG_Z[k]);
+                case FRAME_POST -> net.neoforged.neoforge.client.ClientHooks.fireRenderFramePost(PT_TICK_END ? TICK_END : realTimer);
                 case UNBIND_WRITE -> m.getMainRenderTarget().unbindWrite();
                 case BLIT -> m.getMainRenderTarget().blitToScreen(ARG_I[k], ARG_J[k]);
                 case UPDATE_DISPLAY -> m.getWindow().updateDisplay();

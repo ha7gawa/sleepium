@@ -18,9 +18,13 @@ public abstract class FrameThreadCameraMixin {
 
     @Inject(method = "setup", at = @At("TAIL"))
     private void sleep$extraTurn(CallbackInfo ci) {
-        if (!FrameThread.EXTRA_TURN || !FrameThread.extraNow() || isDetached()) return;
-        float dy = FrameThread.turnYaw, dp = FrameThread.turnPitch;
-        if (dy == 0f && dp == 0f) return;
-        setRotation(getYRot() + dy, net.minecraft.util.Mth.clamp(getXRot() + dp, -90f, 90f));
+        boolean extra = FrameThread.extraNow();
+        float dy = 0f;
+        if (FrameThread.EXTRA_TURN && extra && !isDetached()) {
+            dy = FrameThread.turnYaw;
+            float dp = FrameThread.turnPitch;
+            if (dy != 0f || dp != 0f) setRotation(getYRot() + dy, net.minecraft.util.Mth.clamp(getXRot() + dp, -90f, 90f));
+        }
+        if (dev.lull.optsupport.TurnLog.ON && FrameThread.onFrameThread()) dev.lull.optsupport.TurnLog.add(extra, getYRot(), getXRot(), dy);
     }
 }

@@ -28,7 +28,7 @@ public final class GameDefaults {
         String[] set = {"lab.opt.FrameThreadMixin=true", "lab.frameThread.overlap=true", "lab.frameThread.extra=true", "lab.frameThread.extraTurn=true",
                 "lab.opt.TickAsyncMixin=true", "lab.prender.tickPoses=true", "lab.pentities.living=true", "lab.partbatch.itemsAnyOrder=true",
                 "lab.prender.tickPoses.tolerance=0.1", "lab.opt.OnePool=true", "lab.clouds.half=true", "lab.leaves.cull=2",
-                "lab.gpu.framesInFlight.auto=true"};
+                "lab.gpu.framesInFlight.auto=true", "lab.frameThread.ptFromTickEnd=true"};
         int n = 0;
         for (String kv : set) {
             int eq = kv.indexOf('=');
