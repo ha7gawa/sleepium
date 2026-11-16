@@ -22,14 +22,15 @@ public final class GameDefaults {
      * canopies, the frames-in-flight limiter (Intel's driver queues far ahead: this jar's own per-frame buffers stalled
      * the N100 for 700-850 ms with Distant Horizons without it). The clouds at half resolution are no longer in it (the
      * user 11-16: blurry; -Dlab.clouds.half=true for weak GPUs). Each flag can still be given on its own (a given value
-     * wins).
+     * wins). A ring of 3 recorded frames (11-16: the main thread records the next frame while the frame thread draws -
+     * N100 tour 427 -> 471 fps uncapped, p99 18.4 -> 16.3 ms at 120 fps).
      */
     private static void decoupledPreset() {
         if (!Boolean.getBoolean("lab.decoupled")) return;
         String[] set = {"lab.opt.FrameThreadMixin=true", "lab.frameThread.overlap=true", "lab.frameThread.extra=true", "lab.frameThread.extraTurn=true",
                 "lab.opt.TickAsyncMixin=true", "lab.prender.tickPoses=true", "lab.pentities.living=true", "lab.partbatch.itemsAnyOrder=true",
                 "lab.prender.tickPoses.tolerance=0.1", "lab.opt.OnePool=true", "lab.leaves.cull=2",
-                "lab.gpu.framesInFlight.auto=true", "lab.frameThread.ptFromTickEnd=true"};
+                "lab.gpu.framesInFlight.auto=true", "lab.frameThread.ptFromTickEnd=true", "lab.frameThread.ring=3"};
         int n = 0;
         for (String kv : set) {
             int eq = kv.indexOf('=');
