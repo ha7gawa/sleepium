@@ -96,13 +96,12 @@ public final class TickAsync {
     public static long gaveWay;
 
     /**
-     * -Dlab.tickAsync.gen (default on; the pipeline's generations, notes/75): the join's render part without stopping the frame thread. The pairs are
+     * Generations (notes/75; with the frame thread): the join's render part without stopping the frame thread. The pairs are
      * swapped, the walking set emptied and a new generation published (FrameThread.publish); a frame begun before it may
      * still draw from the old pairs and the snapshot jobs - those are written again only by the next walk, so the wait
      * moves to the next walk's start (the gate, tickEnd) and covers only a frame begun before the join that still draws:
      * never the frames queued in the ring behind it. The snapshot jobs come from two pools in turn and are let go there.
      */
-    static final boolean GEN = !"false".equals(System.getProperty("lab.tickAsync.gen"));
     /** the generation published at the last join whose gate has not been passed (0: none) */
     private static long gateGen;
     public static long gates, gateWaits, gateWaitNs;
@@ -187,7 +186,7 @@ public final class TickAsync {
      * and no extra frame starts until it is done
      */
     private static void finishRender() {
-        finishRender(GEN);
+        finishRender(true);
     }
 
     private static void finishRender(boolean gen) {
@@ -225,6 +224,6 @@ public final class TickAsync {
                 gaveWay, tasksDeferred)
                 + String.format(java.util.Locale.ROOT, "; skips: no pair %d, snapshot failed %d, pair merge failed %d (held pairs on the CPU after a GPU refusal %d, refusals marked %d)",
                         skipNone, skipSnap, skipMerge, TickPoses.HELD_CPU.get(), TickPoses.HELD_REFUSED.get())
-                + (GEN ? String.format(java.util.Locale.ROOT, "; generation gates %d (waited at %d, %.3f ms a gate)", gates, gateWaits, gates == 0 ? 0.0 : gateWaitNs / 1e6 / gates) : "");
+                + String.format(java.util.Locale.ROOT, "; generation gates %d (waited at %d, %.3f ms a gate)", gates, gateWaits, gates == 0 ? 0.0 : gateWaitNs / 1e6 / gates);
     }
 }
