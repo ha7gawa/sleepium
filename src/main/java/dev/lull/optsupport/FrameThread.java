@@ -41,6 +41,8 @@ public final class FrameThread {
     private static int nOps;
     private static Minecraft mc;
     public static long frames, borrows, waitNs, borrowWaitNs, failures;
+    /** frame jobs over 10 ms: count, total, by part (frameBegin + queue, the main thread's calls, ops), the calls' count, the longest */
+    public static long slowJobs, slowJobNs, slowReplayNs, slowCallsNs, slowOpsNs, slowCallsN, slowJobMax;
     private static final java.util.Map<String, long[]> BORROW_SITES = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static void setRenderThread(Thread t) {
@@ -521,6 +523,7 @@ public final class FrameThread {
                     com.mojang.blaze3d.systems.RenderSystem.replayQueue();
                     long q2 = System.nanoTime();
                     tReplay += q2 - q1;
+                    int nCalls = JOB_CALLS.size();
                     for (int i = 0; i < JOB_CALLS.size(); i++) JOB_CALLS.get(i).call(JOB_CALL_ARGS.get(i));   // the main thread's renderer calls, in order
                     JOB_CALLS.clear();
                     JOB_CALL_ARGS.clear();
@@ -532,6 +535,16 @@ public final class FrameThread {
                     long dt = System.nanoTime() - q3;
                     tOps += dt;
                     lastFrameNs = dt;
+                    long tot = System.nanoTime() - q0;
+                    if (tot > 10_000_000L) {   // the long jobs: what made them long
+                        slowJobs++;
+                        slowJobNs += tot;
+                        slowReplayNs += q2 - q1;
+                        slowCallsNs += q3 - q2;
+                        slowOpsNs += dt;
+                        slowCallsN += nCalls;
+                        slowJobMax = Math.max(slowJobMax, tot);
+                    }
                 } finally {
                     drawing = false;
                 }
@@ -775,6 +788,8 @@ public final class FrameThread {
                 extraFrames, extraNs / 1e6 / Math.max(1, extraFrames), ticksSeen, ticksWhileFrameBusy, ticksWhileIdle));
         b.append(String.format(java.util.Locale.ROOT, "; per frame (us): main present: polls %.1f, side fence %.1f, held lists + light %.1f; frame thread: side wait %.1f, frameBegin + queue %.1f, calls %.1f, ops %.1f",
                 tPoll / 1e3 / fr, tFence / 1e3 / fr, tHeld / 1e3 / fr, tSideWait / 1e3 / fr, tReplay / 1e3 / fr, tCalls / 1e3 / fr, tOps / 1e3 / fr));
+        if (slowJobs > 0) b.append(String.format(java.util.Locale.ROOT, "; frame jobs over 10 ms: %d (%.1f ms each, longest %.1f; frameBegin + queue %.1f, calls %.1f (%d calls each), ops %.1f)",
+                slowJobs, slowJobNs / 1e6 / slowJobs, slowJobMax / 1e6, slowReplayNs / 1e6 / slowJobs, slowCallsNs / 1e6 / slowJobs, slowCallsN / slowJobs, slowOpsNs / 1e6 / slowJobs));
         BORROW_SITES.entrySet().stream().sorted((x, y) -> Long.compare(y.getValue()[0], x.getValue()[0])).limit(8)
                 .forEach(e -> b.append("; borrow ").append(e.getValue()[0]).append(" x ").append(e.getKey()));
         return b.toString();
