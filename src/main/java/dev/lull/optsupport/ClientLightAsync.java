@@ -105,7 +105,10 @@ public final class ClientLightAsync {
             synchronized (LOCK) {
                 while (running) {
                     try {
-                        LOCK.wait();
+                        // (in slices, the workers' shape questions answered between: a TickAsync walk on the same pool may
+                        // wait for them - with self-clocked frames the light job queued behind it deadlocked, 11-16)
+                        LOCK.wait(1);
+                        if (Thread.currentThread() == ParticleWorkers.renderThread && ParticleWorkers.pending()) ParticleWorkers.serve();
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         break;

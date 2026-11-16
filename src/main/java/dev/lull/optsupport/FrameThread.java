@@ -277,6 +277,26 @@ public final class FrameThread {
         if (mainIdle) org.lwjgl.glfw.GLFW.glfwPostEmptyEvent();
     }
 
+    private static volatile boolean askPosted;
+
+    /**
+     * a worker asked the main thread a block shape (ParticleWorkers: TickAsync's walk, parallel particles) - only the
+     * main thread answers: woken from its wait for events or for the frame thread (once until it answers)
+     */
+    public static void workerAsked() {
+        if (!active || askPosted || !(mainIdle || mainWaiting)) return;
+        askPosted = true;
+        org.lwjgl.glfw.GLFW.glfwPostEmptyEvent();
+    }
+
+    /** the main thread, waiting: the workers' shape questions answered */
+    private static void serveWorkers() {
+        if (ParticleWorkers.pending() && Thread.currentThread() == ParticleWorkers.renderThread) {
+            askPosted = false;
+            ParticleWorkers.serve();
+        }
+    }
+
     /** the main thread at a hand-over (self-clocked): whether this recorded frame must go to the frame thread */
     private static boolean needHand(Slot r) {
         int why = holdToFrame ? 0 : !r.calls.isEmpty() ? 1 : r.nDirty > 0 ? 2 : tickedSinceHand ? 3 : r.ents != handedEnts || r.parts != handedParts ? 4
@@ -310,6 +330,7 @@ public final class FrameThread {
         mainIdle = true;
         try {
             while (true) {
+                serveWorkers();
                 if (taskPending && System.nanoTime() - runTickAt >= 2_000_000L) {   // (packets coalesced: at most every 2 ms)
                     idleWakesTask++;
                     break;
@@ -954,6 +975,7 @@ public final class FrameThread {
         if (EVENT_WAIT && !inGlfw && Thread.currentThread() == mainThread) {
             eventWaits++;
             while (!until.getAsBoolean()) {
+                serveWorkers();
                 mainWaiting = true;
                 if (until.getAsBoolean()) break;   // (after the flag: a wake from now on posts an event)
                 inGlfw = true;
