@@ -1107,7 +1107,25 @@ public final class ParallelRender {
         return true;
     }
 
+    /** -Dlab.prender.drainTime (measuring): the drain's whole time and its merges' per frame, timed directly */
+    static final boolean DRAIN_TIME = Boolean.getBoolean("lab.prender.drainTime");
+    public static long drainNs, mergeNs, drains, merges;
+
     public static void drain(LevelRenderer lr) {
+        if (DRAIN_TIME) {
+            long t0 = System.nanoTime();
+            try {
+                drain0(lr);
+            } finally {
+                drainNs += System.nanoTime() - t0;
+                drains++;
+            }
+            return;
+        }
+        drain0(lr);
+    }
+
+    private static void drain0(LevelRenderer lr) {
         LevelRendererInvoker inv = (LevelRendererInvoker) lr;
         for (int i = 0; i < size; i++) {
             Job j = QUEUE.get(i);
@@ -1126,7 +1144,13 @@ public final class ParallelRender {
                 j.run();   // (not taken by a worker yet: here)
                 j.await();
                 j.tick = null;
-                if (j.ok && (j.gpuTick ? TickPoses.mergeGpu(tp, j) : PartBatch.mergeJob(j.parts, j.buffers))) {
+                long m0 = DRAIN_TIME ? System.nanoTime() : 0;
+                boolean merged = j.ok && (j.gpuTick ? TickPoses.mergeGpu(tp, j) : PartBatch.mergeJob(j.parts, j.buffers));
+                if (DRAIN_TIME) {
+                    mergeNs += System.nanoTime() - m0;
+                    merges++;
+                }
+                if (merged) {
                     RenderCache.append(j.out, j.buffers);   // (the flame and the shadow the job recorded)
                     parallel++;
                     if (clean) leakCheck(j);
@@ -1503,7 +1527,9 @@ public final class ParallelRender {
             for (int i = 0; i < WHY_N.length; i++) if (WHY_N[i] > 0) w.append(' ').append(WHY_NAMES[i]).append(' ').append(WHY_N[i]).append(';');
             System.out.println(w);
         }
-        return String.format(java.util.Locale.ROOT, "parallel render: %d workers, jobs %d, on workers %d (render thread helped %d), on the render thread %d, failed %d, refused %d, journaled calls %d, part records merged in %.0f ms%s", THREADS, jobs, parallel,
+        String drainTime = DRAIN_TIME && drains > 0 ? String.format(java.util.Locale.ROOT, "parallel render drain time: %.1f us a frame, merges %.1f us a frame (%d a frame, %.2f us each); ",
+                drainNs / 1e3 / drains, mergeNs / 1e3 / drains, merges / drains, mergeNs / 1e3 / Math.max(1, merges)) : "";
+        return drainTime + String.format(java.util.Locale.ROOT, "parallel render: %d workers, jobs %d, on workers %d (render thread helped %d), on the render thread %d, failed %d, refused %d, journaled calls %d, part records merged in %.0f ms%s", THREADS, jobs, parallel,
                 helped, sequential, failed, refused, journaled, mergeNanos / 1e6, (CPU_STATS ? cpuReport() : "") + (WORKER_REFUSED.isEmpty() ? "" : ", kept on the render thread " + WORKER_REFUSED) + (CHECK ? ", checked in place " + checked + (checkMismatches > 0 ? " (differed " + checkMismatches + ")" : "") : "") + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches + (MISMATCH_TYPES.isEmpty() ? "" : " " + MISMATCH_TYPES) : ""))
                 + (TickPoses.ON ? "; " + TickPoses.report() : "") + (TickAsync.ON ? "; " + TickAsync.report() : "");
     }
