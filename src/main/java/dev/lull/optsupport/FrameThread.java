@@ -252,7 +252,49 @@ public final class FrameThread {
     /** frames begun so far: present() sees whether its own poll ran a nested runTick (recordSeq moved) */
     private static long recordSeq;
 
+    /**
+     * -Dlab.frameThread.noWait (full decoupling, an experiment): the main thread never waits for the frame thread - when
+     * the last frame is still drawing, this runTick's frame is skipped (nothing recorded, the op list left as it is: the
+     * frame thread draws extra frames from it meanwhile) and the main thread goes on to its input, tasks and ticks.
+     */
+    public static final boolean NO_WAIT = Boolean.getBoolean("lab.frameThread.noWait");
+    /** this runTick's frame is skipped (NO_WAIT) */
+    private static boolean skipping;
+    public static long skippedFrames;
+    /** the main thread's window polls: the gaps between them (input latency's floor), 0.1-ms buckets up to 100 ms */
+    private static final long[] POLL_GAPS = new long[1001];
+    private static long lastPollNs;
+
+    /** the main thread, after each glfwPollEvents of ours */
+    private static void polled() {
+        long now = System.nanoTime();
+        if (lastPollNs != 0 && dev.lull.ClientMeter.measuring()) POLL_GAPS[(int) Math.min(1000, (now - lastPollNs) / 100_000L)]++;
+        lastPollNs = now;
+    }
+
+    private static String pollGaps() {
+        long n = 0;
+        for (long c : POLL_GAPS) n += c;
+        if (n == 0) return "";
+        long[] want = {n / 2, n * 99 / 100, n * 999 / 1000};
+        double[] at = new double[3];
+        long acc = 0;
+        int k = 0, max = 0;
+        for (int i = 0; i < POLL_GAPS.length; i++) {
+            if (POLL_GAPS[i] > 0) max = i;
+            acc += POLL_GAPS[i];
+            while (k < 3 && acc > want[k]) at[k++] = i / 10.0;
+        }
+        return String.format(java.util.Locale.ROOT, "; window polls' gaps (measured window): p50 %.1f, p99 %.1f, p99.9 %.1f, max %s ms", at[0], at[1], at[2], max >= 1000 ? ">100" : String.valueOf(max / 10.0));
+    }
+
     private static void begin() {
+        if (NO_WAIT && pending && !jobDone) {
+            skipping = true;
+            fresh = false;
+            skippedFrames++;
+            return;
+        }
         recordSeq++;
         awaitLast();
         mainRecording = true;   // (before the check: an extra frame starting now sees it and backs off)
@@ -269,6 +311,7 @@ public final class FrameThread {
 
     public static void record(com.llamalad7.mixinextras.injector.wrapoperation.Operation<?> operation, Object... args) {
         if (fresh) begin();
+        if (skipping) return;
         OPERATIONS[nOps] = operation;
         ARGS[nOps] = args;
         OPS[nOps++] = 0;
@@ -276,11 +319,13 @@ public final class FrameThread {
 
     public static void op(int code) {
         if (fresh) begin();
+        if (skipping) return;
         OPS[nOps++] = code;
     }
 
     public static void op(int code, int i, int j, boolean z) {
         if (fresh) begin();
+        if (skipping) return;
         ARG_I[nOps] = i;
         ARG_J[nOps] = j;
         ARG_Z[nOps] = z;
@@ -307,12 +352,22 @@ public final class FrameThread {
     public static long tPoll, tFence, tHeld, tLight, tSideWait, tReplay, tCalls, tOps;
 
     public static void present() {
+        if (skipping) {   // NO_WAIT: no frame this time - the window polled, a short wait for the frame thread (bounded)
+            skipping = false;
+            fresh = true;
+            org.lwjgl.glfw.GLFW.glfwPollEvents();
+            polled();
+            long until = System.nanoTime() + 1_000_000L;
+            waitPumping(() -> jobDone || System.nanoTime() > until);
+            return;
+        }
         long p0 = System.nanoTime();
         long seq = recordSeq;
         // this frame's op list is complete: a runTick nested in the poll below begins a list of its own (begin: recordSeq
         // moves) - without this its ops were appended to this frame's and handed over with it (the exit crash, 11-16)
         fresh = true;
         org.lwjgl.glfw.GLFW.glfwPollEvents();
+        polled();
         if (recordSeq != seq) {
             // the poll ran a runTick of its own (a click on "Save and Quit": Minecraft.disconnect's forced frames) - it
             // recorded over this frame's ops and handed its frames over; this one, of the world before, is dropped
@@ -364,12 +419,14 @@ public final class FrameThread {
             overlapFrames++;
             frames++;
             org.lwjgl.glfw.GLFW.glfwPollEvents();
+            polled();
             return;
         }
         waitPumping(() -> jobDone);
         waitNs += System.nanoTime() - t0;
         frames++;
         org.lwjgl.glfw.GLFW.glfwPollEvents();
+        polled();
         Throwable f = failure;
         if (f != null) {
             failure = null;
@@ -727,6 +784,7 @@ public final class FrameThread {
         pumping = true;
         try {
             org.lwjgl.glfw.GLFW.glfwPollEvents();
+            polled();
         } finally {
             pumping = false;
         }
@@ -962,6 +1020,8 @@ public final class FrameThread {
                 frames + extraFrames, waitNs / 1e6 / Math.max(1, frames), overlapFrames, overlapWaitNs / 1e6 / Math.max(1, overlapFrames), wakeNs / 1e3 / Math.max(1, frames),
                 mainWakeNs / 1e3 / Math.max(1, mainWakes), borrows, borrowWaitNs / 1e6 / Math.max(1, borrows), failures));
         long fr = Math.max(1, frames);
+        if (NO_WAIT) b.append("; frames skipped by the main thread (no wait) ").append(skippedFrames);
+        b.append(pollGaps());
         if (EXTRA) b.append(String.format(java.util.Locale.ROOT, "; extra frames during ticks %d (%.3f ms each); ticks %d (the frame thread busy at their start %d, idle %d)",
                 extraFrames, extraNs / 1e6 / Math.max(1, extraFrames), ticksSeen, ticksWhileFrameBusy, ticksWhileIdle));
         b.append(String.format(java.util.Locale.ROOT, "; per frame (us): main present: polls %.1f, side fence %.1f, held lists + light %.1f; frame thread: side wait %.1f, frameBegin + queue %.1f, calls %.1f, ops %.1f",
