@@ -7,6 +7,7 @@
   "overwrites": { "conformVisibility": true },
   "refmap": "sleepium.refmap.json",
   "mixins": [
+    "FrameProfileServerMixin",
     "ParallelEntityTicksMoveMixin",
     "ParallelEntityTicksGuardMixin",
     "FluidScanDryMixin",
@@ -162,6 +163,9 @@
   "client": [
     "ParallelAnimationMixin",
     "FrameThreadMixin",
+    "FrameProfileMixin",
+    "FrameProfileFlushMixin",
+    "FrameProfileUploadMixin",
     "FrameThreadRespawnMixin",
     "FrameThreadSystemMixin",
     "FrameThreadLevelMixin",
