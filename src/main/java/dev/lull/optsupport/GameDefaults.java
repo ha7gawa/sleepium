@@ -15,7 +15,7 @@ public final class GameDefaults {
     private static boolean done;
 
     /**
-     * -Dlab.decoupled=true (1.3.0 research, non-exact - the user's call 11-15; port of 1.21.1's preset): the frame on its
+     * -Dlab.decoupled=true (1.3.0 research, non-exact - a decision of 11-15; port of 1.21.1's preset): the frame on its
      * own thread drawing while the main thread ticks, extra frames during a long tick, entities ticked on the pool after
      * the tick and drawn from tick-rate poses, the frames-in-flight limiter, the partial tick from the tick's end, a ring
      * of 3 recorded frames, and the pipeline's stages 1-3 (notes/75: the tick's generations, published lists, the view

@@ -567,7 +567,7 @@ public final class PartBatch {
     private static final Map<RenderType, Boolean> ITEM_TYPE_OK = new IdentityHashMap<>();
 
     /**
-     * -Dlab.partbatch.itemsAnyOrder=true (NOT exact - the decoupling mode, the user's call 11-15): translucent item types
+     * -Dlab.partbatch.itemsAnyOrder=true (NOT exact - the decoupling mode, a decision of 11-15): translucent item types
      * (held items: entity_translucent_cull over the block atlas) take item records with the records grouped by geometry
      * too - their draw order changes (overlapping translucent pixels may differ); a mob holding an item then draws model
      * parts and item records only, so TickPoses can draw it from tick-rate poses interpolated on the GPU

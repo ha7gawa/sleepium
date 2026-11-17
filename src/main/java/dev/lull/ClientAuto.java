@@ -124,7 +124,7 @@ public final class ClientAuto {
     private static long spinAt;
 
     /**
-     * -Dsleep.clientAuto.orbit=cx,cy,cz,radius,periodSeconds (the user, 11-17: "fly a circle over the zoo while the camera
+     * -Dsleep.clientAuto.orbit=cx,cy,cz,radius,periodSeconds (11-17: "fly a circle over the zoo while the camera
      * turns"): from the measured window's start the player flies a circle around (cx, cz) at height cy - a position each
      * client tick, flying, so the frames between ticks interpolate it like real flight; with -Dsleep.clientAuto.spin the
      * camera turns every frame too. Chunks load at the circle's far side, entities pass through the view.
@@ -161,7 +161,7 @@ public final class ClientAuto {
     }
 
     /**
-     * -Dsleep.clientAuto.lookCircle=amplitudeDeg,periodSeconds (the user, 11-17): the view itself traces a circle - yaw
+     * -Dsleep.clientAuto.lookCircle=amplitudeDeg,periodSeconds (11-17): the view itself traces a circle - yaw
      * and pitch around their centre, every frame from the real clock (as a hand moving the mouse in circles), on top of
      * spin's turning
      */

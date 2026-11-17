@@ -11,7 +11,7 @@ import java.lang.management.ManagementFactory;
  * while the game idles, nothing is returned (10-01: 525 MB live in 1.73 GB committed).
  *
  * <p>The three flags are "manageable": set at run time through HotSpotDiagnosticMXBean, so a jar needs no launcher
- * arguments. Only flags the user left at their default are touched (a -XX on the command line wins):
+ * arguments. Only flags the player left at their default are touched (a -XX on the command line wins):
  * <ul>
  *   <li>G1PeriodicGCInterval = {@code lab.heap.periodicMs} (30 000): after that long without any GC, G1 starts a
  *       concurrent cycle (concurrent: no stop-the-world full GC), whose remark may uncommit;</li>
