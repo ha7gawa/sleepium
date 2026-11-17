@@ -31,11 +31,36 @@ public final class SectionSet extends LinkedHashSet<Object> {
     private boolean broken;
     /** the setOrigin epoch: any chunk moved */
     public static volatile int originEpoch;
+    /**
+     * the chunks that moved (RenderChunk.index), a ring every set reads on from where it was (11-17: re-placing all
+     * ~51 000 after each camera chunk crossing took 6.5 ms on 1.21.1 - the hardest orbit's slowest frames; ViewArea
+     * moves one strip of them). A set that fell a whole ring behind, or holds a chunk without an index, re-places all.
+     */
+    private static final int LOG = 1 << 16;
+    private static final int[] MOVED = new int[LOG];
+    private static long movedHead;
+    private long consumed = -1;
+    private int[] posOf = new int[0];   // RenderChunk.index -> position + 1
+    private boolean noIndex;
+
+    /** RenderChunk.setOrigin, after the origin is written (SectionOriginEpochMixin) */
+    public static void moved(int chunkIndex) {
+        synchronized (MOVED) {
+            MOVED[(int) (movedHead & (LOG - 1))] = chunkIndex;
+            movedHead++;
+        }
+        originEpoch++;
+    }
     static final int SHIFT = Integer.getInteger("lab.frustumRegions.shift", 5), SIZE = 1 << SHIFT;
 
     public SectionSet(int size) {
         super(size);
         regionOf.defaultReturnValue(-1);
+        // (each add places its chunk where it is then: only the moves from now on matter - a new graph's set needs no
+        // re-placement of all)
+        synchronized (MOVED) {
+            consumed = movedHead;
+        }
     }
 
     @Override
@@ -55,6 +80,11 @@ public final class SectionSet extends LinkedHashSet<Object> {
         info[n] = o;
         chunk[n] = c;
         cidx[n] = c.index;
+        if (c.index < 0) noIndex = true;
+        else {
+            if (c.index >= posOf.length) posOf = java.util.Arrays.copyOf(posOf, Math.max(c.index + 1, posOf.length * 2));
+            posOf[c.index] = n + 1;
+        }
         place(n, c);
         n++;
         return true;
@@ -101,10 +131,36 @@ public final class SectionSet extends LinkedHashSet<Object> {
     public boolean addInFrustum(Frustum frustum, List<?> out) {
         if (!usable()) return false;
         int e = originEpoch;
-        if (e != epoch) {   // chunks moved since: origins and regions read again
-            regionOf.clear();
-            regions = 0;
-            for (int i = 0; i < n; i++) place(i, chunk[i]);
+        if (e != epoch) {   // chunks moved since: the moved ones placed again (or all)
+            long t0 = System.nanoTime();
+            boolean full = consumed < 0 || noIndex || regions > Math.max(4096, n);
+            long head;
+            int moved = 0;
+            synchronized (MOVED) {
+                head = movedHead;
+                if (!full && head - consumed > LOG) full = true;
+                if (!full)
+                    for (long q = consumed; q < head; q++) {
+                        int ci = MOVED[(int) (q & (LOG - 1))];
+                        int p = ci < posOf.length ? posOf[ci] - 1 : -1;
+                        if (p >= 0) {
+                            place(p, chunk[p]);
+                            moved++;
+                        }
+                    }
+            }
+            if (full) {
+                regionOf.clear();
+                regions = 0;
+                for (int i = 0; i < n; i++) place(i, chunk[i]);
+                places++;
+                placeNs += System.nanoTime() - t0;
+            } else {
+                partialPlaces++;
+                partialPlaced += moved;
+                partialNs += System.nanoTime() - t0;
+            }
+            consumed = head;
             epoch = e;
         }
         var acc = (dev.lull.opt.FrustumRegionAccessor) frustum;
@@ -137,5 +193,12 @@ public final class SectionSet extends LinkedHashSet<Object> {
         }
         SectionLists.walkN = k;
         return true;
+    }
+
+    public static long placeNs, places, partialPlaces, partialPlaced, partialNs;
+
+    public static String timing() {
+        return String.format(java.util.Locale.ROOT, "%d re-placements of all %.0f us each, %d of the moved ones %.0f us each (%d chunks each)",
+                places, placeNs / 1e3 / Math.max(1, places), partialPlaces, partialNs / 1e3 / Math.max(1, partialPlaces), partialPlaced / Math.max(1, partialPlaces));
     }
 }

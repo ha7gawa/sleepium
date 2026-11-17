@@ -38,6 +38,10 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntitiesMixin") || Boolean.getBoolean("lab.opt.FrameThreadMixin");
         if (simple.equals("TickPosesAnimationMixin"))   // tick poses: renders that move their entity's animation clock
             on = Boolean.getBoolean("lab.prender.tickPoses");
+        if (simple.equals("ViewAreaStripsMixin"))   // repositionCamera visits the moved columns only
+            on = Boolean.getBoolean("lab.viewAreaStrips");
+        if (simple.startsWith("TintBlend"))   // biome blending by running sums (TintBlend)
+            on = Boolean.getBoolean("lab.tintBlend");
         if (simple.startsWith("FrameProfile"))   // the frame thread's frame by profiler sections (measuring)
             on = Boolean.getBoolean("lab.frameProfile");
         if (simple.equals("FrameProfileServerMixin"))   // the server thread's tick by profiler sections (measuring)

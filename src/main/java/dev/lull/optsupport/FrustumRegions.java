@@ -17,7 +17,7 @@ public final class FrustumRegions {
 
     private static Frustum current;
     private static java.util.List<?> out;
-    public static long calls, applyNs, visibleSum, flatWalks, verifyFails;
+    public static long calls, applyNs, visibleSum, flatWalks, verifyFails; public static long vaPasses, vaColumns, vaVerifyMoved;
     private static long beginAt;
     private static final boolean VERIFY = Boolean.getBoolean("lab.frustumRegions.verify");
     /** -Dlab.frustumRegions.off=true: the timing only, vanilla's walk (A/B in one build) */
@@ -59,6 +59,6 @@ public final class FrustumRegions {
 
     public static String report() {
         return String.format(java.util.Locale.ROOT, "frustum: %d applies %.3f ms each (%d visible each, %d by the flat walk, verify fails %d)",
-                calls, applyNs / 1e6 / Math.max(1, calls), visibleSum / Math.max(1, calls), flatWalks, verifyFails);
+                calls, applyNs / 1e6 / Math.max(1, calls), visibleSum / Math.max(1, calls), flatWalks, verifyFails) + "; " + SectionSet.timing() + "; view area strips: passes " + vaPasses + ", columns visited " + vaColumns + ", sections left elsewhere (verify) " + vaVerifyMoved;
     }
 }
