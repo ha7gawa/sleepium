@@ -54,6 +54,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntitiesMixin") || Boolean.getBoolean("lab.opt.FrameThreadMixin");
         if (simple.equals("TickPosesAnimationMixin"))   // tick poses: renders that move their entity's animation clock
             on = Boolean.getBoolean("lab.prender.tickPoses");
+        if (simple.startsWith("FrameProfile"))   // the frame thread's frame by profiler sections (measuring)
+            on = Boolean.getBoolean("lab.frameProfile");
         if (simple.startsWith("FrameThread"))   // the frame thread's hooks (FrameThread)
             on = Boolean.getBoolean("lab.opt.FrameThreadMixin");
         if (simple.startsWith("GlWorker"))   // the GL worker's hooks (GlWorker)

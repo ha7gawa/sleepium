@@ -1458,6 +1458,7 @@ public final class FrameThread {
     }
 
     private static void runOps(Slot s) {
+        if (FrameProfile.ON) FrameProfile.frame();
         Minecraft m = mc;
         final int[] OPS = s.ops, ARG_I = s.argI, ARG_J = s.argJ;
         final boolean[] ARG_Z = s.argZ;

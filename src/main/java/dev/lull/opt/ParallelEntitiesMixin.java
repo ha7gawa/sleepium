@@ -20,14 +20,20 @@ public abstract class ParallelEntitiesMixin {
     @Redirect(method = "renderLevel", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/client/renderer/LevelRenderer;renderEntity(Lnet/minecraft/world/entity/Entity;DDDFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;)V"))
     private void sleep$queue(LevelRenderer self, Entity e, double camX, double camY, double camZ, float pt, PoseStack pose, MultiBufferSource buffers) {
+        boolean prof = dev.lull.optsupport.FrameProfile.ON && dev.lull.optsupport.FrameThread.drawingHere();
+        if (prof) dev.lull.optsupport.FrameProfile.INSTANCE.push("queue");
         ParallelRender.enqueue(self, e, camX, camY, camZ, pt, pose, buffers);
+        if (prof) dev.lull.optsupport.FrameProfile.INSTANCE.pop();
     }
 
     @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/MultiBufferSource$BufferSource;endLastBatch()V", ordinal = 0))
     private void sleep$drain(CallbackInfo ci) {
         // -Dsleep.drawStats: the entity loop ("entities"), the drain of its queue, and what follows until block entities
         if (dev.lull.DrawStats.ON) dev.lull.DrawStats.section("entities/drain");
+        boolean prof = dev.lull.optsupport.FrameProfile.ON && dev.lull.optsupport.FrameThread.drawingHere();
+        if (prof) dev.lull.optsupport.FrameProfile.INSTANCE.push("drain");
         ParallelRender.drain((LevelRenderer) (Object) this);
+        if (prof) dev.lull.optsupport.FrameProfile.INSTANCE.pop();
         if (dev.lull.DrawStats.ON) dev.lull.DrawStats.section("entities/after");
     }
 }

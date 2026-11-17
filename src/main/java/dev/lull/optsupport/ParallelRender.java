@@ -1142,7 +1142,11 @@ public final class ParallelRender {
             if (j.tick != null) {
                 TickPoses.Pair tp = j.tick;
                 j.run();   // (not taken by a worker yet: here)
-                j.await();
+                if (FrameProfile.ON && FrameThread.drawingHere()) {
+                    FrameProfile.INSTANCE.push("await");
+                    j.await();
+                    FrameProfile.INSTANCE.pop();
+                } else j.await();
                 j.tick = null;
                 long m0 = DRAIN_TIME ? System.nanoTime() : 0;
                 boolean merged = j.ok && (j.gpuTick ? TickPoses.mergeGpu(tp, j) : PartBatch.mergeJob(j.parts, j.buffers));
@@ -1186,7 +1190,11 @@ public final class ParallelRender {
                         if (h.done) helped++;
                     }
                 }
-                j.await();
+                if (FrameProfile.ON && FrameThread.drawingHere()) {
+                    FrameProfile.INSTANCE.push("await");
+                    j.await();
+                    FrameProfile.INSTANCE.pop();
+                } else j.await();
                 if (j.ok && INNER) {   // through vanilla's renderEntity: the dispatcher's renderer call takes the job (innerMerge)
                     if (VERIFY) verify(inv, j);
                     innerArmed = j;
