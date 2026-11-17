@@ -190,6 +190,79 @@ public final class ClassBytes {
         }
     };
 
+    /** a class's header from its bytes: super name, then the interfaces (null: no bytes) */
+    private static final java.util.concurrent.ConcurrentHashMap<String, String[]> HEADERS = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final String[] NONE = new String[0];
+    public static final boolean TYPE_VERIFY = Boolean.getBoolean("lab.analysis.typeVerify");
+    public static long typeChecks, typeFallbacks, typeMismatches;
+
+    private static String[] header(ClassLoader loader, String internal) {
+        String[] h = HEADERS.get(internal);
+        if (h != null) return h == NONE ? null : h;
+        try (InputStream in = (loader != null ? loader : ClassLoader.getSystemClassLoader()).getResourceAsStream(internal + ".class")) {
+            if (in == null) {
+                HEADERS.put(internal, NONE);
+                return null;
+            }
+            ClassReader r = new ClassReader(in);
+            String[] is = r.getInterfaces();
+            h = new String[is.length + 1];
+            h[0] = r.getSuperName();
+            System.arraycopy(is, 0, h, 1, is.length);
+            HEADERS.put(internal, h);
+            return h;
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /**
+     * Is {@code internal} {@code target} or a subtype of it - from the class files' headers, nothing loaded (a load goes
+     * through the transformer under Mixin's lock). JDK types are asked of the JDK (loaded outside the transformer).
+     * Null: not decidable from the bytes (a class file missing).
+     */
+    public static Boolean subtypeByBytes(ClassLoader loader, String internal, String target, boolean interfaces) {
+        java.util.ArrayDeque<String> todo = new java.util.ArrayDeque<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        todo.add(internal);
+        while (!todo.isEmpty()) {
+            String n = todo.poll();
+            if (n == null || !seen.add(n)) continue;
+            if (n.equals(target)) return true;
+            if (n.equals("java/lang/Object")) continue;
+            if (n.startsWith("java/") || n.startsWith("javax/") || n.startsWith("jdk/") || n.startsWith("sun/")) {
+                if (!target.startsWith("java/")) continue;   // a JDK class is no subtype of a game type
+                try {
+                    if (Class.forName(target.replace('/', '.')).isAssignableFrom(Class.forName(n.replace('/', '.')))) return true;
+                } catch (Throwable e) {
+                    return null;
+                }
+                continue;
+            }
+            String[] h = header(loader, n);
+            if (h == null) return null;
+            todo.add(h[0]);
+            if (interfaces) for (int i = 1; i < h.length; i++) todo.add(h[i]);
+        }
+        return false;
+    }
+
+    /** a loaded class's runtime supertypes by name (mixins' interfaces included): is {@code target} among them */
+    public static boolean runtimeSubtype(Class<?> c, String target) {
+        String t = target.replace('/', '.');
+        java.util.ArrayDeque<Class<?>> todo = new java.util.ArrayDeque<>();
+        todo.add(c);
+        java.util.Set<Class<?>> seen = new java.util.HashSet<>();
+        while (!todo.isEmpty()) {
+            Class<?> k = todo.poll();
+            if (k == null || !seen.add(k)) continue;
+            if (k.getName().equals(t)) return true;
+            if (k.getSuperclass() != null) todo.add(k.getSuperclass());
+            java.util.Collections.addAll(todo, k.getInterfaces());
+        }
+        return false;
+    }
+
     /**
      * The analyses' Class.forName: a class not loaded yet is loaded now, through the transformer under Mixin's
      * processor lock - at a high priority while it does (the analysis thread runs at the lowest: an inversion every
