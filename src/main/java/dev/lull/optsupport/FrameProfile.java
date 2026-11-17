@@ -168,7 +168,7 @@ public final class FrameProfile implements ProfilerFiller {
             Integer[] by = new Integer[f.n - 1];
             for (int i = 1; i < f.n; i++) by[i - 1] = i;
             java.util.Arrays.sort(by, (a, c) -> Long.compare(f.slowT[c] - f.total[c] * sf / fr, f.slowT[a] - f.total[a] * sf / fr));
-            for (int k = 0; k < Math.min(18, by.length); k++) {
+            for (int k = 0; k < Math.min(Integer.getInteger("lab.frameProfile.slowTop", 18), by.length); k++) {
                 int i = by[k];
                 b.append(String.format(java.util.Locale.ROOT, " %s %.1f (avg %.1f);", f.path(i), f.slowT[i] / 1e3 / sf, f.total[i] / 1e3 / fr));
             }

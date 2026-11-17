@@ -1167,7 +1167,10 @@ public final class ParallelRender {
                 Job sj = j.snap;
                 j.snap = null;
                 j.hold = false;
+                boolean prof = FrameProfile.ON && FrameThread.drawingHere();
+                if (prof) FrameProfile.INSTANCE.push("snapshot");
                 if (!drawSnapshot(sj, j)) { TickAsync.skipped++; TickAsync.skipSnap++; }
+                if (prof) FrameProfile.INSTANCE.pop();
                 if (clean) leakCheck(j);
                 j.entity = null;
                 continue;
@@ -1182,7 +1185,10 @@ public final class ParallelRender {
                 } else j.await();
                 j.tick = null;
                 long m0 = DRAIN_TIME ? System.nanoTime() : 0;
+                boolean profM = FrameProfile.ON && FrameThread.drawingHere();
+                if (profM) FrameProfile.INSTANCE.push("tick_merge");
                 boolean merged = j.ok && (j.gpuTick ? TickPoses.mergeGpu(tp, j) : PartBatch.mergeJob(j.parts, j.buffers));
+                if (profM) FrameProfile.INSTANCE.pop();
                 if (DRAIN_TIME) {
                     mergeNs += System.nanoTime() - m0;
                     merges++;
@@ -1245,7 +1251,10 @@ public final class ParallelRender {
                 }
                 if (j.ok && j.parts.size() > 0) {
                     long t0 = System.nanoTime();
+                    boolean profP = FrameProfile.ON && FrameThread.drawingHere();
+                    if (profP) FrameProfile.INSTANCE.push("job_merge");
                     boolean merged = PartBatch.mergeJob(j.parts, j.buffers);
+                    if (profP) FrameProfile.INSTANCE.pop();
                     mergeNanos += System.nanoTime() - t0;
                     if (!merged) {
                         j.ok = false;   // a record's type is not a batch here: the object the vanilla way, without the job's side effects
@@ -1265,7 +1274,10 @@ public final class ParallelRender {
                     continue;
                 }
             }
+            boolean profS = FrameProfile.ON && FrameThread.drawingHere();
+            if (profS) FrameProfile.INSTANCE.push("sequential");
             inv.sleep$renderEntity(j.entity, j.camX, j.camY, j.camZ, j.pt, j.pose, j.buffers);
+            if (profS) FrameProfile.INSTANCE.pop();
             sequential++;
             if (clean) leakCheck(j);
             j.entity = null;
