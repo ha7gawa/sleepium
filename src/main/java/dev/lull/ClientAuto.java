@@ -482,7 +482,7 @@ public final class ClientAuto {
     private static long spinAt;
 
     /**
-     * -Dsleep.clientAuto.orbit=cx,cy,cz,radius,periodSeconds (the user, 11-17: "fly a circle over the zoo while the camera
+     * -Dsleep.clientAuto.orbit=cx,cy,cz,radius,periodSeconds[,ampY,periodY[,driftX]] (the user, 11-17: "fly a circle over the zoo while the camera
      * turns"): from the measured window's start the player flies a circle around (cx, cz) at height cy - a position each
      * client tick, flying, so the frames between ticks interpolate it like real flight; with -Dsleep.clientAuto.spin the
      * camera turns every frame too. Chunks load at the circle's far side, entities pass through the view.
@@ -493,8 +493,8 @@ public final class ClientAuto {
     private static double[] parseOrbit(String v) {
         if (v == null) return null;
         String[] p = v.split(",");
-        double[] o = new double[5];
-        for (int i = 0; i < 5; i++) o[i] = Double.parseDouble(p[i].trim());
+        double[] o = new double[8];
+        for (int i = 0; i < Math.min(8, p.length); i++) o[i] = Double.parseDouble(p[i].trim());
         return o;
     }
 
@@ -515,7 +515,11 @@ public final class ClientAuto {
         double a = 2 * Math.PI * orbitTicks / (ORBIT[4] * 20.0);
         mc.player.getAbilities().flying = true;
         mc.player.setDeltaMovement(0, 0, 0);
-        mc.player.setPos(ORBIT[0] + ORBIT[3] * Math.cos(a), ORBIT[1], ORBIT[2] + ORBIT[3] * Math.sin(a));
+        // (6th, 7th: up and down by ampY over periodY seconds - the user's hardest case, 11-17; 8th: blocks a second
+        // straight along +x on top of the circle - flying into new terrain)
+        double yy = ORBIT[1] + (ORBIT[6] > 0 ? ORBIT[5] * Math.sin(2 * Math.PI * orbitTicks / (ORBIT[6] * 20.0)) : 0);
+        double drift = ORBIT[7] * orbitTicks / 20.0;
+        mc.player.setPos(ORBIT[0] + drift + ORBIT[3] * Math.cos(a), yy, ORBIT[2] + ORBIT[3] * Math.sin(a));
     }
 
     /**
