@@ -215,6 +215,17 @@ public final class SleepScreen extends Screen {
             list.add(new Row(() -> Component.literal(SleepStats.lines()[k]).withStyle(k == 0 ? ChatFormatting.WHITE : ChatFormatting.GRAY), null,
                     Component.translatable("sleepium.ui.stats.tip"), new AbstractWidget[0]));
         }
+        // 1.3.0's feature first: decoupled frames (experimental; read at start - a restart applies it)
+        if (desired.containsKey("lab.decoupled")) {
+            Button dec = Button.builder(Component.empty(), x -> {
+                if (!SleepConfig.locked("lab.decoupled")) desired.put("lab.decoupled", !desired.get("lab.decoupled"));
+            }).size(70, 20).build();
+            list.add(new Row(() -> Component.translatable("sleepium.ui.decoupled").withStyle(ChatFormatting.AQUA), () -> {
+                boolean want = desired.get("lab.decoupled");
+                dec.setMessage(on(want));
+                return want != Boolean.getBoolean("lab.decoupled") ? Component.translatable("sleepium.ui.decoupled.restart").withStyle(ChatFormatting.YELLOW) : null;
+            }, Component.translatable("sleepium.ui.decoupled.tip"), dec));
+        }
         // the presets
         List<AbstractWidget> ps = new ArrayList<>();
         for (String p : new String[] {"maximum", "recommended", "compatible", "off"}) {
