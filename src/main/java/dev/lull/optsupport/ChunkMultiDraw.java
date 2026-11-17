@@ -739,9 +739,14 @@ public final class ChunkMultiDraw {
             return true;
         }
         if (SORT_NEAR && !allFaces) visible = sortedNearFirst(visible, x, y, z);
+        long tList = System.nanoTime();
+        long secs0 = sectionsMulti;
         boolean cut = VoxelLod.cutting && !allFaces;   // the GPU terrain draws the opaque layers (VoxelStream)
         if (cut) VoxelLod.camera(x, z);
-        for (SectionRenderDispatcher.RenderSection s : visible) {
+        boolean parDone = PARALLEL_LISTS && replaces && !cut && ssbo()
+                && visible instanceof it.unimi.dsi.fastutil.objects.ObjectArrayList<SectionRenderDispatcher.RenderSection> pvl
+                && pvl.size() >= PAR_MIN && ParLists.run(pvl, fs, x, y, z);
+        if (!parDone) for (SectionRenderDispatcher.RenderSection s : visible) {
             if (cut && VoxelLod.far(s.getOrigin())) continue;   // the GPU's section (VoxelLod.far: unless vanilla draws it for mods)
             // the section's own entry slots: no emptiness test (an empty layer has no entry), no map lookups
             Object[] md = ((ChunkEntries) s).sleep$md();
@@ -777,6 +782,9 @@ public final class ChunkMultiDraw {
             if (e != null) queue(a, e, o, x, y, z, ox, oy, oz, layer, ps);
             sectionsMulti++;
         }
+        listNanos += System.nanoTime() - tList;
+        listBuilds++;
+        listSections += sectionsMulti - secs0;
         if (reusable) {
             lc.stable = false;
             lc.arenas.clear();
@@ -799,9 +807,14 @@ public final class ChunkMultiDraw {
             sc.sig = shadowSignature;
             sc.faces = lightFaces;
         }
+        long tFlush = System.nanoTime();
         flushAll(layer, ps, reusable || shadowReuse);
+        listFlushNanos += System.nanoTime() - tFlush;
         return true;
     }
+
+    /** the lists rebuilt (the camera moved, or the sections changed): the section loop's time, its sections, the flush after */
+    public static long listNanos, listBuilds, listSections, listFlushNanos;
 
     /**
      * -Dlab.chunkmd.stable (default on; =false: uploaded every frame): a layer drawn again from its kept lists (the same camera position and
@@ -1425,21 +1438,7 @@ public final class ChunkMultiDraw {
             // visible face buckets: a face whose normal points away from the camera (or edge-on) would be culled by the
             // GPU anyway; every +X face of the section lies at x >= minX, so with the camera at x <= minX none is visible
             // (a margin of 1/64 block keeps it conservative against float rounding: more faces drawn, never fewer)
-            float[] pl = e.plane;
-            double rx = x - o.getX(), ry = y - o.getY(), rz = z - o.getZ();
-            int vis = 1 << 3;   // other
-            if (allFaces) {
-                // a shadow pass (orthographic, from the light): an axis face is front-facing when its normal points
-                // toward the light - the others the GPU would cull anyway
-                vis |= lightFaces;
-            } else {
-                if (rx < pl[0] + EPS) vis |= 1;
-                if (ry < pl[1] + EPS) vis |= 1 << 1;
-                if (rz < pl[2] + EPS) vis |= 1 << 2;
-                if (rx > pl[4] - EPS) vis |= 1 << 4;
-                if (ry > pl[5] - EPS) vis |= 1 << 5;
-                if (rz > pl[6] - EPS) vis |= 1 << 6;
-            }
+            int vis = faceMask(e, o, x, y, z);
             int[] bq = e.bq;
             int runStart = -1, runEnd = -1;
             for (int k = 0; k <= 7; k++) {
@@ -1455,6 +1454,222 @@ public final class ChunkMultiDraw {
                 }
             }
             quadsTotal += bq[7];
+    }
+
+    /** the entry's visible face buckets from the camera (bit k: bucket k; "other" always) */
+    private static int faceMask(Entry e, net.minecraft.core.BlockPos o, double x, double y, double z) {
+        float[] pl = e.plane;
+        double rx = x - o.getX(), ry = y - o.getY(), rz = z - o.getZ();
+        int vis = 1 << 3;   // other
+        if (allFaces) {
+            // a shadow pass (orthographic, from the light): an axis face is front-facing when its normal points
+            // toward the light - the others the GPU would cull anyway
+            vis |= lightFaces;
+        } else {
+            if (rx < pl[0] + EPS) vis |= 1;
+            if (ry < pl[1] + EPS) vis |= 1 << 1;
+            if (rz < pl[2] + EPS) vis |= 1 << 2;
+            if (rx > pl[4] - EPS) vis |= 1 << 4;
+            if (ry > pl[5] - EPS) vis |= 1 << 5;
+            if (rz > pl[6] - EPS) vis |= 1 << 6;
+        }
+        return vis;
+    }
+
+    /**
+     * -Dlab.chunkmd.parallelLists (11-17, the user's hand test: flying over the zoo at distance 32 the frame thread built
+     * every layer's draw list anew each frame - ~650 us a layer over ~2000 sections, one thread): the section loop split
+     * into parts on the client pool. A part works out its sections' draws (entries, face buckets, offsets) into its own
+     * scratch; the frame thread claims parts too, then appends every part's draws to the arenas in section order - the
+     * same lists, bit for bit, as the serial loop. A worker that comes late finds no part left (claims carry the run's
+     * epoch). Only where the loop draws nothing itself (replaces: no vanilla buffers) and the lists grow (storage-buffer
+     * offsets); a part's failure -> the serial loop for that layer.
+     */
+    static boolean PARALLEL_LISTS = Boolean.getBoolean("lab.chunkmd.parallelLists");
+    private static final int PAR_MIN = Integer.getInteger("lab.chunkmd.parallelMin", 384);
+    private static final int PAR_PART = Integer.getInteger("lab.chunkmd.parallelPart", 128);
+    public static long parBuilds, parParts, parWorkerParts, parFallbacks, parMergeNanos, parWaitNanos;
+
+    private static final class ListPart {
+        Arena[] arenas = new Arena[512];
+        int[] ints = new int[4 * 512];   // slot, count, base vertex, light volume
+        float[] offs = new float[3 * 512];
+        int n;
+        long skipped, multi, drawn, total;
+        Throwable error;
+
+        void add(Arena a, int base, int count, float ox, float oy, float oz, int vol, int slot) {
+            if (n == arenas.length) {
+                arenas = java.util.Arrays.copyOf(arenas, n * 2);
+                ints = java.util.Arrays.copyOf(ints, 4 * n * 2);
+                offs = java.util.Arrays.copyOf(offs, 3 * n * 2);
+            }
+            arenas[n] = a;
+            int i4 = 4 * n, i3 = 3 * n;
+            ints[i4] = slot;
+            ints[i4 + 1] = count;
+            ints[i4 + 2] = base;
+            ints[i4 + 3] = vol;
+            offs[i3] = ox;
+            offs[i3 + 1] = oy;
+            offs[i3 + 2] = oz;
+            n++;
+        }
+
+        /** queue()'s runs of visible, non-empty buckets - into this part */
+        void queue(Entry e, net.minecraft.core.BlockPos o, double x, double y, double z, float ox, float oy, float oz) {
+            int vis = faceMask(e, o, x, y, z);
+            int[] bq = e.bq;
+            int runStart = -1, runEnd = -1;
+            for (int k = 0; k <= 7; k++) {
+                boolean take = k < 7 && (vis & (1 << k)) != 0;
+                boolean empty = k < 7 && bq[k + 1] == bq[k];
+                if (take && !empty) {
+                    if (runStart < 0) runStart = bq[k];
+                    runEnd = bq[k + 1];
+                } else if (!empty && runStart >= 0) {
+                    add(e.arena, e.start + runStart * 4, (runEnd - runStart) * 6, ox, oy, oz, e.recipes ? e.vol : -1, e.id);
+                    drawn += runEnd - runStart;
+                    runStart = -1;
+                }
+            }
+            total += bq[7];
+        }
+    }
+
+    private static final class ParLists {
+        static ListPart[] parts = new ListPart[0];
+        static Object[] secs;
+        static int count, fs;
+        static double cx, cy, cz;
+        static long epoch;
+        /** epoch << 40 | parts << 20 | next part */
+        static final java.util.concurrent.atomic.AtomicLong STATE = new java.util.concurrent.atomic.AtomicLong();
+        static final java.util.concurrent.atomic.AtomicInteger DONE = new java.util.concurrent.atomic.AtomicInteger(),
+                OUTSTANDING = new java.util.concurrent.atomic.AtomicInteger(), BY_WORKERS = new java.util.concurrent.atomic.AtomicInteger();
+        static final Runnable HELP = () -> {
+            OUTSTANDING.decrementAndGet();
+            work(true);
+        };
+
+        /** claims parts of the current run until none is left */
+        static void work(boolean worker) {
+            while (true) {
+                long st = STATE.get();
+                int next = (int) (st & 0xFFFFF), np = (int) ((st >>> 20) & 0xFFFFF);
+                if (next >= np) return;
+                if (!STATE.compareAndSet(st, st + 1)) continue;
+                part(next, np);
+                if (worker) BY_WORKERS.incrementAndGet();
+                DONE.incrementAndGet();
+            }
+        }
+
+        static void part(int p, int np) {
+            ListPart lp = parts[p];
+            lp.n = 0;
+            lp.skipped = lp.multi = lp.drawn = lp.total = 0;
+            lp.error = null;
+            int from = (int) ((long) count * p / np), to = (int) ((long) count * (p + 1) / np);
+            double x = cx, y = cy, z = cz;
+            int fs = ParLists.fs;
+            Object[] secs = ParLists.secs;
+            try {
+                for (int i = from; i < to; i++) {
+                    SectionRenderDispatcher.RenderSection s = (SectionRenderDispatcher.RenderSection) secs[i];
+                    Object[] md = ((ChunkEntries) s).sleep$md();
+                    Entry e = (Entry) md[fs], pe = (Entry) md[fs + 1];
+                    if (e == null && pe == null) {
+                        lp.skipped++;
+                        continue;
+                    }
+                    var o = s.getOrigin();
+                    long origin = o.asLong();
+                    if (e != null && e.origin != origin) e = null;
+                    if (pe != null && pe.origin != origin) pe = null;
+                    if (e == null && pe == null) {
+                        lp.skipped++;
+                        continue;
+                    }
+                    float ox = (float) ((double) o.getX() - x), oy = (float) ((double) o.getY() - y), oz = (float) ((double) o.getZ() - z);
+                    if (pe != null) lp.queue(pe, o, x, y, z, ox, oy, oz);
+                    if (e != null) lp.queue(e, o, x, y, z, ox, oy, oz);
+                    lp.multi++;
+                }
+            } catch (Throwable t) {
+                lp.error = t;
+            }
+        }
+
+        /** the frame thread: the layer's lists built by parts and merged; false -> the serial loop (nothing appended) */
+        static boolean run(it.unimi.dsi.fastutil.objects.ObjectArrayList<SectionRenderDispatcher.RenderSection> vl, int fs, double x, double y, double z) {
+            int n = vl.size();
+            int np = Math.min(64, (n + PAR_PART - 1) / PAR_PART);
+            if (parts.length < np) {
+                ListPart[] g = java.util.Arrays.copyOf(parts, np);
+                for (int i = parts.length; i < np; i++) g[i] = new ListPart();
+                parts = g;
+            }
+            secs = vl.elements();
+            count = n;
+            ParLists.fs = fs;
+            cx = x;
+            cy = y;
+            cz = z;
+            DONE.set(0);
+            BY_WORKERS.set(0);
+            epoch++;
+            STATE.set((epoch & 0xFFFFFF) << 40 | (long) np << 20);   // (publishes the fields above)
+            dev.lab.runtime.LabRuntime pool = FrameReactor.pool();
+            int want = Math.min(pool.workerCount(), np - 1) - OUTSTANDING.get();
+            for (int i = 0; i < want; i++) {
+                OUTSTANDING.incrementAndGet();
+                pool.execute(HELP);
+            }
+            work(false);
+            long tw = System.nanoTime();
+            for (int spins = 0; DONE.get() < np; spins++) {   // (the parts in flight: one each at most)
+                if (spins < 20000) Thread.onSpinWait();
+                else Thread.yield();
+            }
+            parWaitNanos += System.nanoTime() - tw;
+            secs = null;
+            for (int p = 0; p < np; p++) {
+                Throwable t = parts[p].error;
+                if (t != null) {
+                    if (parFallbacks++ < 3) System.out.println("[sleep/opt] chunk lists: a part failed, the serial loop instead: " + t);
+                    return false;
+                }
+            }
+            long tm = System.nanoTime();
+            for (int p = 0; p < np; p++) {
+                ListPart lp = parts[p];
+                Arena[] as = lp.arenas;
+                int[] ints = lp.ints;
+                float[] offs = lp.offs;
+                for (int i = 0, m = lp.n; i < m; i++) {
+                    Arena a = as[i];
+                    if (!a.listed) {
+                        a.listed = true;
+                        a.n = 0;
+                        a.maxIndices = 0;
+                        LISTED.add(a);
+                    }
+                    if (a.n + 4 > a.drawCap) a.ensureDraws(a.n + 4);
+                    int i4 = 4 * i, i3 = 3 * i;
+                    addDraw(a, ints[i4 + 2], ints[i4 + 1], offs[i3], offs[i3 + 1], offs[i3 + 2], ints[i4 + 3], ints[i4]);
+                }
+                sectionsSkipped += lp.skipped;
+                sectionsMulti += lp.multi;
+                quadsDrawn += lp.drawn;
+                quadsTotal += lp.total;
+            }
+            parMergeNanos += System.nanoTime() - tm;
+            parBuilds++;
+            parParts += np;
+            parWorkerParts += BY_WORKERS.get();
+            return true;
+        }
     }
 
     private static final double EPS = 1.0 / 64;
@@ -1706,7 +1921,12 @@ public final class ChunkMultiDraw {
                 uploads, arenas, bytes / 1048576.0, grows,
                 KEEP_VANILLA || PATCHED.size() != SUPPORTED.size() ? "filled" : "not filled") + packReport()
                 + (TRANSLUCENT ? String.format(java.util.Locale.ROOT, "; translucent: patched %s, multi-draws %d, frames the vanilla way %d, resorts %d",
-                        translucentPatched, translucentDraws, translucentFallbacks, resorts) : "");
+                        translucentPatched, translucentDraws, translucentFallbacks, resorts) : "")
+                + String.format(java.util.Locale.ROOT, "; list rebuilds %d (reused %d): section loop %.1f us each (%.0f sections, %.0f ns a section), the flush after %.1f us each",
+                        listBuilds, drawReuses, listNanos / 1e3 / Math.max(1, listBuilds), (double) listSections / Math.max(1, listBuilds),
+                        listNanos / (double) Math.max(1, listSections), listFlushNanos / 1e3 / Math.max(1, listBuilds))
+                + (PARALLEL_LISTS ? String.format(java.util.Locale.ROOT, "; parallel lists %d (parts %d, by workers %d, fallbacks %d): the wait %.1f us, the merge %.1f us each",
+                        parBuilds, parParts, parWorkerParts, parFallbacks, parWaitNanos / 1e3 / Math.max(1, parBuilds), parMergeNanos / 1e3 / Math.max(1, parBuilds)) : "");
     }
 
     /** the camera's kept layer lists dropped (the GPU terrain: the set of drawn sections changed without a new version) */
