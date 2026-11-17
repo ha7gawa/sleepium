@@ -4,6 +4,48 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.3.0 - 2026-11-18
+
+Much smoother flight over large worlds, Android at render distances above 7, an experimental decoupled-frames mode,
+and a fix for freezes in big mod packs. The start of a new cycle: chunk loading in flight is the next one's subject.
+
+- **Smoother flight at far view distances.** Flying in circles at 32 chunks while turning the camera and going up and
+  down, compared with 1.2.6 on the same path: 162 -> 806-857 fps, the slowest 1 % of frames 39 -> 150-157 fps, the
+  worst frame 47 -> 37 ms, and 8.9 -> 6.4 CPU cores. With the camera standing and turning: 715 -> 1120 fps, the
+  slowest 1 % 213 -> 440. What changed, each with the same picture as before (checked frame by frame or value by
+  value against the game's own code):
+  - the lists of terrain to draw are built on several threads;
+  - **Biome Blend** colours are worked out with running sums: the same colours for a fraction of the work (chunk
+    meshing at the largest Biome Blend took 6 cores, now 2);
+  - crossing a chunk border no longer re-reads all ~50 000 chunk sections in view nor compares the whole chunk grid;
+  - a chunk's mesh no longer binds a GPU object it never uses (the most expensive part of putting a new chunk on
+    screen).
+  Switches (Options -> Sleepium): `lab.chunkmd.parallelLists`, `lab.tintBlend`, `lab.viewAreaStrips`,
+  `lab.opt.UploadBindMixin`.
+- **Android: render distance above 7 no longer crashes** (Adreno phones through MojoLauncher / LTW; every earlier
+  version died within half a minute at 8 or more). The game made three GPU objects for every chunk section in view,
+  empty or not - about 150 000 at distance 12, more than these drivers take. Now a section gets them only when it has
+  something to draw: at distance 12, 1 617 instead of 75 000, and the phone runs there at 110 fps. On the desktop the
+  same, with the picture checked bit for bit (about 1.5 million fewer GPU objects at 32 chunks). Switch:
+  `lab.opt.LazyChunkBufferMixin`.
+- **New, experimental: Decoupled frames** (Options -> Sleepium, off by default, at your own risk). The frame is drawn
+  on its own thread with its own clock, and mobs are ticked on worker threads and drawn from tick-rate poses, so a long
+  tick no longer holds a frame back. It helps where long ticks freeze the picture: in a 225-mod pack the longest
+  freeze went from 1.8 s to 0.15 s (the average fps was lower, 255 -> 195); in a 474-mod pack flying over the world
+  the slowest 1 % of frames went from 91 to 185-203 fps (average 280 -> 312-345). In scenes full of mobs it can be
+  slower all round (the 225-mod pack's mob zoo: 122 -> 87 fps), so try it in your own world and keep whichever feels
+  better. It touches how the game is scheduled, so some mods may not expect it: if something looks wrong, turn it off -
+  a crash report that names it offers to turn it off at the next start. Works on Android launchers too.
+- **Fix: freezes of up to seconds in big mod packs, with a mod that looks up a class every tick** (reported with
+  Punchy and Better Combat 1.9.0 in a 250-mod pack). Sleepium's background analysis of mobs re-read their classes
+  through Mixin, which holds a lock every other class lookup waits on. It now keeps those classes as the game loaded
+  them, checks types from the class files without loading them, and never takes that lock for them; the few other
+  classes it needs are remembered from the first start. In a 474-mod pack the time it held the lock went from 10.9 s
+  to 0.04 s on the first start and to 0 after.
+- **Fix: the same Mixin warnings printed again and again** by other mods (GitHub issue #8): each class goes through
+  Mixin's transformer at most once.
+- Less garbage while fluids settle in new chunks.
+
 ## 1.2.6 - 2026-11-15
 
 Three fixes.
