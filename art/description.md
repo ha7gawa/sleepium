@@ -38,6 +38,30 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.3.0: smooth flight over large worlds, Android above 7 chunks
+
+| 32 chunks, flying in circles while turning the camera and going up and down (desktop) | 1.2.6 | 1.3.0 |
+|---|---:|---:|
+| fps | 162 | 806-857 |
+| the slowest 1 % of frames, fps | 39 | 150-157 |
+| the worst frame | 47 ms | 35-37 ms |
+| CPU used | 8.9 cores | 6.4 cores |
+| the camera standing and turning, fps | 715 | 1 120 |
+
+- **Smoother flight at far view distances:** the lists of terrain to draw are built on several threads, Biome Blend
+  colours are worked out with running sums (the same colours; chunk meshing at the largest blend took 6 cores, now 2),
+  crossing a chunk border no longer re-reads every section in view, and a new chunk no longer binds a GPU object it
+  never uses. The same picture, checked frame by frame.
+- **Android: render distance above 7 no longer crashes** (MojoLauncher, Adreno). Chunk sections get their GPU objects
+  only when they have something to draw: at distance 12, 1 617 instead of 75 000. A phone runs at distance 12 at 110 fps.
+- **Experimental: Decoupled frames** (Options -> Sleepium, off by default, at your own risk): the frame is drawn on its
+  own thread and mobs are ticked on worker threads, so a long tick no longer holds a frame back. It helps where long
+  ticks freeze the picture (a 474-mod pack: the slowest 1 % of frames 91 -> 185-203 fps; a 225-mod pack: the longest
+  freeze 1.8 -> 0.15 s) and can be slower in scenes full of mobs - try it in your own world.
+- **Fix: freezes of up to seconds in big mod packs** (reported with Punchy and Better Combat 1.9.0): Sleepium's mob
+  analysis no longer holds the lock every class lookup waits on (a 474-mod pack: 10.9 s -> 0).
+- **Fix: other mods' Mixin warnings printed again and again** (GitHub #8).
+
 ## New in 1.2.3: see and choose what Sleepium does to each mod
 
 - **Options -> Sleepium -> Mods:** what Sleepium does to every mod - which of its blocks and entities sleep and why
@@ -318,7 +342,7 @@ engine flag one by one with search. Saved to `config/sleepium.properties`.
 ## Installation and compatibility
 
 - Minecraft 1.21.1 with NeoForge 21.1.251 or later (Java 21 or newer), or Minecraft 1.20.1 with Forge 47.4.9 or later
-  (Java 17 or newer). The renderer needs OpenGL 4.3 (4.6 for multi-draw).
+  (Java 17 or newer). The renderer needs OpenGL 3.3 or newer (phones through MojoLauncher too); multi-draw needs 4.6.
 - Works on the server, on the client, or both: a server with Sleepium accepts clients without it, and the other way round.
 - Tested with Create 6.0.10, Create Aeronautics (Sable, Veil) and GeckoLib 4.9.3.
 - Tested together with Sodium, Iris (also with shaderpacks), Embeddium, Lithium, Moonrise, C2ME, ModernFix, FerriteCore, ImmediatelyFast, EntityCulling, ScalableLux, Radium, BadOptimizations, Dynamic FPS, Chloride, Noisium, spark, FastSuite, Ksyxis, ServerCore, Clumps and Create, and 13 of them at once. With Lithium or Moonrise installed Sleepium's changes stay exact.
