@@ -9,8 +9,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** A section moved (the camera went far): SectionSet rereads its origins. Part of FrustumRegionMixin. */
 @Mixin(SectionRenderDispatcher.RenderSection.class)
 public abstract class SectionOriginEpochMixin {
-    @Inject(method = "setOrigin", at = @At("HEAD"))
+    @Inject(method = "setOrigin", at = @At("RETURN"))
     private void sleep$moved(int x, int y, int z, CallbackInfo ci) {
-        dev.lull.optsupport.SectionSet.originEpoch++;
+        dev.lull.optsupport.SectionSet.moved(((net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection) (Object) this).index);
     }
 }

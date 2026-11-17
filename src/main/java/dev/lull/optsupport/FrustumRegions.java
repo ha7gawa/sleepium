@@ -60,6 +60,6 @@ public final class FrustumRegions {
 
     public static String report() {
         return String.format(java.util.Locale.ROOT, "frustum: %d applies %.3f ms each (%d visible each, %d by the flat walk, verify fails %d)",
-                calls, applyNs / 1e6 / Math.max(1, calls), visibleSum / Math.max(1, calls), flatWalks, verifyFails);
+                calls, applyNs / 1e6 / Math.max(1, calls), visibleSum / Math.max(1, calls), flatWalks, verifyFails) + "; " + SectionSet.timing();
     }
 }

@@ -30,11 +30,36 @@ public final class SectionSet extends LinkedHashSet<Object> {
     private boolean broken;
     /** the setOrigin epoch: any section moved */
     public static volatile int originEpoch;
+    /**
+     * the sections that moved (RenderSection.index), a ring every set reads on from where it was (11-17: re-placing all
+     * 51 000 sections after each camera chunk crossing took 6.5 ms - the hardest orbit's slowest frames; ViewArea moves
+     * one strip of them). A set that fell a whole ring behind, or holds a section without an index, re-places all.
+     */
+    private static final int LOG = 1 << 16;
+    private static final int[] MOVED = new int[LOG];
+    private static long movedHead;
+    private long consumed = -1;
+    private int[] posOf = new int[0];   // RenderSection.index -> position + 1
+    private boolean noIndex;
+
+    /** RenderSection.setOrigin (SectionOriginEpochMixin) */
+    public static void moved(int sectionIndex) {
+        synchronized (MOVED) {
+            MOVED[(int) (movedHead & (LOG - 1))] = sectionIndex;
+            movedHead++;
+        }
+        originEpoch++;
+    }
     static final int SHIFT = Integer.getInteger("lab.frustumRegions.shift", 5), SIZE = 1 << SHIFT;
 
     public SectionSet(int size) {
         super(size);
         regionOf.defaultReturnValue(-1);
+        // (each add places its section where it is then: only the moves from now on matter - a new graph's set, made at
+        // every full update, needs no re-placement of all)
+        synchronized (MOVED) {
+            consumed = movedHead;
+        }
     }
 
     @Override
@@ -52,6 +77,11 @@ public final class SectionSet extends LinkedHashSet<Object> {
         SectionRenderDispatcher.RenderSection s = ((dev.lull.opt.SectionNodeAccessor) node).sleep$section();
         sec[n] = s;
         sidx[n] = s.index;
+        if (s.index < 0) noIndex = true;
+        else {
+            if (s.index >= posOf.length) posOf = java.util.Arrays.copyOf(posOf, Math.max(s.index + 1, posOf.length * 2));
+            posOf[s.index] = n + 1;
+        }
         place(n, s);
         n++;
         return true;
@@ -98,12 +128,41 @@ public final class SectionSet extends LinkedHashSet<Object> {
     public boolean addInFrustum(Frustum frustum, List<?> out) {
         if (!usable()) return false;
         int e = originEpoch;
-        if (e != epoch) {   // sections moved since: origins and regions read again
-            regionOf.clear();
-            regions = 0;
-            for (int i = 0; i < n; i++) place(i, (SectionRenderDispatcher.RenderSection) sec[i]);
+        long t0 = System.nanoTime();
+        if (e != epoch) {   // sections moved since: the moved ones placed again (or all)
+            boolean full = consumed < 0 || noIndex || regions > Math.max(4096, n);
+            long head;
+            int moved = 0;
+            synchronized (MOVED) {
+                head = movedHead;
+                if (!full && head - consumed > LOG) full = true;
+                if (!full)
+                    for (long q = consumed; q < head; q++) {
+                        int si = MOVED[(int) (q & (LOG - 1))];
+                        int p = si < posOf.length ? posOf[si] - 1 : -1;
+                        if (p >= 0) {
+                            place(p, (SectionRenderDispatcher.RenderSection) sec[p]);
+                            moved++;
+                        }
+                    }
+            }
+            if (full) {
+                regionOf.clear();
+                regions = 0;
+                for (int i = 0; i < n; i++) place(i, (SectionRenderDispatcher.RenderSection) sec[i]);
+                places++;
+                placeNs += System.nanoTime() - t0;
+            } else {
+                partialPlaces++;
+                partialPlaced += moved;
+                partialNs += System.nanoTime() - t0;
+            }
+            consumed = head;
             epoch = e;
         }
+        long t1 = System.nanoTime();
+        walks++;
+        walkSections += n;
         var acc = (dev.lull.opt.FrustumRegionAccessor) frustum;
         FrustumIntersection fi = acc.sleep$intersection();
         double cx = acc.sleep$camX(), cy = acc.sleep$camY(), cz = acc.sleep$camZ();
@@ -133,6 +192,16 @@ public final class SectionSet extends LinkedHashSet<Object> {
             wi[k++] = sidx[i];
         }
         SectionLists.walkN = k;
+        walkNs += System.nanoTime() - t1;
         return true;
+    }
+
+    /** the walks' parts: re-placing all sections after they moved, and the walk itself */
+    public static long placeNs, places, walkNs, walks, walkSections, partialPlaces, partialPlaced, partialNs;
+
+    public static String timing() {
+        return String.format(java.util.Locale.ROOT, "frustum walk: %d walks %.0f us each over %d sections; %d re-placements of all %.0f us each, %d of the moved ones %.0f us each (%d sections each)",
+                walks, walkNs / 1e3 / Math.max(1, walks), walkSections / Math.max(1, walks), places, placeNs / 1e3 / Math.max(1, places),
+                partialPlaces, partialNs / 1e3 / Math.max(1, partialPlaces), partialPlaced / Math.max(1, partialPlaces));
     }
 }

@@ -33,6 +33,13 @@ public final class FrameProfile implements ProfilerFiller {
     private final long[] startAt = new long[DEPTH];
     private int depth;
     private long frames;
+    /**
+     * -Dlab.frameProfile.slowUs (4000): frames longer than this (start to next start) also summed apart - the slow
+     * frames' sections next to the average ones (the user, 11-17: the dips are the 1 % low, not the average)
+     */
+    private static final long SLOW_NS = Long.getLong("lab.frameProfile.slowUs", 4000) * 1000L;
+    private final long[] frameT = new long[MAX], slowT = new long[MAX];
+    private long slowFrames, lastFrameAt;
 
     private FrameProfile(String root, String what, String unit) {
         names[0] = root;
@@ -58,8 +65,18 @@ public final class FrameProfile implements ProfilerFiller {
 
     /** the window's frames counted (the frame thread's GameRenderer.render calls) */
     public static void frame() {
-        INSTANCE.depth = 0;   // (a frame starts at the root: a section left open by another mod's early return ends here)
-        if (dev.lull.ClientMeter.measuring()) INSTANCE.frames++;
+        FrameProfile f = INSTANCE;
+        f.depth = 0;   // (a frame starts at the root: a section left open by another mod's early return ends here)
+        long now = System.nanoTime();
+        if (dev.lull.ClientMeter.measuring()) {
+            f.frames++;
+            if (f.lastFrameAt != 0 && now - f.lastFrameAt > SLOW_NS) {
+                for (int i = 1; i < f.n; i++) f.slowT[i] += f.frameT[i];
+                f.slowFrames++;
+            }
+        }
+        java.util.Arrays.fill(f.frameT, 0, f.n, 0);
+        f.lastFrameAt = now;
     }
 
     private int child(int p, String name) {
@@ -94,7 +111,9 @@ public final class FrameProfile implements ProfilerFiller {
         if (depth >= DEPTH) return;
         int s = stack[depth];
         if (s > 0 && counting()) {
-            total[s] += System.nanoTime() - startAt[depth];
+            long dt = System.nanoTime() - startAt[depth];
+            total[s] += dt;
+            frameT[s] += dt;
             count[s]++;
         }
     }
@@ -141,6 +160,18 @@ public final class FrameProfile implements ProfilerFiller {
         for (int i : idx) {
             if (f.total[i] * 100 < top) continue;
             b.append(String.format(java.util.Locale.ROOT, " %s %.1f (%.1f a %s);", f.path(i), f.total[i] / 1e3 / fr, (double) f.count[i] / fr, f.names[0]));
+        }
+        if (f.slowFrames > 0) {   // the slow frames: each section's us a slow frame next to its us an average frame
+            long sf = f.slowFrames, stop = 0;
+            for (int i = 1; i < f.n; i++) if (f.parent[i] == 0) stop += f.slowT[i];
+            b.append(String.format(java.util.Locale.ROOT, " | slow %ss (over %.1f ms): %d, top sections %.1f us a slow %s:", f.names[0], SLOW_NS / 1e6, sf, stop / 1e3 / sf, f.names[0]));
+            Integer[] by = new Integer[f.n - 1];
+            for (int i = 1; i < f.n; i++) by[i - 1] = i;
+            java.util.Arrays.sort(by, (a, c) -> Long.compare(f.slowT[c] - f.total[c] * sf / fr, f.slowT[a] - f.total[a] * sf / fr));
+            for (int k = 0; k < Math.min(18, by.length); k++) {
+                int i = by[k];
+                b.append(String.format(java.util.Locale.ROOT, " %s %.1f (avg %.1f);", f.path(i), f.slowT[i] / 1e3 / sf, f.total[i] / 1e3 / fr));
+            }
         }
         return b.toString();
     }
