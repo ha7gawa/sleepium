@@ -122,7 +122,7 @@ public final class TickAsync {
 
     /**
      * -Dlab.tickAsync.graph (in lab.decoupled; notes/75 stage 6): the walk as a TaskGraph on the client's pool - walk
-     * nodes for the workers (pool only: a walking worker asks the main thread for block shapes), then the join node on
+     * nodes (a worker's claims; the main thread's own when it runs one, see walkNode), then the join node on
      * the main thread's member (the deferred moves, the pairs swapped, the generation published). It replaces the hand
      * wiring (walkDone's wake, joinIfDone's check): the join is posted to the main thread's inbox when the last walk node
      * ends, and the main thread runs it at its next runTick (its idle wait woken). A main thread that must join earlier
@@ -149,10 +149,20 @@ public final class TickAsync {
             dev.lab.runtime.TaskGraph g = new dev.lab.runtime.TaskGraph("client tick", pool);
             dev.lab.runtime.TaskGraph.Node join = g.add("join", main(), TickAsync::graphJoin);
             for (int k = 0; k < pool.workerCount(); k++)
-                g.after(g.addPoolOnly("walk" + k, dev.lab.runtime.LabRuntime.Lane.TICK, ParallelEntities::asyncWorkerRun), join);
+                g.after(g.add("walk" + k, dev.lab.runtime.LabRuntime.Lane.TICK, TickAsync::walkNode), join);
             graph = g.seal();
         }
         return graph;
+    }
+
+    /**
+     * a walk node: on a worker the worker's claims; on the main thread (it helps while it waits for the graph) the main
+     * thread's own claims, answering the workers' questions itself - a walk node never waits for a free worker then (the
+     * N100's two workers busy with meshes and entity jobs kept main waiting 115 times x 51 ms with pool-only walk nodes)
+     */
+    private static void walkNode() {
+        if (mainMember != null && Thread.currentThread() == mainMember.thread()) ParallelEntities.helpAsync();
+        else ParallelEntities.asyncWorkerRun();
     }
 
     /** the join node (main): the walk is done - its world part and its render part (generations: no frame hold) */
