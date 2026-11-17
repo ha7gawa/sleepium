@@ -57,7 +57,7 @@ public final class ClientCounters {
                 + RenderThread.report()
                 + FrameThread.report()
                 + (ChunkChurn.ON ? "; " + ChunkChurn.report() : "") + (TintBlend.ON ? "; " + TintBlend.report() : "") + (MeshMemo.ON ? "; " + MeshMemo.report() : "")
-                + (FrameProfile.ON ? "; " + FrameProfile.report() : "")
+                + "; " + dev.lull.ClassBytes.passReport() + (FrameProfile.ON ? "; " + FrameProfile.report() : "")
                 + (FrameProfile.SERVER_ON ? "; " + FrameProfile.serverReport() : "")
                 + (StallProbe.ON ? "; " + StallProbe.report() : "")
                 + (ClientTickProfile.ON ? "; " + ClientTickProfile.report() : "")

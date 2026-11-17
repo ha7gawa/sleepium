@@ -121,6 +121,7 @@ public final class ClassBytes {
         // each class through Mixin's transformer once: the analyses ask for the same superclasses (LivingEntity, Mob)
         // again and again, and every pass made Mixin print other mods' warnings again (issue #8: Critters and
         // Companions' Shift.BY warning 21 more times, from our analysis thread); a copy each time, the analyses change it
+        if (!RUN_CACHE_ON) return readRunning0(loader, internalName);
         ClassNode cached;
         synchronized (RUN_CACHE) {
             cached = RUN_CACHE.get(internalName);
@@ -135,6 +136,17 @@ public final class ClassBytes {
         ClassNode copy = new ClassNode();
         cached.accept(copy);
         return copy;
+    }
+
+    /** -Dlab.analysis.runCache (default on), -Dlab.analysis.passPriority (default on): issue #8 / the 11-17 lock fix, switchable */
+    private static final boolean RUN_CACHE_ON = !"false".equals(System.getProperty("lab.analysis.runCache")),
+            PASS_PRIORITY = !"false".equals(System.getProperty("lab.analysis.passPriority"));
+    public static long passes, passNanos, passMaxNanos;
+    public static String passMax = "";
+
+    public static String passReport() {
+        return String.format(java.util.Locale.ROOT, "analysis passes through Mixin's transformer: %d, %.0f ms in all, the longest %.0f ms (%s)",
+                passes, passNanos / 1e6, passMaxNanos / 1e6, passMax);
     }
 
     /** the classes read as they run, the last 32 (the shared superclasses stay; a class's node can be large) */
@@ -153,10 +165,26 @@ public final class ClassBytes {
             ClassNode cn = new ClassNode();
             new ClassReader(in).accept(cn, ClassReader.EXPAND_FRAMES);
             REREAD.set(Boolean.TRUE);
+            // Mixin's processor lock is held through the pass, and every class any thread loads meanwhile waits for it
+            // (a 250-mod 1.20.1 pack, 11-17: a mod's Class.forName each client tick, the render thread waiting up to
+            // 1.7 s on our analysis thread, which runs at the lowest priority - an inversion): the pass at a high one
+            Thread th = Thread.currentThread();
+            int priority = th.getPriority();
+            if (PASS_PRIORITY && priority < Thread.NORM_PRIORITY) th.setPriority(Thread.MAX_PRIORITY);
+            long tp = System.nanoTime();
             try {
                 t.transformClass(env, internalName.replace('/', '.'), cn);
             } finally {
+                th.setPriority(priority);
                 REREAD.remove();
+                long d = System.nanoTime() - tp;
+                passes++;
+                passNanos += d;
+                if (d > passMaxNanos) {
+                    passMaxNanos = d;
+                    passMax = internalName;
+                }
+                if (d > 50_000_000L) System.out.println("[sleep/analysis] " + internalName + " through Mixin's transformer: " + d / 1_000_000 + " ms (" + Thread.currentThread().getName() + ")");
             }
             for (org.objectweb.asm.tree.MethodNode m : cn.methods)
                 for (org.objectweb.asm.tree.AbstractInsnNode i : m.instructions.toArray())
