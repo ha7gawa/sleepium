@@ -212,3 +212,9 @@
 # the frustum culls chunk sections on flat arrays (origins, regions) instead of the occlusion graph's linked set: fast
 # camera turns at far view distances (1.2.5; the same sections in the same order, frame hashes unchanged)
 -Dlab.opt.FrustumRegionMixin=true
+# 1.3.0 (11-17, the user's motion dips; all exact, verified against vanilla): terrain draw lists built in parts on the
+# client pool and merged in order; biome blending by running sums (meshing at a large Biome Blend several times
+# cheaper); the chunk grid moved with the camera by the columns that move only
+-Dlab.chunkmd.parallelLists=true
+-Dlab.tintBlend=true
+-Dlab.viewAreaStrips=true
