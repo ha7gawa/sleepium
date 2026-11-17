@@ -1421,6 +1421,7 @@ public final class FrameThread {
     private static int holdDepth;
 
     public static void holdForMain() {
+        if (active && Thread.currentThread() != mainThread && holdMisses++ < 3) System.out.println("[sleep/opt] frame thread: a hold asked off the main thread (" + Thread.currentThread().getName() + ")");
         if (!active || Thread.currentThread() != mainThread) return;
         holdDepth++;
         mainHolding = true;
@@ -1501,15 +1502,29 @@ public final class FrameThread {
     /** Minecraft's own timer, taken on the main thread at start (on the frame thread getTimer answers with TICK_END) */
     private static net.minecraft.client.DeltaTracker realTimer;
 
+    /** the renderers have no level (leaving a world: FrameThreadEnginesMixin / RendererMixin / SodiumRendererMixin) - until they get one again */
+    public static volatile boolean levelGone;
+
+    /** the level renderer has no level (it left the world: Embeddium's world renderer is gone with it) - no extra frame */
+    private static boolean noRendererLevel() {
+        try {
+            return mc != null && mc.levelRenderer != null && ((dev.lull.opt.FrameThreadRendererLevelAccessor) mc.levelRenderer).sleep$rendererLevel() == null;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+    private static int holdMisses;
+
     /** the frame thread, idle: an extra frame if the main thread is in a tick and the last frame is older than one frame */
     private static boolean extraFrame() {
         // (ring: the slot drawn last is never recorded into - the main thread's recording does not stop it)
         Slot c = cur;
         boolean self = selfOk;
         if (mc != null && mc.screen != null) return false;   // (no extra frame of a screen: the main thread changes its widgets)
+        if (levelGone || noRendererLevel()) return false;   // (the renderers left the level and the game's field may still hold it: FrameThreadLevelMixin)
         if (!(self || mainTicking) || borrowAsked || mainHolding || c == null || c.nOps == 0 || taken != handed) return false;
         extraRunning = true;
-        if (taken != handed || borrowAsked || mainHolding) {   // (a job or a borrow came meanwhile)
+        if (taken != handed || borrowAsked || mainHolding || levelGone || noRendererLevel()) {   // (a job, a borrow or a level change came meanwhile)
             extraRunning = false;
             return false;
         }
