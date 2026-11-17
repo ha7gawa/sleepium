@@ -14,7 +14,15 @@ import net.minecraft.util.profiling.metrics.MetricCategory;
  */
 public final class FrameProfile implements ProfilerFiller {
     public static final boolean ON = Boolean.getBoolean("lab.frameProfile");
-    public static final FrameProfile INSTANCE = new FrameProfile();
+    public static final FrameProfile INSTANCE = new FrameProfile("frame", "the frame thread", "frames");
+    /**
+     * -Dlab.serverProfile=true (measuring): the same for the server thread's tick (MinecraftServer.getProfiler on the
+     * server thread, FrameProfileServerMixin) - its sections by vanilla's names (levels, entities, blockEntities,
+     * chunkSource, connection ...), per tick
+     */
+    public static final boolean SERVER_ON = Boolean.getBoolean("lab.serverProfile");
+    public static final FrameProfile SERVER = new FrameProfile("tick", "the server thread", "ticks");
+    private final String what, unit;
 
     private static final int MAX = 512, DEPTH = 64;
     private final String[] names = new String[MAX];
@@ -26,9 +34,26 @@ public final class FrameProfile implements ProfilerFiller {
     private int depth;
     private long frames;
 
-    private FrameProfile() {
-        names[0] = "frame";
+    private FrameProfile(String root, String what, String unit) {
+        names[0] = root;
         parent[0] = -1;
+        this.what = what;
+        this.unit = unit;
+    }
+
+    /** the server thread at a tick's start (MinecraftServer.tickServer) */
+    public static void tick() {
+        SERVER.depth = 0;
+        if (measuringServer()) SERVER.frames++;
+    }
+
+    /** the server's window: the client's measured window (an integrated server), else always */
+    private static boolean measuringServer() {
+        return dev.lull.ClientMeter.measuring();
+    }
+
+    private boolean counting() {
+        return this == SERVER ? measuringServer() : dev.lull.ClientMeter.measuring();
     }
 
     /** the window's frames counted (the frame thread's GameRenderer.render calls) */
@@ -68,7 +93,7 @@ public final class FrameProfile implements ProfilerFiller {
         depth--;
         if (depth >= DEPTH) return;
         int s = stack[depth];
-        if (s > 0 && dev.lull.ClientMeter.measuring()) {
+        if (s > 0 && counting()) {
             total[s] += System.nanoTime() - startAt[depth];
             count[s]++;
         }
@@ -98,17 +123,24 @@ public final class FrameProfile implements ProfilerFiller {
 
     /** the sections over 1 % of the window's frame time, in us a frame (the report, on the main thread: racy reads) */
     public static String report() {
-        FrameProfile f = INSTANCE;
+        return report(INSTANCE);
+    }
+
+    public static String serverReport() {
+        return report(SERVER);
+    }
+
+    private static String report(FrameProfile f) {
         long fr = Math.max(1, f.frames);
         long top = 0;
         for (int i = 1; i < f.n; i++) if (f.parent[i] == 0) top += f.total[i];
-        StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT, "frame profile (the frame thread, %d frames, top sections %.1f us a frame):", f.frames, top / 1e3 / fr));
+        StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT, "%s profile (%s, %d %s, top sections %.1f us a %s):", f.names[0], f.what, f.frames, f.unit, top / 1e3 / fr, f.names[0]));
         Integer[] idx = new Integer[f.n - 1];
         for (int i = 1; i < f.n; i++) idx[i - 1] = i;
         java.util.Arrays.sort(idx, (a, c) -> f.path(a).compareTo(f.path(c)));
         for (int i : idx) {
             if (f.total[i] * 100 < top) continue;
-            b.append(String.format(java.util.Locale.ROOT, " %s %.1f (%.1f a frame);", f.path(i), f.total[i] / 1e3 / fr, (double) f.count[i] / fr));
+            b.append(String.format(java.util.Locale.ROOT, " %s %.1f (%.1f a %s);", f.path(i), f.total[i] / 1e3 / fr, (double) f.count[i] / fr, f.names[0]));
         }
         return b.toString();
     }

@@ -57,6 +57,7 @@ public final class ClientCounters {
                 + RenderThread.report()
                 + FrameThread.report()
                 + (FrameProfile.ON ? "; " + FrameProfile.report() : "")
+                + (FrameProfile.SERVER_ON ? "; " + FrameProfile.serverReport() : "")
                 + (StallProbe.ON ? "; " + StallProbe.report() : "")
                 + (ClientTickProfile.ON ? "; " + ClientTickProfile.report() : "")
                 + (UploadRing.ON || UploadRing.RECORDS || Integer.getInteger("lab.gpu.framesInFlight", 0) > 0 || Boolean.getBoolean("lab.gpu.framesInFlight.auto") ? "; " + UploadRing.report() : "")
