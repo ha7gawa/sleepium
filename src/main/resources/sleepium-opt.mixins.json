@@ -179,6 +179,8 @@
     "FrameProfileFlushMixin",
     "FrameProfileUploadMixin",
     "FrameProfileCompiledMixin",
+    "FrameProfileCullMixin",
+    "EntityDrawFramesMixin",
     "FrameThreadRespawnMixin",
     "FrameThreadSystemMixin",
     "FrameThreadLevelMixin",

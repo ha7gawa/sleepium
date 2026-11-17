@@ -405,7 +405,7 @@ public final class ParallelRender {
     /** LevelRenderer's entity loop, per entity (in place of renderEntity). */
     public static void enqueue(LevelRenderer lr, Entity e, double camX, double camY, double camZ, float pt, PoseStack pose, MultiBufferSource buffers) {
         if (TEST_SKIP_ON && TEST_SKIP.contains(e.getClass().getSimpleName())) return;
-        if (TickAsync.ON) DRAWN.put(e, drainFrame);
+        if (TickAsync.ON) ((DrawFrames) e).sleep$setQueuedIn(drainFrame + 1);
         TickPoses.Pair held = null;
         Job snap = null;
         if (TickAsync.ON && TickAsync.holding(e) && TickAsync.awaitUnseen(e)) { }   // (an unseen one came into view: its tick waited for)
@@ -1222,6 +1222,8 @@ public final class ParallelRender {
             }
             if (j.parallel) {
                 // helping instead of waiting: the queued jobs from here on that no worker has taken yet
+                boolean profH = FrameProfile.ON && FrameThread.drawingHere() && !j.done;
+                if (profH) FrameProfile.INSTANCE.push("help");
                 for (int k = i; !j.done && k < size; k++) {
                     Job h = QUEUE.get(k);
                     if (h.parallel && !h.done) {
@@ -1229,6 +1231,7 @@ public final class ParallelRender {
                         if (h.done) helped++;
                     }
                 }
+                if (profH) FrameProfile.INSTANCE.pop();
                 if (FrameProfile.ON && FrameThread.drawingHere()) {
                     FrameProfile.INSTANCE.push("await");
                     j.await();
@@ -1238,10 +1241,13 @@ public final class ParallelRender {
                     if (VERIFY) verify(inv, j);
                     innerArmed = j;
                     merged = false;
+                    boolean profI = FrameProfile.ON && FrameThread.drawingHere();
+                    if (profI) FrameProfile.INSTANCE.push("inner");
                     try {
                         inv.sleep$renderEntity(j.entity, j.camX, j.camY, j.camZ, j.pt, j.pose, j.buffers);
                     } finally {
                         innerArmed = null;
+                        if (profI) FrameProfile.INSTANCE.pop();
                     }
                     if (merged) parallel++;
                     else sequential++;
@@ -1263,12 +1269,17 @@ public final class ParallelRender {
                 }
                 if (j.ok) {
                     if (VERIFY) verify(inv, j);
+                    boolean profC = FrameProfile.ON && FrameThread.drawingHere();
+                    if (profC) FrameProfile.INSTANCE.push("calls");
                     for (int c = 0; c < j.calls.size(); c++) j.calls.get(c).execute();   // the job's deferred side effects, in place
+                    if (profC) FrameProfile.INSTANCE.popPush("append");
                     journaled += j.calls.size();
                     j.calls.clear();
                     RenderCache.append(j.out, j.buffers);
+                    if (profC) FrameProfile.INSTANCE.popPush("on_worker");
                     parallel++;
-                    if (TickAsync.ON) ON_WORKER.put(j.entity, drainFrame);
+                    if (TickAsync.ON) ((DrawFrames) j.entity).sleep$setWorkerIn(drainFrame + 1);
+                    if (profC) FrameProfile.INSTANCE.pop();
                     if (clean) leakCheck(j);
                     j.entity = null;
                     continue;
@@ -1286,8 +1297,7 @@ public final class ParallelRender {
         size = 0;
         if (TickAsync.ON && (++drainFrame & 1023) == 0) {   // gone entities forgotten now and then - only the old entries: a clear
             long f = drainFrame;                                 // made every visible entity look unseen for two frames (skipped)
-            ON_WORKER.values().removeIf(v -> f - v > 64);
-            DRAWN.values().removeIf(v -> f - v > 64);
+            // (the drains are kept on the entities now: nothing to sweep)
         }
         if (TickPoses.ON) TickPoses.endFrame();
     }
@@ -1402,21 +1412,27 @@ public final class ParallelRender {
     /** renderEntity + EntityRenderDispatcher.render (without hitboxes), with a worker's renderers. */
     // ------------------------------------------------------------------ TickAsync's snapshots
 
-    /** render thread: entities a worker drew (the usual job path, merged fine) and the drain they were last drawn in */
-    private static final java.util.concurrent.ConcurrentHashMap<Entity, Long> ON_WORKER = new java.util.concurrent.ConcurrentHashMap<>();   // (concurrent: the split reads it on the main thread)
-    private static long drainFrame;
+    /** EntityDrawFramesMixin: the drain (+ 1, 0: never) an entity was last queued in and last drawn on a worker in */
+    public interface DrawFrames {
+        long sleep$queuedIn();
 
-    /** render thread: every entity a frame queued, and the drain it was queued in */
-    private static final java.util.concurrent.ConcurrentHashMap<Entity, Long> DRAWN = new java.util.concurrent.ConcurrentHashMap<>();
+        void sleep$setQueuedIn(long f);
+
+        long sleep$workerIn();
+
+        void sleep$setWorkerIn(long f);
+    }
+
+    private static volatile long drainFrame;
 
     static boolean drawnLately(Entity e) {
-        Long f = DRAWN.get(e);
-        return f != null && drainFrame - f <= 2;
+        long f = ((DrawFrames) e).sleep$queuedIn();
+        return f != 0 && drainFrame - (f - 1) <= 2;
     }
 
     static boolean drewOnWorker(Entity e) {
-        Long f = ON_WORKER.get(e);
-        return f != null && drainFrame - f <= 2 && !INNER;
+        long f = ((DrawFrames) e).sleep$workerIn();
+        return f != 0 && drainFrame - (f - 1) <= 2 && !INNER;
     }
 
     /** render thread, the walk: a snapshot job for e - the whole render at partial tick 1, the camera at the entity */
