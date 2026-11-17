@@ -60,6 +60,11 @@ public final class LightVolumes {
 
     private static final ThreadLocal<Compile> STATE = ThreadLocal.withInitial(Compile::new);
 
+    /** MeshMemo: whether a compile of this section now writes light recipes (part of its mesh's inputs) */
+    public static boolean recipesFor(long section) {
+        return ALL || DYNAMIC.contains(section);
+    }
+
     public static void beginCompile(SectionPos section) {
         Compile c = STATE.get();
         c.on = ALL || DYNAMIC.contains(section.asLong());

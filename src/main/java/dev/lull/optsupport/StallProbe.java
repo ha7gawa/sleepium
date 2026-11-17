@@ -72,7 +72,7 @@ public final class StallProbe {
 
     public static String report() {
         StringBuilder sb = new StringBuilder("stall probe: " + longFrames + " frames over " + LIMIT / 1_000_000 + " ms, " + samples + " stacks; the most common:");
-        SEEN.entrySet().stream().sorted((a, b) -> b.getValue()[0] - a.getValue()[0]).limit(4)
+        SEEN.entrySet().stream().sorted((a, b) -> b.getValue()[0] - a.getValue()[0]).limit(Integer.getInteger("lab.stallProbe.top", 4))
                 .forEach(e -> sb.append("\n    ").append(e.getValue()[0]).append(" x").append(e.getKey()));
         return sb.append("\n  ").append(GlFrame.report()).toString();
     }
