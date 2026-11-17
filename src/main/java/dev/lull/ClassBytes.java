@@ -150,6 +150,98 @@ public final class ClassBytes {
      * Mixin's transformer is not at hand, or the transformer fails.
      */
     public static ClassNode readRunning(ClassLoader loader, String internalName) {
+        // each class through Mixin's transformer once: the analyses ask for the same superclasses (LivingEntity, Mob)
+        // again and again, and every pass made Mixin print other mods' warnings again (issue #8: Critters and
+        // Companions' Shift.BY warning 21 more times, from our analysis thread); a copy each time, the analyses change it
+        if (!RUN_CACHE_ON) return readRunning0(loader, internalName);
+        ClassNode cached;
+        synchronized (RUN_CACHE) {
+            cached = RUN_CACHE.get(internalName);
+        }
+        if (cached == null) {
+            cached = readRunning0(loader, internalName);
+            if (cached == null) return null;
+            synchronized (RUN_CACHE) {
+                RUN_CACHE.put(internalName, cached);
+            }
+        }
+        ClassNode copy = new ClassNode();
+        cached.accept(copy);
+        return copy;
+    }
+
+    /** -Dlab.analysis.runCache (default on), -Dlab.analysis.passPriority (default on): issue #8 / the 11-17 lock fix, switchable */
+    private static final boolean RUN_CACHE_ON = !"false".equals(System.getProperty("lab.analysis.runCache")),
+            PASS_PRIORITY = !"false".equals(System.getProperty("lab.analysis.passPriority"));
+    public static long passes, passNanos, passMaxNanos;
+    public static String passMax = "";
+
+    public static String passReport() {
+        return String.format(java.util.Locale.ROOT, "analysis passes through Mixin's transformer: %d, %.0f ms in all, the longest %.0f ms (%s); %s%s",
+                passes, passNanos / 1e6, passMaxNanos / 1e6, passMax, RunCapture.report(),
+                CAPTURE_VERIFY ? ", verified " + captureVerified + ", mismatches " + captureMismatches : "");
+    }
+
+    /** the classes read as they run, the last 32 (the shared superclasses stay; a class's node can be large) */
+    private static final java.util.LinkedHashMap<String, ClassNode> RUN_CACHE = new java.util.LinkedHashMap<>(64, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(java.util.Map.Entry<String, ClassNode> e) {
+            return size() > 32;
+        }
+    };
+
+    /** RunCapture: inside our own pass through Mixin's transformer (its postApply skips it) */
+    public static boolean rereading() {
+        return REREAD.get() != null;
+    }
+
+    private static final boolean CAPTURE_VERIFY = Boolean.getBoolean("lab.analysis.capture.verify");
+    public static long captureVerified, captureMismatches;
+
+    /** the kept bytes (RunCapture) as the pass would give them: Mojang's names, no frames */
+    private static ClassNode fromCapture(byte[] b) {
+        ClassNode cn = new ClassNode();
+        ClassReader r = new ClassReader(b);
+        if (Names.SRG) r.accept(new ClassRemapper(cn, OFFICIAL), ClassReader.SKIP_FRAMES);
+        else r.accept(cn, ClassReader.SKIP_FRAMES);
+        return complete(cn);
+    }
+
+    /** verify: the same methods with the same instructions (opcodes, in order) */
+    private static String differs(ClassNode a, ClassNode b) {
+        java.util.Map<String, org.objectweb.asm.tree.MethodNode> m = new java.util.HashMap<>();
+        for (org.objectweb.asm.tree.MethodNode x : b.methods) m.put(x.name + x.desc, x);
+        if (a.methods.size() != b.methods.size()) return "methods " + a.methods.size() + " vs " + b.methods.size();
+        for (org.objectweb.asm.tree.MethodNode x : a.methods) {
+            org.objectweb.asm.tree.MethodNode y = m.get(x.name + x.desc);
+            if (y == null) return "no " + x.name + x.desc;
+            var xi = x.instructions.toArray();
+            var yi = y.instructions.toArray();
+            java.util.List<Integer> xo = new java.util.ArrayList<>(), yo = new java.util.ArrayList<>();
+            for (var i : xi) if (i.getOpcode() >= 0) xo.add(i.getOpcode());
+            for (var i : yi) if (i.getOpcode() >= 0) yo.add(i.getOpcode());
+            if (!xo.equals(yo)) return x.name + x.desc + ": " + xo.size() + " vs " + yo.size() + " instructions";
+        }
+        return null;
+    }
+
+    private static ClassNode readRunning0(ClassLoader loader, String internalName) {
+        byte[] captured = RunCapture.ON ? RunCapture.get(internalName) : null;
+        if (captured != null) {   // as Mixin left it when the class was loaded: no pass, no lock
+            ClassNode cn = fromCapture(captured);
+            if (!CAPTURE_VERIFY) return cn;
+            ClassNode pass = readRunningPass(loader, internalName);
+            if (pass != null) {
+                captureVerified++;
+                String d = differs(cn, pass);
+                if (d != null && captureMismatches++ < 10) System.out.println("[sleep/analysis] run capture MISMATCH " + internalName + ": " + d);
+            }
+            return cn;
+        }
+        return readRunningPass(loader, internalName);
+    }
+
+    private static ClassNode readRunningPass(ClassLoader loader, String internalName) {
         try (InputStream in = (loader != null ? loader : ClassLoader.getSystemClassLoader()).getResourceAsStream(internalName + ".class")) {
             if (in == null) return null;
             org.spongepowered.asm.mixin.MixinEnvironment env = org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment();
@@ -157,10 +249,26 @@ public final class ClassBytes {
             ClassNode raw = new ClassNode();
             new ClassReader(in).accept(raw, ClassReader.EXPAND_FRAMES);
             REREAD.set(Boolean.TRUE);
+            // Mixin's processor lock is held through the pass, and every class any thread loads meanwhile waits for it
+            // (a 250-mod 1.20.1 pack, 11-17: a mod's Class.forName each client tick, the render thread waiting up to
+            // 1.7 s on our analysis thread, which runs at the lowest priority - an inversion): the pass at a high one
+            Thread th = Thread.currentThread();
+            int priority = th.getPriority();
+            if (PASS_PRIORITY && priority < Thread.NORM_PRIORITY) th.setPriority(Thread.MAX_PRIORITY);
+            long tp = System.nanoTime();
             try {
                 t.transformClass(env, internalName.replace('/', '.'), raw);
             } finally {
+                th.setPriority(priority);
                 REREAD.remove();
+                long d = System.nanoTime() - tp;
+                passes++;
+                passNanos += d;
+                if (d > passMaxNanos) {
+                    passMaxNanos = d;
+                    passMax = internalName;
+                }
+                if (d > 50_000_000L) System.out.println("[sleep/analysis] " + internalName + " through Mixin's transformer: " + d / 1_000_000 + " ms (" + Thread.currentThread().getName() + ")");
             }
             ClassNode cn = new ClassNode();
             raw.accept(Names.SRG ? new ClassRemapper(cn, OFFICIAL) : cn);

@@ -260,6 +260,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
     @Override
     public void onLoad(String mixinPackage) {
         dev.lull.optsupport.LateEventSites.register();
+        dev.lull.RunCapture.register();   // entity classes as Mixin left them: the analyses need no second pass (no lock)
         if (Boolean.getBoolean("lab.opt.universal")) {
             // -Dlab.opt.except=A,B: universal without those (A/B of one part)
             java.util.Set<String> except = new java.util.HashSet<>(java.util.Arrays.asList(System.getProperty("lab.opt.except", "").split(",")));
