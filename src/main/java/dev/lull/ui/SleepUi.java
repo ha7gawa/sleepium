@@ -31,6 +31,7 @@ public final class SleepUi {
             if (!(e.getScreen() instanceof net.minecraft.client.gui.screens.TitleScreen title)) return;
             net.minecraft.client.gui.screens.Screen hint = CrashHint.check(title);
             if (hint != null) Minecraft.getInstance().tell(() -> Minecraft.getInstance().setScreen(hint));
+            else decoupledHint();
         });
         gameBus.addListener(EventPriority.NORMAL, false, ScreenEvent.Init.Post.class, e -> {
             // the Options screen and the pause menu: a button at the top left (1.20.1's PauseScreen does not say whether it
@@ -375,5 +376,25 @@ public final class SleepUi {
         } catch (Exception ex) {
             System.out.println("[sleep/ui] shot: " + ex);
         }
+    }
+
+    /** 1.3.0: the decoupled frames shown once on the title screen while they are off (config/sleepium-hints.properties) */
+    private static boolean hintChecked;
+
+    static void decoupledHint() {
+        if (hintChecked || Boolean.getBoolean("lab.decoupled")) return;
+        hintChecked = true;
+        try {
+            java.nio.file.Path f = dev.lull.optsupport.SleepConfig.file().resolveSibling("sleepium-hints.properties");
+            if (java.nio.file.Files.exists(f) && java.nio.file.Files.readString(f, java.nio.charset.StandardCharsets.UTF_8).contains("decoupled130=shown")) return;
+            java.nio.file.Files.writeString(f, "# Sleepium's one-time hints\ndecoupled130=shown\n", java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            return;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        net.minecraft.client.gui.components.toasts.SystemToast.add(mc.getToasts(),
+                net.minecraft.client.gui.components.toasts.SystemToast.SystemToastIds.PERIODIC_NOTIFICATION,
+                net.minecraft.network.chat.Component.translatable("sleepium.ui.decoupled.hint.title"),
+                net.minecraft.network.chat.Component.translatable("sleepium.ui.decoupled.hint.body"));
     }
 }

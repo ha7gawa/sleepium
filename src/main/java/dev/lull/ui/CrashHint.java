@@ -67,6 +67,12 @@ public final class CrashHint extends Screen {
 
     /** the settings whose names the report's Sleepium classes carry, in the order they appear (a part goes to its parent) */
     static List<String> match(String text) {
+        // the decoupled frames (1.3.0, experimental): a crash on the frame thread or through its classes - that switch
+        // alone (its parts are not switches of their own); the screen's own classes are no part (dev.lull.ui)
+        if (Boolean.getBoolean("lab.decoupled") && (text.contains("dev.lull.optsupport.FrameThread") || text.contains("Sleepium frame")
+                || text.contains("dev.lull.opt.FrameThread") || text.contains("dev.lull.optsupport.TickAsync")))
+            return new ArrayList<>(List.of("lab.decoupled"));
+        text = text.replace("dev.lull.ui.", "ui.");   // (the screen's classes: no part of their own)
         Set<String> classes = new LinkedHashSet<>();
         Matcher m = Pattern.compile("dev\\.lull\\.[a-z.]*?\\.?([A-Z]\\w*)").matcher(text);
         while (m.find()) classes.add(m.group(1).replaceAll("\\$.*", ""));
