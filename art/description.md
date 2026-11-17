@@ -38,7 +38,55 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
-## New in 1.3.0: smooth flight over large worlds, Android above 7 chunks
+## New in 1.3.0: the frame and the tick go their own ways (experimental)
+
+In vanilla one thread does everything in turn: it ticks the world, then draws a frame, then ticks again. When a tick
+runs long - a crowd of mobs, a big pack, a modded machine room - the picture simply stops until it is over, however
+fast your graphics card is. 1.3.0 is the first step of Sleepium's new cycle: **the frame and the game's tick are
+separated**. It is experimental, off by default, and you turn it on at your own risk - we want it in players' hands
+early, and we want to hear how it behaves in your worlds.
+
+**Decoupled frames** - Options -> Sleepium -> Decoupled frames (needs a restart):
+
+- **The frame gets its own thread and its own clock.** The graphics context moves to a frame thread, and the frame is
+  drawn there while the main thread ticks the world. During a long tick the frame thread keeps drawing on its own
+  clock, so the camera still turns with the mouse instead of freezing.
+- **A pipeline instead of taking turns.** The main thread records the next frame while the frame thread draws the
+  previous one (a ring of three recorded frames); what each frame sees - the camera, the lists of what to draw - is
+  latched at its start, so a frame never mixes two moments.
+- **Mobs tick in parallel.** After the client's own tick, mobs - living ones too - are ticked on worker threads, laid
+  out as a graph of tasks that waits only for what it really depends on.
+- **Mobs are drawn from tick-rate poses.** Each mob's pose is worked out once per tick and the frames in between
+  interpolate it, so drawing a crowd no longer waits for a tick and the tick no longer waits for drawing. Model parts
+  are still prepared on helper threads, as before.
+- **Frames in flight kept in check:** on drivers that queue frames far ahead (Intel) the number of frames waiting on
+  the graphics card is limited automatically, so input does not lag behind.
+
+What it does in practice (each line one test, the same path with the mode off and on):
+
+| | off | Decoupled frames |
+|---|---:|---:|
+| a 225-mod pack: the longest freeze | 1.8 s | 0.15 s |
+| a 474-mod pack, flying over the world: the slowest 1 % of frames | 91 fps | 185-203 fps |
+| the same, average | 280 fps | 312-345 fps |
+| a phone (MojoLauncher), distance 6: average / the slowest 1 % of frames | 119 fps / 34 ms | 150 fps / 22 ms |
+| Intel N100, a flight over new land: the worst frame | 417 ms | 226 ms |
+
+**What to know before you turn it on:**
+
+- **It is not bit-exact like the rest of Sleepium.** Mobs are drawn from interpolated poses (within 0.1 block of
+  vanilla's), translucent items may be drawn in another order, and on 1.21.1 leaves draw no faces deep inside a
+  canopy, where nobody can see them. The world itself - every block, every tick - stays exactly vanilla's.
+- **It can be slower.** It is about smooth frames, not the average: in the 225-mod pack the average went from 255 to
+  195 fps, and in that pack's mob zoo it was slower all round (122 -> 87 fps). Mods that replace the game's main loop
+  (in that pack Veil, Sodium, Figura and Xaero's World Map) turn the frame thread's own clock off, and then it mostly
+  costs. Try it in your own world and keep whichever feels better.
+- **Some mods may not expect it** - they may assume that drawing happens on the main thread. If something looks wrong,
+  turn it off; after a crash that goes through it, the title screen names it and offers to turn it off.
+- **Tell us what you see:** a GitHub issue with your pack (a link is enough), what happened, and the numbers from
+  Options -> Sleepium -> HUD helps us more than anything.
+
+**On by default, exact as always:**
 
 | 32 chunks, flying in circles while turning the camera and going up and down (desktop) | 1.2.6 | 1.3.0 |
 |---|---:|---:|
@@ -54,13 +102,13 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
   never uses. The same picture, checked frame by frame.
 - **Android: render distance above 7 no longer crashes** (MojoLauncher, Adreno). Chunk sections get their GPU objects
   only when they have something to draw: at distance 12, 1 617 instead of 75 000. A phone runs at distance 12 at 110 fps.
-- **Experimental: Decoupled frames** (Options -> Sleepium, off by default, at your own risk): the frame is drawn on its
-  own thread and mobs are ticked on worker threads, so a long tick no longer holds a frame back. It helps where long
-  ticks freeze the picture (a 474-mod pack: the slowest 1 % of frames 91 -> 185-203 fps; a 225-mod pack: the longest
-  freeze 1.8 -> 0.15 s) and can be slower in scenes full of mobs - try it in your own world.
 - **Fix: freezes of up to seconds in big mod packs** (reported with Punchy and Better Combat 1.9.0): Sleepium's mob
   analysis no longer holds the lock every class lookup waits on (a 474-mod pack: 10.9 s -> 0).
 - **Fix: other mods' Mixin warnings printed again and again** (GitHub #8).
+
+**Next in this cycle:** loading chunks in flight. Every time you cross a chunk border at 32 chunks, the game sends a
+strip of 65 chunks again and meshes them again, more than half of them unchanged; and every 8 blocks it rebuilds its
+whole visibility graph. Both are what we work on next.
 
 ## New in 1.2.3: see and choose what Sleepium does to each mod
 
