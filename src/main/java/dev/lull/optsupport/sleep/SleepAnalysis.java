@@ -854,12 +854,17 @@ final class SleepAnalysis {
                 return true;   // something else first: no cast to judge by
             }
             if (in.getOpcode() == Opcodes.CHECKCAST && in instanceof TypeInsnNode ti) {
-                try {
-                    Class<?> cast = dev.lull.ClassBytes.forName(ti.desc.replace('/', '.'), false, beClass.getClassLoader());
-                    return cast.isAssignableFrom(beClass);
-                } catch (ClassNotFoundException | LinkageError e) {
-                    return true;
+                // the cast's type among the block entity class's own supertypes (by name): the cast type not loaded
+                boolean r = dev.lull.ClassBytes.runtimeSubtype(beClass, ti.desc);
+                if (dev.lull.ClassBytes.TYPE_VERIFY) {
+                    try {
+                        Class<?> cast = dev.lull.ClassBytes.forName(ti.desc.replace('/', '.'), false, beClass.getClassLoader());
+                        if (cast.isAssignableFrom(beClass) != r) typeMismatch("cast " + ti.desc + " of " + beClass.getName());
+                    } catch (ClassNotFoundException | LinkageError e) {
+                        if (r) typeMismatch("cast " + ti.desc + " (not loadable) of " + beClass.getName());
+                    }
                 }
+                return r;
             }
             return true;
         }
@@ -1597,9 +1602,16 @@ final class SleepAnalysis {
         if (!desc.startsWith("L")) return false;
         String t = desc.substring(1, desc.length() - 1);
         if (t.equals("net/minecraft/core/NonNullList") || t.equals("net/minecraft/world/item/ItemStack")) return true;
+        // from the class files (nothing loaded); a mixin may add an interface, so a "no" for a class mixins change is
+        // asked of the class itself
+        Boolean m = dev.lull.ClassBytes.subtypeByBytes(loader, t, "java/util/Map", true), c2 = m != null && m ? m : dev.lull.ClassBytes.subtypeByBytes(loader, t, "java/util/Collection", true);
+        Boolean bytes = m == null || c2 == null ? null : m || c2;
+        if (bytes != null && (bytes || !dev.lull.optsupport.MixinTouch.anyForeign(t)) && !dev.lull.ClassBytes.TYPE_VERIFY) return bytes;
         try {
             Class<?> c = dev.lull.ClassBytes.forName(t.replace('/', '.'), false, loader);
-            return java.util.Map.class.isAssignableFrom(c) || java.util.Collection.class.isAssignableFrom(c);
+            boolean r = java.util.Map.class.isAssignableFrom(c) || java.util.Collection.class.isAssignableFrom(c);
+            if (dev.lull.ClassBytes.TYPE_VERIFY && bytes != null && bytes != r) typeMismatch("container " + t);
+            return r;
         } catch (ClassNotFoundException | LinkageError e) {
             return false;
         }
@@ -2382,11 +2394,22 @@ final class SleepAnalysis {
     }
 
     private boolean entityClass(String internal) {
+        // the superclass chain from the class files (a mixin cannot change it): nothing loaded
+        Boolean bytes = dev.lull.ClassBytes.subtypeByBytes(loader, internal, "net/minecraft/world/entity/Entity", false);
+        if (bytes != null && !dev.lull.ClassBytes.TYPE_VERIFY) return bytes;
         try {
-            return net.minecraft.world.entity.Entity.class.isAssignableFrom(dev.lull.ClassBytes.forName(internal.replace('/', '.'), false, loader));
+            boolean r = net.minecraft.world.entity.Entity.class.isAssignableFrom(dev.lull.ClassBytes.forName(internal.replace('/', '.'), false, loader));
+            if (bytes != null && bytes != r) typeMismatch("entity " + internal);
+            return r;
         } catch (ClassNotFoundException | LinkageError e) {
+            if (bytes != null && bytes) typeMismatch("entity " + internal + " (not loadable)");
             return false;
         }
+    }
+
+    /** -Dlab.analysis.typeVerify: a type answer from the bytes that the loaded class contradicts */
+    private static void typeMismatch(String what) {
+        if (dev.lull.ClassBytes.typeMismatches++ < 10) System.out.println("[sleep/analysis] type check MISMATCH: " + what);
     }
 
     private boolean containsClock(Operand o) {
