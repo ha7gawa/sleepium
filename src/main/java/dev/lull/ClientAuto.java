@@ -123,6 +123,58 @@ public final class ClientAuto {
     private static final double SPIN = Double.parseDouble(System.getProperty("sleep.clientAuto.spin", "0"));
     private static long spinAt;
 
+    /**
+     * -Dsleep.clientAuto.orbit=cx,cy,cz,radius,periodSeconds (the user, 11-17: "fly a circle over the zoo while the camera
+     * turns"): from the measured window's start the player flies a circle around (cx, cz) at height cy - a position each
+     * client tick, flying, so the frames between ticks interpolate it like real flight; with -Dsleep.clientAuto.spin the
+     * camera turns every frame too. Chunks load at the circle's far side, entities pass through the view.
+     */
+    private static final double[] ORBIT = parseOrbit(System.getProperty("sleep.clientAuto.orbit"));
+    private static int orbitTicks = -1;
+
+    private static double[] parseOrbit(String v) {
+        if (v == null) return null;
+        String[] p = v.split(",");
+        double[] o = new double[5];
+        for (int i = 0; i < 5; i++) o[i] = Double.parseDouble(p[i].trim());
+        return o;
+    }
+
+    /** the renderer's section counts, read with no frame drawing (the frame thread changes them: an NPE, 11-17) */
+    private static String sectionStats(Minecraft mc) {
+        dev.lull.optsupport.FrameThread.holdForMain();
+        try {
+            return mc.levelRenderer.getChunkStatistics();
+        } finally {
+            dev.lull.optsupport.FrameThread.releaseForMain();
+        }
+    }
+
+    private static void orbitTick(Minecraft mc) {
+        if (ORBIT == null || mc.player == null || shotsBase < 0 && !dev.lull.ClientMeter.measuring()) return;
+        if (orbitTicks < 0) log(String.format(Locale.ROOT, "orbit: radius %.0f around %.0f %.0f %.0f, %.0f s a round", ORBIT[3], ORBIT[0], ORBIT[1], ORBIT[2], ORBIT[4]));
+        orbitTicks++;
+        double a = 2 * Math.PI * orbitTicks / (ORBIT[4] * 20.0);
+        mc.player.getAbilities().flying = true;
+        mc.player.setDeltaMovement(0, 0, 0);
+        mc.player.setPos(ORBIT[0] + ORBIT[3] * Math.cos(a), ORBIT[1], ORBIT[2] + ORBIT[3] * Math.sin(a));
+    }
+
+    /**
+     * -Dsleep.clientAuto.lookCircle=amplitudeDeg,periodSeconds (the user, 11-17): the view itself traces a circle - yaw
+     * and pitch around their centre, every frame from the real clock (as a hand moving the mouse in circles), on top of
+     * spin's turning
+     */
+    private static final double[] LOOK = parseLook(System.getProperty("sleep.clientAuto.lookCircle"));
+    private static long lookStart;
+    private static double lookYaw, lookPitch;
+
+    private static double[] parseLook(String v) {
+        if (v == null) return null;
+        String[] p = v.split(",");
+        return new double[] {Double.parseDouble(p[0].trim()), Double.parseDouble(p[1].trim())};
+    }
+
     private static void spin() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null || mc.screen != null) {
@@ -132,6 +184,18 @@ public final class ClientAuto {
         long now = System.nanoTime();
         if (spinAt != 0) {
             float d = (float) (SPIN * (now - spinAt) / 1e9);
+            if (LOOK != null) {   // the circle's offset this frame, the last one's taken back
+                if (lookStart == 0) {
+                    lookStart = now;
+                    lookPitch = mc.player.getXRot();
+                }
+                double a = 2 * Math.PI * ((now - lookStart) / 1e9) / LOOK[1];
+                double yaw = LOOK[0] * Math.cos(a), pitch = LOOK[0] * Math.sin(a);
+                d += (float) (yaw - lookYaw);
+                lookYaw = yaw;
+                mc.player.setXRot((float) Math.max(-89, Math.min(89, lookPitch + pitch)));
+                mc.player.xRotO = mc.player.getXRot();
+            }
             mc.player.setYRot(mc.player.getYRot() + d);
             mc.player.yRotO = mc.player.getYRot();
         }
@@ -157,6 +221,12 @@ public final class ClientAuto {
      * "!resources" is the client's resource reload (F3+T) */
     private static final String CMD_AT = System.getProperty("sleep.clientAuto.cmdAt");
     private static final java.util.List<Object[]> CMDS = new java.util.ArrayList<>();
+    /**
+     * -Dsleep.clientAuto.probeEntity=namespace:type: every 2 s of the measured window the nearest such entity looked at
+     * (the player's view turned to its eyes), the pick's result and the entity's client state logged, then a right
+     * click through the use key (KeyMapping.click: the real input path) - does the game register the entity
+     */
+    private static final String PROBE_ENTITY = System.getProperty("sleep.clientAuto.probeEntity");
 
     /** -Dsleep.clientAuto.jfr=file.jfr[;settings.jfc]: a JFR recording of exactly the measured window */
     private static final String JFR = System.getProperty("sleep.clientAuto.jfr");
@@ -592,6 +662,54 @@ public final class ClientAuto {
         });
     }
 
+    private static void probeEntity(Minecraft mc) {
+        if (mc.level == null || mc.player == null) return;
+        net.minecraft.world.entity.Entity best = null;
+        double bd = Double.MAX_VALUE;
+        for (net.minecraft.world.entity.Entity e : mc.level.entitiesForRendering()) {
+            net.minecraft.resources.ResourceLocation k = net.minecraft.world.entity.EntityType.getKey(e.getType());
+            if (k == null || !PROBE_ENTITY.equals(k.toString())) continue;
+            double d = e.distanceToSqr(mc.player);
+            if (d < bd) {
+                bd = d;
+                best = e;
+            }
+        }
+        if (best == null) {
+            log("probe entity: no " + PROBE_ENTITY + " in the level - summoned 3 blocks away");
+            // the player on the ground first (the probe world's ground at 26.5 66 6.5), the entity 4 blocks in front
+            command(mc, "tp @p 26.5 66 2.5 0 0");
+            command(mc, "summon " + PROBE_ENTITY + " 26.5 66 6.5 {NoAI:1b}");
+            return;
+        }
+        net.minecraft.world.phys.Vec3 eye = mc.player.getEyePosition(), at = best.getBoundingBox().getCenter();
+        double dx = at.x - eye.x, dy = at.y - eye.y, dz = at.z - eye.z, h = Math.sqrt(dx * dx + dz * dz);
+        float yRot = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0), xRot = (float) -Math.toDegrees(Math.atan2(dy, h));
+        mc.player.setYRot(yRot);
+        mc.player.setXRot(xRot);
+        mc.player.yRotO = yRot;
+        mc.player.xRotO = xRot;
+        mc.gameRenderer.pick(1.0F);
+        net.minecraft.world.phys.HitResult hr = mc.hitResult;
+        net.minecraft.world.phys.Vec3 view = mc.player.getViewVector(1.0F);
+        boolean geo = best.getBoundingBox().clip(eye, eye.add(view.scale(6.0))).isPresent();
+        java.util.List<net.minecraft.world.entity.Entity> near = mc.level.getEntities(mc.player, mc.player.getBoundingBox().expandTowards(view.scale(6.0)).inflate(1.0));
+        log("probe entity: the view ray crosses its box " + geo + ", level.getEntities near the ray: " + near.size() + " (it among them " + near.contains(best) + ")");
+        String hit = hr == null ? "none" : hr.getType() + (hr instanceof net.minecraft.world.phys.EntityHitResult ehr ? " " + net.minecraft.world.entity.EntityType.getKey(ehr.getEntity().getType()) + "#" + ehr.getEntity().getId() : "");
+        log(String.format(java.util.Locale.ROOT, "probe entity %s#%d at %.1f blocks: pick %s; client tickCount %d, box %.2fx%.2f, pickable %s, pos %.2f %.2f %.2f, head %.1f body %.1f, screen %s",
+                PROBE_ENTITY, best.getId(), Math.sqrt(bd), hit, best.tickCount, best.getBbWidth(), best.getBbHeight(), best.isPickable(),
+                best.getX(), best.getY(), best.getZ(), best.getYHeadRot(), best instanceof net.minecraft.world.entity.LivingEntity le ? le.yBodyRot : 0f,
+                mc.screen == null ? "none" : mc.screen.getClass().getSimpleName()));
+        net.minecraft.client.server.IntegratedServer srv = mc.getSingleplayerServer();
+        if (srv != null) {   // the server's own copy (a racy read: diagnostics only)
+            net.minecraft.server.level.ServerLevel sl = srv.getLevel(mc.level.dimension());
+            net.minecraft.world.entity.Entity se = sl == null ? null : sl.getEntity(best.getId());
+            if (se != null) log(String.format(java.util.Locale.ROOT, "probe entity server side: tickCount %d, pos %.2f %.2f %.2f, head %.1f, noAi %s",
+                    se.tickCount, se.getX(), se.getY(), se.getZ(), se.getYHeadRot(), se instanceof net.minecraft.world.entity.Mob m && m.isNoAi()));
+        }
+        net.minecraft.client.KeyMapping.click(mc.options.keyUse.getKey());   // a right click: handled by the next tick's keybinds
+    }
+
     private static void tick() {
         for (java.util.Iterator<Object[]> it = CMDS.iterator(); it.hasNext(); ) {
             Object[] c = it.next();
@@ -604,6 +722,7 @@ public final class ClientAuto {
                     Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(Minecraft.getInstance().player));
                 else if ("!pause".equals(c[1])) Minecraft.getInstance().pauseGame(false);
                 else if ("!close".equals(c[1])) Minecraft.getInstance().setScreen(null);
+                else if ("!sleepium".equals(c[1])) Minecraft.getInstance().setScreen(new dev.lull.ui.SleepScreen(null));   // (the settings screen, for a shot)
                 else command(Minecraft.getInstance(), (String) c[1]);
             }
         }
@@ -611,7 +730,9 @@ public final class ClientAuto {
             shotAt = -1;
             frameHash(Minecraft.getInstance());
         }
+        if (PROBE_ENTITY != null && ticks > 0 && ticks % 40 == 0) probeEntity(Minecraft.getInstance());
         shotsTick(Minecraft.getInstance());
+        orbitTick(Minecraft.getInstance());
         if (BURST != null && !burstAsked && shotsBase >= 0 && ticks >= shotsBase + (int) Math.round(Double.parseDouble(BURST.split(":")[0]) * 20)) {
             burstAsked = true;
             Minecraft bm = Minecraft.getInstance();
@@ -765,7 +886,7 @@ public final class ClientAuto {
                 if (meshed && meshedAt == 0) meshedAt = System.nanoTime();
                 if (meshed && since(meshedAt) >= SETTLE_EXTRA) {
                     log(String.format(Locale.ROOT, "initial terrain meshed in %.1f s (%s)%s", since(phaseStart) - 2.0,
-                            mc.levelRenderer.getChunkStatistics(), since(phaseStart) > 90 ? " TIMEOUT" : ""));
+                            sectionStats(mc), since(phaseStart) > 90 ? " TIMEOUT" : ""));
                     command(mc, "gamemode " + GAMEMODE);
                     if (HAS_SCENE) {   // a rendering scene in the sky: build it now (chunks loaded), then wait for its meshes
                         command(mc, SCENE_TP);   // again: the join may still move the player after the first one
@@ -813,7 +934,7 @@ public final class ClientAuto {
                 if (meshedStable(mc) || since(phaseStart) > 60) {
                     int[] p = TP[tpIndex];
                     log(String.format(Locale.ROOT, "teleport %d to (%d, %d): terrain generated + meshed in %.1f s (%s)%s", tpIndex + 1, p[0], p[1],
-                            since(tpStart) - 2.0, mc.levelRenderer.getChunkStatistics(), since(phaseStart) > 60 ? " TIMEOUT" : ""));
+                            since(tpStart) - 2.0, sectionStats(mc), since(phaseStart) > 60 ? " TIMEOUT" : ""));
                     tpIndex++;
                     if (tpIndex < TP.length) enter(Phase.RECORD);
                     else enter(Phase.FINISH);
