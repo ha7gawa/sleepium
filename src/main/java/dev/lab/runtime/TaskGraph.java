@@ -77,6 +77,8 @@ public final class TaskGraph {
         final Runnable body;
         final Member owner;   // null: any thread
         final LabRuntime.Lane lane;
+        /** the pool's workers only - no member helps with it (its code assumes a worker: TickAsync's walk asks main) */
+        final boolean poolOnly;
         final List<Node> next = new ArrayList<>();
         Node[] succ = new Node[0];
         int deps;
@@ -90,11 +92,12 @@ public final class TaskGraph {
         final AtomicInteger claim = new AtomicInteger();
         public long runs, nanos;
 
-        Node(String name, Runnable body, Member owner, LabRuntime.Lane lane) {
+        Node(String name, Runnable body, Member owner, LabRuntime.Lane lane, boolean poolOnly) {
             this.name = name;
             this.body = body;
             this.owner = owner;
             this.lane = lane;
+            this.poolOnly = poolOnly;
         }
 
         /** the pool's entry: runs the node if nobody claimed it yet */
@@ -142,19 +145,24 @@ public final class TaskGraph {
         this.pool = pool;
     }
 
-    /** a node that runs on any thread (the pool's lane given) */
+    /** a node that runs on any thread (the pool's lane given; members waiting may help with it) */
     public Node add(String name, LabRuntime.Lane lane, Runnable body) {
-        return add(name, null, lane, body);
+        return add(name, null, lane, body, false);
+    }
+
+    /** a node for the pool's workers only (no member helps with it) */
+    public Node addPoolOnly(String name, LabRuntime.Lane lane, Runnable body) {
+        return add(name, null, lane, body, true);
     }
 
     /** a node that runs only on its owner */
     public Node add(String name, Member owner, Runnable body) {
-        return add(name, owner, LabRuntime.Lane.TICK, body);
+        return add(name, owner, LabRuntime.Lane.TICK, body, false);
     }
 
-    private Node add(String name, Member owner, LabRuntime.Lane lane, Runnable body) {
+    private Node add(String name, Member owner, LabRuntime.Lane lane, Runnable body, boolean poolOnly) {
         if (sealed) throw new IllegalStateException(this.name + " is sealed");
-        Node n = new Node(name, body, owner, lane);
+        Node n = new Node(name, body, owner, lane, poolOnly);
         nodes.add(n);
         return n;
     }
@@ -198,6 +206,10 @@ public final class TaskGraph {
             return;
         }
         n.ready = epoch;
+        if (n.poolOnly) {
+            pool.execute(n, n.lane);
+            return;
+        }
         while (!readyAny.offer(n)) Thread.onSpinWait();
         pool.execute(n, n.lane);
         wakeWaiters();   // (members waiting for this graph can take it too: whoever claims it first runs it)

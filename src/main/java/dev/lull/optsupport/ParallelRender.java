@@ -1111,7 +1111,40 @@ public final class ParallelRender {
     static final boolean DRAIN_TIME = Boolean.getBoolean("lab.prender.drainTime");
     public static long drainNs, mergeNs, drains, merges;
 
+    /**
+     * the thread in drain now and where it came from (null: none) - a second drain while one runs would take the same
+     * queue's jobs (an NPE once at ON_WORKER.put, 11-17: an entity cleared by another drain); seen, both are logged once
+     */
+    private static final java.util.concurrent.atomic.AtomicReference<Thread> DRAINING = new java.util.concurrent.atomic.AtomicReference<>();
+    private static volatile Throwable drainingAt;
+    private static boolean drainTwiceLogged;
+    public static long drainsTwice;
+
     public static void drain(LevelRenderer lr) {
+        Thread prev = DRAINING.getAndSet(Thread.currentThread());
+        if (prev != null) {
+            drainsTwice++;
+            if (!drainTwiceLogged) {
+                drainTwiceLogged = true;
+                Throwable first = drainingAt;
+                System.out.println("[sleep/opt] parallel render: a drain while another runs - " + prev.getName() + " then " + Thread.currentThread().getName());
+                if (first != null) first.printStackTrace(System.out);
+                new Throwable("the second drain").printStackTrace(System.out);
+            }
+        }
+        if (prev == null && !drainTwiceLogged) drainingAt = drainsTwice == 0 && DRAIN_STACKS ? new Throwable("the first drain") : null;
+        try {
+            drain1(lr);
+        } finally {
+            if (prev == null) DRAINING.set(null);
+            else DRAINING.set(prev);
+        }
+    }
+
+    /** -Dlab.prender.drainStacks (debug): the first drain's stack kept each frame, for the log above */
+    private static final boolean DRAIN_STACKS = Boolean.getBoolean("lab.prender.drainStacks");
+
+    private static void drain1(LevelRenderer lr) {
         if (DRAIN_TIME) {
             long t0 = System.nanoTime();
             try {

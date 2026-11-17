@@ -277,6 +277,16 @@ public final class FrameThread {
     }
 
     private static volatile boolean walkReady;
+    /** a node of a task graph waits in the main thread's inbox (TickAsync's graph): its idle wait ends */
+    private static volatile boolean mainWork;
+    public static long idleWakesWork;
+
+    /** a pool thread posted work for the main thread (TaskGraph's main member): woken from its waits */
+    public static void mainWork(Thread main) {
+        mainWork = true;
+        LockSupport.unpark(main);
+        if (active && (mainIdle || mainWaiting)) org.lwjgl.glfw.GLFW.glfwPostEmptyEvent();
+    }
     public static long idleWakesWalk;
 
     /** TickAsync's walk done (a worker): the main thread woken to join it - the frames draw its new poses at once */
@@ -358,6 +368,11 @@ public final class FrameThread {
                 }
                 if (walkReady) {
                     idleWakesWalk++;
+                    break;
+                }
+                if (mainWork) {
+                    mainWork = false;
+                    idleWakesWork++;
                     break;
                 }
                 if (mc.screen != null || !selfOk) {

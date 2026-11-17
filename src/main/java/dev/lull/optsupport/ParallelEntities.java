@@ -434,8 +434,19 @@ public final class ParallelEntities {
 
     /** Minecraft.tick returned: the left-out entities on the pool, each ticked then captured; the render thread goes on */
     static void startAsync() {
+        int helpers = prepareAsync();
+        if (helpers == 0) return;
+        LabRuntime pool = FrameReactor.pool();
+        for (int k = 0; k < helpers; k++) pool.execute(ParallelEntities::asyncWorkerRun);
+    }
+
+    /**
+     * the walk's state set up for its workers (TickAsync's graph dispatches them as its walk nodes); the workers it wants
+     * (0: no walk this tick)
+     */
+    static int prepareAsync() {
         int m = asyncM;
-        if (m == 0 || asyncRunning) return;
+        if (m == 0 || asyncRunning) return 0;
         if (all.length < m) all = java.util.Arrays.copyOf(all, Math.max(m, all.length * 2));
         System.arraycopy(asyncAll, 0, all, 0, m);   // (the walk is over: all[] is free; the hooks index it)
         java.util.Arrays.fill(asyncAll, 0, m, null);
@@ -463,10 +474,16 @@ public final class ParallelEntities {
         LabRuntime pool = FrameReactor.pool();
         int helpers = Math.max(1, Math.min(pool.workerCount(), m));
         parts = helpers + 1;
-        for (int k = 0; k < helpers; k++) pool.execute(ParallelEntities::asyncWorkerRun);
+        return helpers;
     }
 
-    private static void asyncWorkerRun() {
+    /** the main thread before it waits for the walk: the entities no worker claimed yet, ticked here (serving the workers) */
+    static void helpAsync() {
+        if (asyncRunning) asyncDrain(true);
+    }
+
+    /** a walk node's body: the claims of a worker (a node with nothing left to claim ends at once) */
+    static void asyncWorkerRun() {
         boolean[] in = ParticleWorkers.IN_WORKER.get();
         in[0] = true;
         try {

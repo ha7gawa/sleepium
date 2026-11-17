@@ -163,6 +163,7 @@
     "RenderThreadMixin",
     "RenderThreadModelDataMixin",
     "FrameThreadMixin",
+    "FrameThreadFontMixin",
     "FrameProfileMixin",
     "FrameProfileFlushMixin",
     "FrameProfileUploadMixin",

@@ -120,18 +120,99 @@ public final class TickAsync {
         giveWay(w);
     }
 
+    /**
+     * -Dlab.tickAsync.graph (in lab.decoupled; notes/75 stage 6): the walk as a TaskGraph on the client's pool - walk
+     * nodes for the workers (pool only: a walking worker asks the main thread for block shapes), then the join node on
+     * the main thread's member (the deferred moves, the pairs swapped, the generation published). It replaces the hand
+     * wiring (walkDone's wake, joinIfDone's check): the join is posted to the main thread's inbox when the last walk node
+     * ends, and the main thread runs it at its next runTick (its idle wait woken). A main thread that must join earlier
+     * (a tick due, a level change) ticks the unclaimed entities itself first, then waits for the graph - running its
+     * inbox, serving the workers.
+     */
+    public static final boolean GRAPH = Boolean.getBoolean("lab.tickAsync.graph");
+    private static dev.lab.runtime.TaskGraph graph;
+    private static dev.lab.runtime.TaskGraph.Member mainMember;
+    public static long graphRuns, graphJoinsOnMain;
+
+    /** the main thread's member (made on the main thread) */
+    private static dev.lab.runtime.TaskGraph.Member main() {
+        if (mainMember == null) {
+            mainMember = new dev.lab.runtime.TaskGraph.Member("main", FrameThread::mainWork);
+            mainMember.bind(Thread.currentThread());
+        }
+        return mainMember;
+    }
+
+    private static dev.lab.runtime.TaskGraph graph() {
+        if (graph == null) {
+            dev.lab.runtime.LabRuntime pool = FrameReactor.pool();
+            dev.lab.runtime.TaskGraph g = new dev.lab.runtime.TaskGraph("client tick", pool);
+            dev.lab.runtime.TaskGraph.Node join = g.add("join", main(), TickAsync::graphJoin);
+            for (int k = 0; k < pool.workerCount(); k++)
+                g.after(g.addPoolOnly("walk" + k, dev.lab.runtime.LabRuntime.Lane.TICK, ParallelEntities::asyncWorkerRun), join);
+            graph = g.seal();
+        }
+        return graph;
+    }
+
+    /** the join node (main): the walk is done - its world part and its render part (generations: no frame hold) */
+    private static void graphJoin() {
+        long t0 = System.nanoTime();
+        ParallelEntities.joinAsyncWorld();
+        finishRender();
+        joinWaitNs += System.nanoTime() - t0;
+        joins++;
+    }
+
+    private static boolean graphRunning() {
+        return graph != null && !graph.done();
+    }
+
+    /** the main thread: the graph run to its end - the unclaimed entities ticked here, then its inbox and the workers served */
+    private static void graphJoinNow() {
+        if (!graphRunning()) {
+            if (mainMember != null) mainMember.runInbox();
+            return;
+        }
+        graphJoinsOnMain++;
+        ParallelEntities.helpAsync();
+        graph.await(main(), TickAsync::graphSleep);
+    }
+
+    private static void graphSleep() {
+        ParticleWorkers.serve();
+        java.util.concurrent.locks.LockSupport.parkNanos(100_000L);
+    }
+
+    public static String graphReport() {
+        return graph == null ? "tick graph: not used" : graph.report() + ", joined early on main " + graphJoinsOnMain
+                + (mainMember == null ? "" : ", main ran " + mainMember.ran + " nodes, waited " + mainMember.waits + " times");
+    }
+
     public static void tickEnd() {
         if (pausedTicks > 0 && --pausedTicks == 0) {   // try again, measured afresh
             enabled = true;
             waitEma = 0;
         }
         gate();
+        if (GRAPH) {
+            if (graphRunning()) graphJoinNow();   // (a run left over: never two at once)
+            if (ParallelEntities.prepareAsync() > 0) {
+                graphRuns++;
+                graph().start();
+            }
+            return;
+        }
         ParallelEntities.startAsync();
     }
 
 
     /** runTick's / Minecraft.tick's start: the walk joined (help, then wait) */
     public static void join() {
+        if (GRAPH) {
+            graphJoinNow();
+            return;
+        }
         if (!ParallelEntities.asyncRunning()) return;
         long t0 = System.nanoTime();
         ParallelEntities.joinAsyncWorld();   // (the frame thread may draw meanwhile: nothing it reads changes here)
@@ -145,6 +226,10 @@ public final class TickAsync {
      * packets - a join there waited for a walk just begun; the walk's end wakes it instead: FrameThread.walkDone)
      */
     public static void joinIfDone() {
+        if (GRAPH) {   // (the graph posted its join to the main thread's inbox once the walk ended: run it now)
+            if (mainMember != null) mainMember.runInbox();
+            return;
+        }
         if (ParallelEntities.asyncRunning() && ParallelEntities.asyncFinished()) join();
     }
 
@@ -155,6 +240,16 @@ public final class TickAsync {
      * or a tick is due anyway; otherwise the tasks wait (counted)
      */
     public static boolean tasksMayRun(boolean tickDue) {
+        if (GRAPH) {
+            if (mainMember != null) mainMember.runInbox();
+            if (!graphRunning()) return true;
+            if (tickDue) {
+                graphJoinNow();
+                return true;
+            }
+            tasksDeferred++;
+            return false;
+        }
         if (!ParallelEntities.asyncRunning()) return true;
         if (tickDue || ParallelEntities.asyncFinished()) {
             join();
@@ -166,6 +261,7 @@ public final class TickAsync {
 
     /** a level change: the walk joined whole, its render part too */
     public static void joinAll() {
+        if (GRAPH) graphJoinNow();
         if (ParallelEntities.asyncRunning()) {
             ParallelEntities.joinAsyncWorld();
             finishRender(false);
@@ -224,6 +320,7 @@ public final class TickAsync {
                 gaveWay, tasksDeferred)
                 + String.format(java.util.Locale.ROOT, "; skips: no pair %d, snapshot failed %d, pair merge failed %d (held pairs on the CPU after a GPU refusal %d, refusals marked %d)",
                         skipNone, skipSnap, skipMerge, TickPoses.HELD_CPU.get(), TickPoses.HELD_REFUSED.get())
-                + String.format(java.util.Locale.ROOT, "; generation gates %d (waited at %d, %.3f ms a gate)", gates, gateWaits, gates == 0 ? 0.0 : gateWaitNs / 1e6 / gates);
+                + String.format(java.util.Locale.ROOT, "; generation gates %d (waited at %d, %.3f ms a gate)", gates, gateWaits, gates == 0 ? 0.0 : gateWaitNs / 1e6 / gates)
+                + (GRAPH ? "; " + graphReport() : "");
     }
 }

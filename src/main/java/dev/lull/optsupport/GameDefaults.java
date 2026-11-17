@@ -34,7 +34,7 @@ public final class GameDefaults {
         String[] set = {"lab.opt.FrameThreadMixin=true",
                 "lab.opt.TickAsyncMixin=true", "lab.prender.tickPoses=true", "lab.pentities.living=true", "lab.partbatch.itemsAnyOrder=true",
                 "lab.prender.tickPoses.tolerance=0.1", "lab.opt.OnePool=true", "lab.leaves.cull=2",
-                "lab.gpu.framesInFlight.auto=true"};
+                "lab.gpu.framesInFlight.auto=true", "lab.tickAsync.graph=true"};
         int n = 0;
         for (String kv : set) {
             int eq = kv.indexOf('=');
