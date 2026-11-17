@@ -35,7 +35,7 @@ public final class FrameProfile implements ProfilerFiller {
     private long frames;
     /**
      * -Dlab.frameProfile.slowUs (4000): frames longer than this (start to next start) also summed apart - the slow
-     * frames' sections next to the average ones (the user, 11-17: the dips are the 1 % low, not the average)
+     * frames' sections next to the average ones (11-17: the dips are the 1 % low, not the average)
      */
     private static final long SLOW_NS = Long.getLong("lab.frameProfile.slowUs", 4000) * 1000L;
     private final long[] frameT = new long[MAX], slowT = new long[MAX];

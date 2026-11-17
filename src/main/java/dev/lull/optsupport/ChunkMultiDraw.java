@@ -1477,7 +1477,7 @@ public final class ChunkMultiDraw {
     }
 
     /**
-     * -Dlab.chunkmd.parallelLists (11-17, the user's hand test: flying over the zoo at distance 32 the frame thread built
+     * -Dlab.chunkmd.parallelLists (11-17, a hand test: flying over the zoo at distance 32 the frame thread built
      * every layer's draw list anew each frame - ~650 us a layer over ~2000 sections, one thread): the section loop split
      * into parts on the client pool. A part works out its sections' draws (entries, face buckets, offsets) into its own
      * scratch; the frame thread claims parts too, then appends every part's draws to the arenas in section order - the

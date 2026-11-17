@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * An abstract thread on a pool (1.3.0, the user's roles): a serial executor - its tasks run one at a time, in order,
+ * An abstract thread on a pool (1.3.0): a serial executor - its tasks run one at a time, in order,
  * never two at once - with no thread of its own. While it has tasks one pool worker drains it; when it is empty it
  * costs nothing. In place of a single-thread executor that holds a parked OS thread for the life of the game.
  */

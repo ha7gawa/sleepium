@@ -15,7 +15,7 @@ public final class GameDefaults {
     private static boolean done;
 
     /**
-     * -Dlab.decoupled=true (1.3.0 research, non-exact - the user's call 11-15): the decoupled mode in one switch - the
+     * -Dlab.decoupled=true (1.3.0 research, non-exact - a decision of 11-15): the decoupled mode in one switch - the
      * frame on its own thread drawing while the main thread ticks, extra frames during a long tick (the camera turning
      * with the cursor), entities ticked on the pool after the tick and drawn from tick-rate poses (held items and
      * translucent / additive layers in any order, the pose check's tolerance 0.1 blocks), no leaf faces deep in
@@ -24,7 +24,7 @@ public final class GameDefaults {
      * user 11-16: blurry; -Dlab.clouds.half=true for weak GPUs). Each flag can still be given on its own (a given value
      * wins). A ring of 3 recorded frames (11-16: the main thread records the next frame while the frame thread draws -
      * N100 tour 427 -> 471 fps uncapped, p99 18.4 -> 16.3 ms at 120 fps). The pipeline's stages 1-3 (notes/75, 11-16
-     * evening, the user's hand test "very smooth"): the tick's generations, published lists, the view latched at every
+     * evening, a hand test: "very smooth"): the tick's generations, published lists, the view latched at every
      * frame, self-clocked frames (N100 tour at 120 fps p99 15.6 -> 12.2 ms, stutters halved).
      */
     private static void decoupledPreset() {
