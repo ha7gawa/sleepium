@@ -246,6 +246,8 @@
     "ChunkSectionMixin",
     "ChunkUploadMixin",
     "UploadBindMixin",
+    "LazyChunkBufferMixin",
+    "LazyChunkBufferAreaMixin",
     "EntityDrawFramesMixin",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",

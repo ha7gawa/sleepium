@@ -18,6 +18,8 @@
 -Dlab.opt.ChunkTickMemoMixin=true
 -Dlab.opt.ChunkUploadMixin=true
 -Dlab.opt.UploadBindMixin=true
+-Dlab.opt.LazyChunkBufferMixin=true
+-Dlab.opt.LazyChunkBufferAreaMixin=true
 -Dlab.opt.ClientBiomeMemoMixin=true
 -Dlab.opt.ClientChunkCacheBiomeMixin=true
 -Dlab.opt.ClientEventSiteMixin=true
