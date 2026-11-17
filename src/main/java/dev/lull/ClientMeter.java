@@ -193,6 +193,14 @@ public final class ClientMeter {
             by.merge(NAMES.getOrDefault(e.getKey(), "?"), d, Long::sum);
         }
         StringBuilder b = new StringBuilder("java threads (cores):");
+        try {   // the render thread's monitor waits since start (ClientAuto enables contention monitoring)
+            var mx = java.lang.management.ManagementFactory.getThreadMXBean();
+            for (Thread t : Thread.getAllStackTraces().keySet())
+                if (t.getName().equals("Render thread")) {
+                    var ti = mx.getThreadInfo(t.getId());
+                    if (ti != null) b.insert(0, "render thread blocked on monitors since start: " + ti.getBlockedCount() + " times, " + ti.getBlockedTime() + " ms; ");
+                }
+        } catch (Throwable ignored) {}
         by.entrySet().stream().sorted((x, y) -> Long.compare(y.getValue(), x.getValue())).limit(10)
                 .forEach(e -> b.append(String.format(Locale.ROOT, " %s %.2f;", e.getKey(), e.getValue() / 1e9 / secs)));
         return b.toString();

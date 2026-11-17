@@ -588,6 +588,10 @@ public final class ClientAuto {
             if (e.phase == TickEvent.Phase.START) spin();   // 1.21.1: RenderFrameEvent.Pre
         });
         log("enabled, label '" + LABEL + "'");
+        try {   // the render thread's monitor waits over the whole session (the player's 11-17 report: waits on Mixin's lock)
+            var mx = java.lang.management.ManagementFactory.getThreadMXBean();
+            if (mx.isThreadContentionMonitoringSupported()) mx.setThreadContentionMonitoringEnabled(true);
+        } catch (Throwable ignored) {}
         // -Dsleep.clientAuto.asPlayers=true: vanilla's development-only paths off, as in a player's game (e.g. the
         // two warnings per sound that finds the channel pool full: a dev run measured their logging, not the game)
         if (Boolean.getBoolean("sleep.clientAuto.asPlayers")) {
