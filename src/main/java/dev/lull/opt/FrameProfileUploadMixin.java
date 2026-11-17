@@ -30,6 +30,20 @@ public abstract class FrameProfileUploadMixin {
         }
     }
 
+    @WrapMethod(method = "bind")
+    private void sleep$bind(Operation<Void> original) {
+        if (!FrameThread.drawingHere()) {
+            original.call();
+            return;
+        }
+        FrameProfile.INSTANCE.push("bind");
+        try {
+            original.call();
+        } finally {
+            FrameProfile.INSTANCE.pop();
+        }
+    }
+
     @WrapMethod(method = "drawWithShader(Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;Lnet/minecraft/client/renderer/ShaderInstance;)V")
     private void sleep$draw(Matrix4f view, Matrix4f proj, ShaderInstance shader, Operation<Void> original) {
         if (!FrameThread.drawingHere()) {

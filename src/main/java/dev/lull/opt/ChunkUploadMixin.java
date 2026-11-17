@@ -24,6 +24,16 @@ public abstract class ChunkUploadMixin implements ChunkBufferTag {
         sleep$layer = layer;
     }
 
+    @Override
+    public SectionRenderDispatcher.RenderSection sleep$tagSection() {
+        return sleep$section;
+    }
+
+    @Override
+    public RenderType sleep$tagLayer() {
+        return sleep$layer;
+    }
+
     @org.spongepowered.asm.mixin.Shadow private com.mojang.blaze3d.vertex.VertexFormat format;
 
     /** exp/shader-light: a section's vanilla BLOCK buffer (the translucent layer) exposes the recipe bytes (attribute 7) */
@@ -44,6 +54,21 @@ public abstract class ChunkUploadMixin implements ChunkBufferTag {
 
     @Inject(method = "upload(Lcom/mojang/blaze3d/vertex/MeshData;)V", at = @At("HEAD"), cancellable = true)
     private void sleep$store(MeshData mesh, CallbackInfo ci) {
+        try {
+            sleep$store0(mesh, ci);
+        } finally {   // vanilla uploads it after all: the bind UploadBindMixin left out, now
+            if (ChunkBufferTag.Deferred.buffer == this) {
+                ChunkBufferTag.Deferred.buffer = null;
+                if (!ci.isCancelled()) {
+                    ((VertexBuffer) (Object) this).bind();
+                    ChunkBufferTag.Deferred.boundLate++;
+                }
+            }
+        }
+    }
+
+    @Unique
+    private void sleep$store0(MeshData mesh, CallbackInfo ci) {
         if (sleep$section == null) return;
         if (dev.lull.optsupport.MeshMemo.VERIFY) dev.lull.optsupport.MeshMemo.uploaded(sleep$section, sleep$layer, mesh);
         if (dev.lull.optsupport.RegionDraw.on()) {   // no draw parameters here (GL translators): the opaque layers by region

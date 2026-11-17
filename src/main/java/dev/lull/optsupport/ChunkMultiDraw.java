@@ -1925,6 +1925,8 @@ public final class ChunkMultiDraw {
                 + String.format(java.util.Locale.ROOT, "; list rebuilds %d (reused %d): section loop %.1f us each (%.0f sections, %.0f ns a section), the flush after %.1f us each",
                         listBuilds, drawReuses, listNanos / 1e3 / Math.max(1, listBuilds), (double) listSections / Math.max(1, listBuilds),
                         listNanos / (double) Math.max(1, listSections), listFlushNanos / 1e3 / Math.max(1, listBuilds))
+                + String.format(java.util.Locale.ROOT, "; flushes: offsets upload %.1f us, commands upload %.1f us, draw loop %.1f us a rebuilt layer",
+                        offNanos / 1e3 / Math.max(1, listBuilds), cmdUpNanos / 1e3 / Math.max(1, listBuilds), loopNanos / 1e3 / Math.max(1, listBuilds))
                 + (PARALLEL_LISTS ? String.format(java.util.Locale.ROOT, "; parallel lists %d (parts %d, by workers %d, fallbacks %d): the wait %.1f us, the merge %.1f us each",
                         parBuilds, parParts, parWorkerParts, parFallbacks, parWaitNanos / 1e3 / Math.max(1, parBuilds), parMergeNanos / 1e3 / Math.max(1, parBuilds)) : "");
     }
