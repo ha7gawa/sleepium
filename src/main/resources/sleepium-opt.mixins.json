@@ -172,6 +172,7 @@
     "MeshMemoTaskMixin",
     "MeshMemoTintMixin",
     "MeshMemoLightMixin",
+    "ViewAreaStripsMixin",
     "FrameThreadLightSkipMixin",
     "FrameThreadFontMixin",
     "FrameProfileMixin",
