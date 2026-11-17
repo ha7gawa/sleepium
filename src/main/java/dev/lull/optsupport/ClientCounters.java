@@ -55,7 +55,7 @@ public final class ClientCounters {
                 + (TickSlice.ON ? "; " + TickSlice.report() : "")
                 + (GlInbox.ON ? "; " + GlInbox.report() : "")
                 + FrameThread.report()
-                + (TintBlend.ON ? "; " + TintBlend.report() : "") + (FrameProfile.ON ? "; " + FrameProfile.report() : "")
+                + (TintBlend.ON ? "; " + TintBlend.report() : "") + "; " + dev.lull.ClassBytes.passReport() + (FrameProfile.ON ? "; " + FrameProfile.report() : "")
                 + (FrameProfile.SERVER_ON ? "; " + FrameProfile.serverReport() : "")
                 + (StallProbe.ON ? "; " + StallProbe.report() : "")
                 + (ClientTickProfile.ON ? "; " + ClientTickProfile.report() : "")

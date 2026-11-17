@@ -28,6 +28,16 @@ public abstract class ChunkUploadMixin implements ChunkBufferTag {
         sleep$layer = layer;
     }
 
+    @Override
+    public ChunkRenderDispatcher.RenderChunk sleep$tagSection() {
+        return sleep$section;
+    }
+
+    @Override
+    public RenderType sleep$tagLayer() {
+        return sleep$layer;
+    }
+
     @org.spongepowered.asm.mixin.Shadow private com.mojang.blaze3d.vertex.VertexFormat format;
     @org.spongepowered.asm.mixin.Shadow private int vertexBufferId;
 
@@ -50,6 +60,21 @@ public abstract class ChunkUploadMixin implements ChunkBufferTag {
 
     @Inject(method = "upload", at = @At("HEAD"), cancellable = true)
     private void sleep$store(BufferBuilder.RenderedBuffer mesh, CallbackInfo ci) {
+        try {
+            sleep$store0(mesh, ci);
+        } finally {   // vanilla uploads it after all: the bind UploadBindMixin left out, now
+            if (ChunkBufferTag.Deferred.buffer == this) {
+                ChunkBufferTag.Deferred.buffer = null;
+                if (!ci.isCancelled()) {
+                    ((VertexBuffer) (Object) this).bind();
+                    ChunkBufferTag.Deferred.boundLate++;
+                }
+            }
+        }
+    }
+
+    @org.spongepowered.asm.mixin.Unique
+    private void sleep$store0(BufferBuilder.RenderedBuffer mesh, CallbackInfo ci) {
         if (sleep$section == null || isInvalid()) return;   // (an invalid buffer: vanilla's upload does nothing)
         if (mesh.drawState().indexOnly()) {
             // a translucent section's resort: ChunkMultiDraw's copy takes the new order too

@@ -16,6 +16,7 @@ lab.opt.ChunkTickMemoChunkMixin	ticks	true	ChunkTickMemoMixin: the remembered an
 lab.opt.ChunkTickMemoEpochMixin	ticks	true	ChunkTickMemoMixin: every write of the chunk-visibility map goes through here.	lab.opt.ChunkTickMemoMixin
 lab.opt.ChunkTickMemoMixin	ticks	true	exp/chunk-tick-memo: see ChunkTickMemo.	
 lab.opt.ChunkUploadMixin	chunks	true	ChunkMultiDraw: a section layer's mesh is also copied into its region arena before vanilla uploads it.	lab.opt.ChunkMultiDrawMixin
+lab.opt.UploadBindMixin	chunks	true	ChunkUploadMixin: a section mesh our arenas take skips the bind of the section's own VAO (never drawn; the costliest part of an upload).	lab.opt.ChunkUploadMixin
 lab.opt.ClientBiomeMemoMixin	chunks	true	exp/client-biome-memo (client): the render thread's noise-biome lookups (fog colour: 216 per frame, sky colour, the ambient particles of animateTick: ~1300 per tick) answered from a per-level memo of quart position -> biome holder.	
 lab.opt.ClientChunkCacheBiomeMixin	chunks	true	ClientBiomeMemoMixin: every change of the chunk data (or of which chunks count as present) clears the biome memo.	lab.opt.ClientBiomeMemoMixin
 lab.opt.ClientEventSiteMixin	ticks	true	exp/client-event-sites (client): EventSiteMixin's carrier for the client.	

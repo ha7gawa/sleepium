@@ -241,6 +241,7 @@
     "ChunkShaderPatchMixin",
     "ChunkSectionMixin",
     "ChunkUploadMixin",
+    "UploadBindMixin",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",
     "SoundChannelHandleAccessor",
