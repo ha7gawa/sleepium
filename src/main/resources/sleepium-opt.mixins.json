@@ -163,6 +163,10 @@
   "client": [
     "ParallelAnimationMixin",
     "FrameThreadMixin",
+    "FrameThreadSodiumChunksMixin",
+    "FrameThreadLightSkipMixin",
+    "FrameThreadEmbeddiumMixin",
+    "FrameThreadFontMixin",
     "FrameProfileMixin",
     "FrameProfileFlushMixin",
     "FrameProfileUploadMixin",

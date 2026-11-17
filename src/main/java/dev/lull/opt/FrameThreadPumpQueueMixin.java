@@ -14,6 +14,8 @@ import org.spongepowered.asm.mixin.injection.At;
 public abstract class FrameThreadPumpQueueMixin {
     @ModifyReturnValue(method = "scheduleExecutables", at = @At("RETURN"))
     private boolean sleep$queueWhilePumping(boolean schedule) {
-        return schedule || dev.lull.optsupport.FrameThread.pumping;
+        // (the main thread's own calls only: a frame thread asking - GeckoLib's Minecraft.submit(..).get() for a glowing
+        // texture while main pumped, waiting for that frame - was queued for main and deadlocked, Biohazard 11-17)
+        return schedule || dev.lull.optsupport.FrameThread.pumping && dev.lull.optsupport.FrameThread.onMainThread();
     }
 }
