@@ -481,6 +481,58 @@ public final class ClientAuto {
     private static final double SPIN = Double.parseDouble(System.getProperty("sleep.clientAuto.spin", "0"));
     private static long spinAt;
 
+    /**
+     * -Dsleep.clientAuto.orbit=cx,cy,cz,radius,periodSeconds (the user, 11-17: "fly a circle over the zoo while the camera
+     * turns"): from the measured window's start the player flies a circle around (cx, cz) at height cy - a position each
+     * client tick, flying, so the frames between ticks interpolate it like real flight; with -Dsleep.clientAuto.spin the
+     * camera turns every frame too. Chunks load at the circle's far side, entities pass through the view.
+     */
+    private static final double[] ORBIT = parseOrbit(System.getProperty("sleep.clientAuto.orbit"));
+    private static int orbitTicks = -1;
+
+    private static double[] parseOrbit(String v) {
+        if (v == null) return null;
+        String[] p = v.split(",");
+        double[] o = new double[5];
+        for (int i = 0; i < 5; i++) o[i] = Double.parseDouble(p[i].trim());
+        return o;
+    }
+
+    /** the renderer's section counts, read with no frame drawing (the frame thread changes them: an NPE, 11-17) */
+    private static String sectionStats(Minecraft mc) {
+        dev.lull.optsupport.FrameThread.holdForMain();
+        try {
+            return mc.levelRenderer.getSectionStatistics();
+        } finally {
+            dev.lull.optsupport.FrameThread.releaseForMain();
+        }
+    }
+
+    private static void orbitTick(Minecraft mc) {
+        if (ORBIT == null || mc.player == null || shotsBase < 0 && !dev.lull.ClientMeter.measuring()) return;
+        if (orbitTicks < 0) log(String.format(Locale.ROOT, "orbit: radius %.0f around %.0f %.0f %.0f, %.0f s a round", ORBIT[3], ORBIT[0], ORBIT[1], ORBIT[2], ORBIT[4]));
+        orbitTicks++;
+        double a = 2 * Math.PI * orbitTicks / (ORBIT[4] * 20.0);
+        mc.player.getAbilities().flying = true;
+        mc.player.setDeltaMovement(0, 0, 0);
+        mc.player.setPos(ORBIT[0] + ORBIT[3] * Math.cos(a), ORBIT[1], ORBIT[2] + ORBIT[3] * Math.sin(a));
+    }
+
+    /**
+     * -Dsleep.clientAuto.lookCircle=amplitudeDeg,periodSeconds (the user, 11-17): the view itself traces a circle - yaw
+     * and pitch around their centre, every frame from the real clock (as a hand moving the mouse in circles), on top of
+     * spin's turning
+     */
+    private static final double[] LOOK = parseLook(System.getProperty("sleep.clientAuto.lookCircle"));
+    private static long lookStart;
+    private static double lookYaw, lookPitch;
+
+    private static double[] parseLook(String v) {
+        if (v == null) return null;
+        String[] p = v.split(",");
+        return new double[] {Double.parseDouble(p[0].trim()), Double.parseDouble(p[1].trim())};
+    }
+
     private static void spin() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null || mc.screen != null) {
@@ -490,6 +542,18 @@ public final class ClientAuto {
         long now = System.nanoTime();
         if (spinAt != 0) {
             float d = (float) (SPIN * (now - spinAt) / 1e9);
+            if (LOOK != null) {   // the circle's offset this frame, the last one's taken back
+                if (lookStart == 0) {
+                    lookStart = now;
+                    lookPitch = mc.player.getXRot();
+                }
+                double a = 2 * Math.PI * ((now - lookStart) / 1e9) / LOOK[1];
+                double yaw = LOOK[0] * Math.cos(a), pitch = LOOK[0] * Math.sin(a);
+                d += (float) (yaw - lookYaw);
+                lookYaw = yaw;
+                mc.player.setXRot((float) Math.max(-89, Math.min(89, lookPitch + pitch)));
+                mc.player.xRotO = mc.player.getXRot();
+            }
             mc.player.setYRot(mc.player.getYRot() + d);
             mc.player.yRotO = mc.player.getYRot();
         }
@@ -592,6 +656,7 @@ public final class ClientAuto {
                     Minecraft.getInstance().setScreen(new net.minecraft.client.gui.screens.inventory.InventoryScreen(Minecraft.getInstance().player));
                 else if ("!pause".equals(c[1])) Minecraft.getInstance().pauseGame(false);
                 else if ("!close".equals(c[1])) Minecraft.getInstance().setScreen(null);
+                else if ("!sleepium".equals(c[1])) Minecraft.getInstance().setScreen(new dev.lull.ui.SleepScreen(null));   // (the settings screen, for a shot)
                 else command(Minecraft.getInstance(), (String) c[1]);
             }
         }
@@ -600,6 +665,7 @@ public final class ClientAuto {
             frameHash(Minecraft.getInstance());
         }
         shotsTick(Minecraft.getInstance());
+        orbitTick(Minecraft.getInstance());
         if (BURST != null && !burstAsked && shotsBase >= 0 && ticks >= shotsBase + (int) Math.round(Double.parseDouble(BURST.split(":")[0]) * 20)) {
             burstAsked = true;
             Minecraft bm = Minecraft.getInstance();
@@ -741,7 +807,7 @@ public final class ClientAuto {
                 if (meshed && meshedAt == 0) meshedAt = System.nanoTime();
                 if (meshed && since(meshedAt) >= SETTLE_EXTRA) {
                     log(String.format(Locale.ROOT, "initial terrain meshed in %.1f s (%s)%s", since(phaseStart) - 2.0,
-                            mc.levelRenderer.getSectionStatistics(), since(phaseStart) > 90 ? " TIMEOUT" : ""));
+                            sectionStats(mc), since(phaseStart) > 90 ? " TIMEOUT" : ""));
                     command(mc, "gamemode " + GAMEMODE);
                     if (HAS_SCENE) {   // a rendering scene in the sky: build it now (chunks loaded), then wait for its meshes
                         command(mc, SCENE_TP);   // again: the join may still move the player after the first one
@@ -789,7 +855,7 @@ public final class ClientAuto {
                 if (meshedStable(mc) || since(phaseStart) > 60) {
                     int[] p = TP[tpIndex];
                     log(String.format(Locale.ROOT, "teleport %d to (%d, %d): terrain generated + meshed in %.1f s (%s)%s", tpIndex + 1, p[0], p[1],
-                            since(tpStart) - 2.0, mc.levelRenderer.getSectionStatistics(), since(phaseStart) > 60 ? " TIMEOUT" : ""));
+                            since(tpStart) - 2.0, sectionStats(mc), since(phaseStart) > 60 ? " TIMEOUT" : ""));
                     tpIndex++;
                     if (tpIndex < TP.length) enter(Phase.RECORD);
                     else enter(Phase.FINISH);
