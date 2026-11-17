@@ -2284,12 +2284,9 @@ final class SleepAnalysis {
         }
         if (targets.isEmpty() && r.kind != Kind.FIELD) {
             // an element of a collection field of the current object, of the call's class
-            Class<?> want;
-            try {
-                want = dev.lull.ClassBytes.forName(mi.owner.replace('/', '.'), false, loader);
-            } catch (ClassNotFoundException | LinkageError e) {
-                return false;
-            }
+            // the call's class by name against each element's runtime supertypes: it is not loaded (a load takes Mixin's
+            // lock); a class with no class file is no type here, as when it could not be loaded
+            if (!dev.lull.ClassBytes.hasClassFile(loader, mi.owner)) return false;
             for (Class<?> c = ctxObj.getClass(); c != null && c != Object.class; c = c.getSuperclass())
                 for (Field f : declaredFields(c)) {
                     if (f.getName().equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
@@ -2310,7 +2307,7 @@ final class SleepAnalysis {
                     }
                     int k = 0;
                     for (Object el : els) {
-                        if (want.isInstance(el) && aiObject(el)) targets.add(new Object[] {(ctxPath.isEmpty() ? "" : ctxPath + ".") + f.getName() + "[" + k + "]", el});
+                        if (el != null && dev.lull.ClassBytes.runtimeSubtype(el.getClass(), mi.owner) && aiObject(el)) targets.add(new Object[] {(ctxPath.isEmpty() ? "" : ctxPath + ".") + f.getName() + "[" + k + "]", el});
                         k++;
                     }
                 }
@@ -2444,11 +2441,14 @@ final class SleepAnalysis {
     private boolean registryType(String type) {
         if (type == null || type.length() == 1) return false;
         return REGISTRY_TYPE.computeIfAbsent(type, t -> {
+            // a registry's first entry's runtime supertypes by name: the asked type is not loaded (Mixin's lock)
             try {
-                Class<?> c = dev.lull.ClassBytes.forName(t.replace('/', '.'), false, loader);
                 for (var reg : net.minecraft.core.registries.BuiltInRegistries.REGISTRY) {
                     var it = reg.iterator();
-                    if (it.hasNext() && c.isInstance(it.next())) return true;
+                    if (it.hasNext()) {
+                        Object first = it.next();
+                        if (first != null && dev.lull.ClassBytes.runtimeSubtype(first.getClass(), t)) return true;
+                    }
                 }
             } catch (Throwable ignored) {
             }

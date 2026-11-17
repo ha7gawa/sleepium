@@ -215,6 +215,12 @@ public final class ClassBytes {
         return false;
     }
 
+    /** a class file for this name (JDK classes: yes) - read, not loaded */
+    public static boolean hasClassFile(ClassLoader loader, String internal) {
+        if (internal.startsWith("java/") || internal.startsWith("javax/") || internal.startsWith("jdk/")) return true;
+        return header(loader, internal) != null;
+    }
+
     /** a loaded class's runtime supertypes by name (mixins' interfaces included): is {@code target} among them */
     public static boolean runtimeSubtype(Class<?> c, String target) {
         String t = target.replace('/', '.');
