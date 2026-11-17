@@ -190,6 +190,23 @@ public final class ClassBytes {
         }
     };
 
+    /**
+     * The analyses' Class.forName: a class not loaded yet is loaded now, through the transformer under Mixin's
+     * processor lock - at a high priority while it does (the analysis thread runs at the lowest: an inversion every
+     * class load on another thread would wait on)
+     */
+    public static Class<?> forName(String name, boolean init, ClassLoader loader) throws ClassNotFoundException {
+        Thread th = Thread.currentThread();
+        int priority = th.getPriority();
+        if (priority >= Thread.NORM_PRIORITY) return Class.forName(name, init, loader);
+        th.setPriority(Thread.MAX_PRIORITY);
+        try {
+            return Class.forName(name, init, loader);
+        } finally {
+            th.setPriority(priority);
+        }
+    }
+
     /** RunCapture: inside our own pass through Mixin's transformer (its postApply skips it) */
     public static boolean rereading() {
         return REREAD.get() != null;
@@ -238,7 +255,9 @@ public final class ClassBytes {
             }
             return cn;
         }
-        return readRunningPass(loader, internalName);
+        ClassNode pass = readRunningPass(loader, internalName);
+        if (pass != null && RunCapture.ON) RunCapture.wanted(internalName);   // kept at its load from the next start on
+        return pass;
     }
 
     private static ClassNode readRunningPass(ClassLoader loader, String internalName) {

@@ -869,7 +869,7 @@ final class SleepAnalysis {
             }
             if (in.getOpcode() == Opcodes.CHECKCAST && in instanceof TypeInsnNode ti) {
                 try {
-                    Class<?> cast = Class.forName(ti.desc.replace('/', '.'), false, beClass.getClassLoader());
+                    Class<?> cast = dev.lull.ClassBytes.forName(ti.desc.replace('/', '.'), false, beClass.getClassLoader());
                     return cast.isAssignableFrom(beClass);
                 } catch (ClassNotFoundException | LinkageError e) {
                     return true;
@@ -1614,7 +1614,7 @@ final class SleepAnalysis {
         String t = desc.substring(1, desc.length() - 1);
         if (t.equals("net/minecraft/core/NonNullList") || t.equals("net/minecraft/world/item/ItemStack")) return true;
         try {
-            Class<?> c = Class.forName(t.replace('/', '.'), false, loader);
+            Class<?> c = dev.lull.ClassBytes.forName(t.replace('/', '.'), false, loader);
             return java.util.Map.class.isAssignableFrom(c) || java.util.Collection.class.isAssignableFrom(c);
         } catch (ClassNotFoundException | LinkageError e) {
             return false;
@@ -1626,7 +1626,7 @@ final class SleepAnalysis {
         if (type == null || SAFE_OWNED.contains(type)) return true;
         if (type.length() == 1) return true;   // primitive field: passed by value, cannot be mutated by the callee
         try {
-            Class<?> c = Class.forName(type.replace('/', '.'), false, loader);
+            Class<?> c = dev.lull.ClassBytes.forName(type.replace('/', '.'), false, loader);
             if (deeplyImmutable(c, new HashSet<>())) return true;   // nothing to change: the reference is the whole state
             return java.util.Map.class.isAssignableFrom(c) || java.util.Collection.class.isAssignableFrom(c);
         } catch (ClassNotFoundException | LinkageError e) {
@@ -2291,7 +2291,7 @@ final class SleepAnalysis {
             // an element of a collection field of the current object, of the call's class
             Class<?> want;
             try {
-                want = Class.forName(mi.owner.replace('/', '.'), false, loader);
+                want = dev.lull.ClassBytes.forName(mi.owner.replace('/', '.'), false, loader);
             } catch (ClassNotFoundException | LinkageError e) {
                 return false;
             }
@@ -2418,7 +2418,7 @@ final class SleepAnalysis {
 
     private boolean entityClass(String internal) {
         try {
-            return net.minecraft.world.entity.Entity.class.isAssignableFrom(Class.forName(internal.replace('/', '.'), false, loader));
+            return net.minecraft.world.entity.Entity.class.isAssignableFrom(dev.lull.ClassBytes.forName(internal.replace('/', '.'), false, loader));
         } catch (ClassNotFoundException | LinkageError e) {
             return false;
         }
@@ -2457,7 +2457,7 @@ final class SleepAnalysis {
         if (type == null || type.length() == 1) return false;
         return REGISTRY_TYPE.computeIfAbsent(type, t -> {
             try {
-                Class<?> c = Class.forName(t.replace('/', '.'), false, loader);
+                Class<?> c = dev.lull.ClassBytes.forName(t.replace('/', '.'), false, loader);
                 for (var reg : net.minecraft.core.registries.BuiltInRegistries.REGISTRY) {
                     var it = reg.iterator();
                     if (it.hasNext() && c.isInstance(it.next())) return true;
