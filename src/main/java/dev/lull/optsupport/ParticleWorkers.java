@@ -20,6 +20,8 @@ public final class ParticleWorkers {
     private ParticleWorkers() {}
 
     public static volatile boolean active;
+    /** a particle made or added while a walk runs (ParallelEntityTicksFxMixin): one thread at a time */
+    public static final Object FX_LOCK = new Object();
     static Thread renderThread;
     static final ThreadLocal<boolean[]> IN_WORKER = ThreadLocal.withInitial(() -> new boolean[1]);
 
