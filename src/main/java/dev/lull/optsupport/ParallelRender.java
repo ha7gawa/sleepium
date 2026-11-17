@@ -423,7 +423,7 @@ public final class ParallelRender {
     /** LevelRenderer's entity loop, per entity (in place of renderEntity). */
     public static void enqueue(LevelRenderer lr, Entity e, double camX, double camY, double camZ, float pt, PoseStack pose, MultiBufferSource buffers) {
         if (TEST_SKIP_ON && TEST_SKIP.contains(e.getClass().getSimpleName())) return;
-        if (TickAsync.ON) DRAWN.put(e, drainFrame);
+        if (TickAsync.ON) ((DrawFrames) e).sleep$setQueuedIn(drainFrame + 1);
         TickPoses.Pair held = null;
         Job snap = null;
         if (TickAsync.ON && TickAsync.holding(e) && TickAsync.awaitUnseen(e)) { }   // (an unseen one came into view: its tick waited for)
@@ -1335,7 +1335,7 @@ public final class ParallelRender {
                     }
                     if (merged) {
                         parallel++;
-                        if (TickAsync.ON) ON_WORKER.put(j.entity, drainFrame);
+                        if (TickAsync.ON) ((DrawFrames) j.entity).sleep$setWorkerIn(drainFrame + 1);
                     } else sequential++;
                     if (clean) leakCheck(j);
                     j.entity = null;
@@ -1351,8 +1351,7 @@ public final class ParallelRender {
         size = 0;
         if (TickAsync.ON && (++drainFrame & 1023) == 0) {   // gone entities forgotten now and then - only the old entries: a clear
             long f = drainFrame;                                 // made every visible entity look unseen for two frames (skipped)
-            ON_WORKER.values().removeIf(v -> f - v > 64);
-            DRAWN.values().removeIf(v -> f - v > 64);
+            // (the drains are kept on the entities now: nothing to sweep)
         }
         if (TickPoses.ON) TickPoses.endFrame();
     }
@@ -1484,21 +1483,27 @@ public final class ParallelRender {
     /** renderEntity + EntityRenderDispatcher.render (without hitboxes), with a worker's renderers. */
     // ------------------------------------------------------------------ TickAsync's snapshots
 
-    /** render thread: entities a worker drew (the usual job path, merged fine) and the drain they were last drawn in */
-    private static final java.util.concurrent.ConcurrentHashMap<Entity, Long> ON_WORKER = new java.util.concurrent.ConcurrentHashMap<>();   // (concurrent: the split reads it on the main thread)
-    private static long drainFrame;
+    /** EntityDrawFramesMixin: the drain (+ 1, 0: never) an entity was last queued in and last drawn on a worker in */
+    public interface DrawFrames {
+        long sleep$queuedIn();
 
-    /** render thread: every entity a frame queued, and the drain it was queued in */
-    private static final java.util.concurrent.ConcurrentHashMap<Entity, Long> DRAWN = new java.util.concurrent.ConcurrentHashMap<>();
+        void sleep$setQueuedIn(long f);
+
+        long sleep$workerIn();
+
+        void sleep$setWorkerIn(long f);
+    }
+
+    private static volatile long drainFrame;
 
     static boolean drawnLately(Entity e) {
-        Long f = DRAWN.get(e);
-        return f != null && drainFrame - f <= 2;
+        long f = ((DrawFrames) e).sleep$queuedIn();
+        return f != 0 && drainFrame - (f - 1) <= 2;
     }
 
     static boolean drewOnWorker(Entity e) {
-        Long f = ON_WORKER.get(e);
-        return f != null && drainFrame - f <= 2 && !INNER;
+        long f = ((DrawFrames) e).sleep$workerIn();
+        return f != 0 && drainFrame - (f - 1) <= 2 && !INNER;
     }
 
     /** render thread, the walk: a snapshot job for e - the whole render at partial tick 1, the camera at the entity */

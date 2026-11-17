@@ -242,6 +242,7 @@
     "ChunkSectionMixin",
     "ChunkUploadMixin",
     "UploadBindMixin",
+    "EntityDrawFramesMixin",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",
     "SoundChannelHandleAccessor",

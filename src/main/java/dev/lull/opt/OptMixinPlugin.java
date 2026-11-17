@@ -34,6 +34,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.EntitySectionIndexMixin");
         if (simple.equals("NeighborReactStateMixin") || simple.equals("NeighborReactMultiMixin"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NeighborReactMixin");
+        if (simple.equals("EntityDrawFramesMixin"))   // two fields on Entity for ParallelRender's drains (inert unless it runs)
+            on = true;
         if (simple.equals("ParallelAnimationMixin"))   // models animated on several threads: a scratch vector each
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntitiesMixin") || Boolean.getBoolean("lab.opt.FrameThreadMixin");
         if (simple.equals("TickPosesAnimationMixin"))   // tick poses: renders that move their entity's animation clock
