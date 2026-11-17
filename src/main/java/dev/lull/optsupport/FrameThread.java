@@ -132,11 +132,64 @@ public final class FrameThread {
     public static boolean recording() {
         if (!ON || INACTIVE) return false;
         if (!active) {
+            if (refused) return false;
             Minecraft m = Minecraft.getInstance();
             if (m.level == null || m.player == null || !com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()) return false;
             start(m);
+            if (!active) return false;   // (the probe refused: the usual way from now on)
         }
         return Thread.currentThread() == mainThread;
+    }
+
+    /** the context probe refused the frame thread (the game draws the usual way for the rest of the run) */
+    private static volatile boolean refused;
+
+    /**
+     * Before the frame thread takes the GL context: does the context really travel between threads here? A probe
+     * thread makes it current and looks for two objects the main thread made (a fresh texture and the block atlas).
+     * Under Android launchers (MojoLauncher's LTW over GLES, 11-17) the context taken on another thread was an empty one:
+     * the frames showed the stars and nothing else. Null: it travels; else why not (the frame thread is not started).
+     */
+    private static String probeContext(Minecraft m) {
+        int atlas = m.getTextureManager().getTexture(net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS).getId();
+        int probe = org.lwjgl.opengl.GL11.glGenTextures();
+        org.lwjgl.opengl.GL11.glBindTexture(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, probe);
+        org.lwjgl.opengl.GL11.glTexImage2D(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, 0, org.lwjgl.opengl.GL11.GL_RGBA, 1, 1, 0,
+                org.lwjgl.opengl.GL11.GL_RGBA, org.lwjgl.opengl.GL11.GL_UNSIGNED_BYTE, (java.nio.ByteBuffer) null);
+        org.lwjgl.opengl.GL11.glBindTexture(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, 0);
+        org.lwjgl.opengl.GL11.glFinish();
+        String rendererHere = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_RENDERER);
+        final String[] why = {"the probe thread did not finish"};
+        org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(0L);
+        org.lwjgl.opengl.GL.setCapabilities(null);
+        Thread t = new Thread(() -> {
+            try {
+                org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(window);
+                org.lwjgl.opengl.GL.setCapabilities(caps);
+                boolean probeSeen = org.lwjgl.opengl.GL11.glIsTexture(probe), atlasSeen = org.lwjgl.opengl.GL11.glIsTexture(atlas);
+                String rendererThere = org.lwjgl.opengl.GL11.glGetString(org.lwjgl.opengl.GL11.GL_RENDERER);
+                why[0] = probeSeen && atlasSeen && java.util.Objects.equals(rendererHere, rendererThere) ? null
+                        : "the context on another thread does not see the main thread's objects (a fresh texture " + probeSeen
+                                + ", the block atlas " + atlasSeen + ", renderer '" + rendererHere + "' / '" + rendererThere + "')";
+            } catch (Throwable x) {
+                why[0] = "the context could not be made current on another thread: " + x;
+            } finally {
+                try {
+                    org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(0L);
+                    org.lwjgl.opengl.GL.setCapabilities(null);
+                } catch (Throwable ignored) { }
+            }
+        }, "Sleepium context probe");
+        t.start();
+        try {
+            t.join(3000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        org.lwjgl.glfw.GLFW.glfwMakeContextCurrent(window);
+        org.lwjgl.opengl.GL.setCapabilities(caps);
+        org.lwjgl.opengl.GL11.glDeleteTextures(probe);
+        return t.isAlive() ? "the probe thread hung making the context current" : why[0];
     }
 
     private static void start(Minecraft m) {
@@ -146,6 +199,12 @@ public final class FrameThread {
         mainThread = Thread.currentThread();
         caps = org.lwjgl.opengl.GL.getCapabilities();
         window = m.getWindow().getWindow();
+        String why = probeContext(m);
+        if (why != null) {
+            refused = true;
+            LOG.warn("[sleep/opt] frame thread: not started - {}; the frames are drawn the usual way", why);
+            return;
+        }
         thread = new Thread(FrameThread::loop, "Sleepium frame");
         thread.setDaemon(true);
         thread.setPriority(Thread.MAX_PRIORITY);
@@ -800,9 +859,20 @@ public final class FrameThread {
         pending = true;
         overlapFrames++;
         frames++;
+        if (mc.screen != null) {
+            // a screen open: its widgets change with the input the poll below hands it (a click rebuilt a list while the
+            // frame thread drew it: a ConcurrentModificationException in Screen.render, the hand test 11-17) - the frame
+            // drawn first; the input that comes meanwhile is queued as tasks (pumping) and runs after it
+            waitPumping(FrameThread::idle);
+            pending = false;
+            screenWaits++;
+            checkFailure();
+        }
         pollWindow();
         polled();
     }
+
+    public static long screenWaits;
 
     /** RenderSystem.assertOnRenderThread on the main thread: the context borrowed at a safe point (the frame thread idle) */
     public static void borrowIfNeeded() {
@@ -1436,6 +1506,7 @@ public final class FrameThread {
         // (ring: the slot drawn last is never recorded into - the main thread's recording does not stop it)
         Slot c = cur;
         boolean self = selfOk;
+        if (mc != null && mc.screen != null) return false;   // (no extra frame of a screen: the main thread changes its widgets)
         if (!(self || mainTicking) || borrowAsked || mainHolding || c == null || c.nOps == 0 || taken != handed) return false;
         extraRunning = true;
         if (taken != handed || borrowAsked || mainHolding) {   // (a job or a borrow came meanwhile)
