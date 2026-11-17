@@ -20,12 +20,17 @@ import org.objectweb.asm.tree.ClassNode;
  * 250-mod pack: the render thread waited up to 1.7 s behind our analysis, a mod looking a class up each tick). Mixin
  * calls its extensions right after it applied the mixins to a class (postApply), on the thread loading it: here the
  * class's bytes are kept then, for the subclasses of Entity and BlockEntity only, and readRunning takes them with no
- * pass and no lock. -Dlab.analysis.capture=false: the pass as before.
+ * pass and no lock. A class the analyses needed that was not kept (Container, ItemStack - read for what an entity
+ * calls) goes through the pass once and its name into config/sleepium-capture.txt: the next starts keep it too, so
+ * from the second start the analyses never take Mixin's lock. -Dlab.analysis.capture=false: the pass as before.
  */
 public final class RunCapture implements IExtension {
     public static final boolean ON = !"false".equals(System.getProperty("lab.analysis.capture"));
     private static final String ENTITY = "net/minecraft/world/entity/Entity", BLOCK_ENTITY = "net/minecraft/world/level/block/entity/BlockEntity";
     private static final ConcurrentHashMap<String, byte[]> BYTES = new ConcurrentHashMap<>();
+    /** classes past analyses needed beyond the entities (config/sleepium-capture.txt), kept at their load too */
+    private static final java.util.Set<String> WANTED = ConcurrentHashMap.newKeySet();
+    private static final java.nio.file.Path WANTED_FILE = java.nio.file.Paths.get("config", "sleepium-capture.txt");
     public static volatile long captured, capturedBytes, failed, used;
     private static volatile boolean registered;
 
@@ -40,12 +45,28 @@ public final class RunCapture implements IExtension {
                 System.out.println("[sleep/analysis] run capture: Mixin's transformer not at hand, the analyses pass classes through it as before");
                 return;
             }
+            try {
+                if (java.nio.file.Files.exists(WANTED_FILE))
+                    for (String l : java.nio.file.Files.readAllLines(WANTED_FILE)) if (!l.isBlank() && !l.startsWith("#")) WANTED.add(l.trim());
+            } catch (Throwable ignored) {}
             ex.add(new RunCapture());
             ex.select(env);
             registered = true;
         } catch (Throwable e) {
             System.out.println("[sleep/analysis] run capture: not registered (" + e + ")");
         }
+    }
+
+    /** ClassBytes: a class the analyses passed through the transformer (not kept): kept from the next start on */
+    public static void wanted(String internalName) {
+        if (!ON || !WANTED.add(internalName)) return;
+        try {
+            if (!java.nio.file.Files.exists(WANTED_FILE)) {
+                java.nio.file.Files.createDirectories(WANTED_FILE.getParent());
+                java.nio.file.Files.writeString(WANTED_FILE, "# classes Sleepium's analyses read beyond the entities: kept as they load (no pass through Mixin's transformer)\n");
+            }
+            java.nio.file.Files.writeString(WANTED_FILE, internalName + "\n", java.nio.file.StandardOpenOption.APPEND);
+        } catch (Throwable ignored) {}
     }
 
     /** the kept bytes of a class as it runs, or null */
@@ -56,7 +77,8 @@ public final class RunCapture implements IExtension {
     }
 
     public static String report() {
-        return "run capture: " + (registered ? captured + " classes kept (" + capturedBytes / 1024 + " KiB), " + failed + " failed, " + used + " reads" : "off");
+        return "run capture: " + (registered ? captured + " classes kept (" + capturedBytes / 1024 + " KiB), " + failed + " failed, " + used + " reads, "
+                + WANTED.size() + " wanted beyond the entities" : "off");
     }
 
     @Override
@@ -73,7 +95,7 @@ public final class RunCapture implements IExtension {
         try {
             ClassInfo info = context.getClassInfo();
             String n = info.getName();
-            if (!n.equals(ENTITY) && !n.equals(BLOCK_ENTITY) && !info.hasSuperClass(ENTITY) && !info.hasSuperClass(BLOCK_ENTITY)) return;
+            if (!WANTED.contains(n) && !n.equals(ENTITY) && !n.equals(BLOCK_ENTITY) && !info.hasSuperClass(ENTITY) && !info.hasSuperClass(BLOCK_ENTITY)) return;
             ClassNode node = context.getClassNode();
             ClassWriter cw = new ClassWriter(0);
             node.accept(new ClassVisitor(Opcodes.ASM9, cw) {   // no frames (the analyses drop them): nothing to keep consistent
