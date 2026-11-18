@@ -655,7 +655,34 @@ public final class ClientAuto {
      */
     private static final int REMESH_EVERY = Integer.getInteger("sleep.clientAuto.remeshEvery", 0), REMESH_R = Integer.getInteger("sleep.clientAuto.remeshRadius", 8);
 
+    /**
+     * -Dsleep.clientAuto.holes=true: once a second in the window, the chunks within view distance - 1 of the player the
+     * client does not have (a missing chunk is a hole in the ground) - summed and the worst second.
+     */
+    private static final boolean HOLES = Boolean.getBoolean("sleep.clientAuto.holes");
+    static long holeSum, holeSamples;
+    static int holeMax;
+
+    private static void holes() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null) return;
+        int r = mc.options.getEffectiveRenderDistance() - 1, cx = mc.player.chunkPosition().x, cz = mc.player.chunkPosition().z, n = 0;
+        var cs = mc.level.getChunkSource();
+        for (int dx = -r; dx <= r; dx++)
+            for (int dz = -r; dz <= r; dz++)
+                if (dx * dx + dz * dz <= r * r && !cs.hasChunk(cx + dx, cz + dz)) n++;
+        holeSum += n;
+        holeSamples++;
+        holeMax = Math.max(holeMax, n);
+        log("holes " + holeSamples + ": " + n);
+    }
+
+    public static String holesReport() {
+        return HOLES ? String.format(java.util.Locale.ROOT, "holes: %.1f a second (worst %d) over %d s", holeSamples == 0 ? 0.0 : (double) holeSum / holeSamples, holeMax, holeSamples) : "";
+    }
+
     private static void tick() {
+        if (HOLES && dev.lull.ClientMeter.measuring() && ticks % 20 == 0) holes();
         if (REMESH_EVERY > 0 && dev.lull.ClientMeter.measuring() && (ticks - windowStart) % (REMESH_EVERY * 20) == 0 && Minecraft.getInstance().player != null) {
             var p = Minecraft.getInstance().player.blockPosition();
             int r = REMESH_R * 16;
