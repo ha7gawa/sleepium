@@ -356,7 +356,7 @@ public final class ChunkMultiDraw {
     }
 
     private static final Long2ObjectOpenHashMap<Arena>[] ARENAS = newMaps(), PACKED_ARENAS = newMaps();
-    private static final List<RenderType> LAYERS = new ArrayList<>();
+    static final List<RenderType> LAYERS = new ArrayList<>();
 
     @SuppressWarnings("unchecked")
     private static Long2ObjectOpenHashMap<Arena>[] newMaps() {
@@ -600,6 +600,7 @@ public final class ChunkMultiDraw {
 
     /** From RenderSection.reset (origin change, release): every layer's entry. */
     public static void release(SectionRenderDispatcher.RenderSection section) {
+        if (MeshPark.ON) MeshPark.park(section);   // (a kept mesh's entries are detached first: nothing to release then)
         RegionDraw.release(section);
         for (RenderType t : LAYERS) release(section, t);
         if (LightVolumes.ON) LightVolumes.released(section);
@@ -702,6 +703,7 @@ public final class ChunkMultiDraw {
 
         if (!RETIRED.isEmpty()) reapRetired();
         if (!PENDING_COMPILED.isEmpty()) drainCompiled();
+        if (MeshPark.ON) MeshPark.drain();
         int[] ps = programState(shader.getId());
         if (ps == null) return false;
         program = shader.getId();
@@ -1007,6 +1009,7 @@ public final class ChunkMultiDraw {
         int li = LAYERS.indexOf(layer);
         if (li < 0) return false;
         if (!PENDING_COMPILED.isEmpty()) drainCompiled();
+        if (MeshPark.ON) MeshPark.drain();
         int[] ps = programState(shader.getId());
         if (ps == null) return false;
         // SectionLists: only the sections with a non-empty translucent layer, in the same order (the loop below skips the

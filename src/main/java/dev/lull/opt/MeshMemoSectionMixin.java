@@ -60,8 +60,8 @@ public abstract class MeshMemoSectionMixin implements dev.lull.optsupport.MeshMe
         sleep$expectSame = false;
     }
 
-    /** a new origin or a release: no mesh, no memo */
-    @Inject(method = "reset", at = @At("HEAD"))
+    /** a new origin or a release: no mesh, no memo (at the end: MeshPark reads the memo while the reset releases the entries) */
+    @Inject(method = "reset", at = @At("RETURN"))
     private void sleep$memoReset(CallbackInfo ci) {
         sleep$memo = 0;
         sleep$incoming = 0;

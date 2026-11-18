@@ -406,6 +406,36 @@ public final class LightVolumes {
     }
 
     /** RenderSection reset (origin change, release): its volume is free again. */
+    /** MeshPark: a parked section's recipe info (null: its layers carry baked light only) */
+    static CompileInfo parkInfo(net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection section) {
+        Sec sec = SECS.get(key(section));
+        return sec == null ? null : sec.info;
+    }
+
+    /**
+     * MeshPark: a parked mesh put back on its section - as uploaded() does for a new arena mesh with recipes: a volume,
+     * the section's entries pointed at it once a refill from the current light lands (baked light meanwhile).
+     */
+    static void adopted(net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection section, CompileInfo info) {
+        if (info == null) return;
+        long k = key(section);
+        if (!FIRST_SEEN.containsKey(k)) FIRST_SEEN.put(k, System.nanoTime());
+        Sec sec = SECS.get(k);
+        if (sec == null) SECS.put(k, sec = new Sec());
+        SECTIONS.put(k, section);
+        sec.info = info;
+        if (sec.vol < 0) {
+            sec.vol = allocSlot();
+            if (sec.vol < 0) return;
+        }
+        sec.ready = false;
+        assign(section, -1);
+        if (!sec.dirty) {
+            sec.dirty = true;
+            DIRTY.add(k);
+        }
+    }
+
     public static void released(net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection section) {
         FIRST_SEEN.remove(key(section));
         LIGHT_COUNT.remove(key(section));

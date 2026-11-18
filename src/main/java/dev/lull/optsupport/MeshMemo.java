@@ -326,6 +326,8 @@ public final class MeshMemo {
                         d += fd;
                         if (MISMATCHES.incrementAndGet() <= 12 || !d.isEmpty() && MISMATCHES.get() <= 40)
                             System.out.println("[sleep/opt] mesh memo MISMATCH at " + s.getOrigin() + " layer " + li + ": bytes " + crcs[4 + li] + " -> " + n + d);
+                        if (MISMATCHES.get() <= 4)   // (a production client's log has no stdout: into the report too)
+                            DIFFS.add(s.getOrigin().toShortString() + " layer " + li + ": bytes " + crcs[4 + li] + " -> " + n + d);
                     }
                 }
                 if (sampled(s)) {
@@ -345,11 +347,36 @@ public final class MeshMemo {
         }
     }
 
+    /**
+     * Tint caches cleared for a chunk's 3 x 3 columns (BlockTintCache.invalidateForChunk, a chunk arriving): those
+     * columns stamped, before and after. A compile reads the tint of its own column and the ones next to it - it keeps
+     * a memo if none of those 3 x 3 was stamped while it ran (a global epoch refused 1 850 compiles of the zoo orbit:
+     * any chunk arriving anywhere). invalidateAll (the blend radius changed) stays global: TINT_EPOCH.
+     */
+    private static final java.util.concurrent.atomic.AtomicInteger TINT_STAMPS = new java.util.concurrent.atomic.AtomicInteger(1);
+    private static final int[] TINT_STAMP = new int[128 * 128];
+
+    public static void tintCleared(int x, int z) {
+        for (int i = -1; i <= 1; i++)
+            for (int j = -1; j <= 1; j++) TINT_STAMP[((x + i) & 127) * 128 + ((z + j) & 127)] = TINT_STAMPS.incrementAndGet();
+    }
+
+    /** the newest stamp of the 3 x 3 columns around (cx, cz) */
+    public static int tintStamp(int cx, int cz) {
+        int m = 0;
+        for (int i = -1; i <= 1; i++)
+            for (int j = -1; j <= 1; j++) m = Math.max(m, TINT_STAMP[((cx + i) & 127) * 128 + ((cz + j) & 127)]);
+        return m;
+    }
+
+    static final java.util.List<String> DIFFS = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
     public static String report() {
         long hn = HASHED.get();
         return String.format(java.util.Locale.ROOT, "mesh memo: hashed %d (%.0f us each), skipped %d, not memoised %d, inputs moved during the mesh %d, tint caches invalidated during it %d, light updated during it %d%s",
                 hn, HASH_NANOS.get() / 1e3 / Math.max(1, hn), SKIPPED.get(), NOT_MEMO.get(), MOVED.get(), TINT_MOVED.get(), LIGHT_MOVED.get(),
                 VERIFY ? String.format(java.util.Locale.ROOT, ", verified layers %d, mismatches %d (sampled differing bytes: position %d, colour %d, uv %d, light %d, normal %d)", VERIFIED.get(), MISMATCHES.get(),
-                        FIELD_DIFFS[0].get(), FIELD_DIFFS[1].get(), FIELD_DIFFS[2].get(), FIELD_DIFFS[3].get(), FIELD_DIFFS[4].get()) : "");
+                        FIELD_DIFFS[0].get(), FIELD_DIFFS[1].get(), FIELD_DIFFS[2].get(), FIELD_DIFFS[3].get(), FIELD_DIFFS[4].get())
+                        + (DIFFS.isEmpty() ? "" : " - first: " + DIFFS) : "");
     }
 }
