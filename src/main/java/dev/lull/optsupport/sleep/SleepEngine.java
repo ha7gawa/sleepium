@@ -71,17 +71,23 @@ public final class SleepEngine {
     public static long costlyClasses;
     private static long tickT0;
 
-    /** observed-only: true (and decided for good) when the class's check costs more than its tick is worth */
+    /**
+     * observed-only: true (and decided for good) when the class's checks cost more than they save - all checks' time
+     * against the skipped ticks times a tick's time (a class that seldom sleeps pays its checks for little), or a single
+     * check above OBSERVED_COST of a tick
+     */
     static boolean costly(Sleeper s) {
         ClassInfo ci = s.info;
         if (ci.costly) return true;
         if (ci.ticks < COST_SAMPLES || ci.checks < COST_SAMPLES) return false;
         double tick = (double) ci.tickNs / ci.ticks, check = (double) ci.checkNs / ci.checks;
-        if (check <= OBSERVED_COST * tick) return false;
+        boolean perCheck = check > OBSERVED_COST * tick;
+        boolean overall = ci.checks >= 4L * COST_SAMPLES && ci.checkNs > ci.skips * tick;
+        if (!perCheck && !overall) return false;
         ci.costly = true;
         costlyClasses++;
-        System.out.println(String.format(java.util.Locale.ROOT, "[sleep/sleep] %s: observed sleep off - a check costs %.2f us, a tick %.2f us",
-                s.be.getClass().getSimpleName(), check / 1e3, tick / 1e3));
+        System.out.println(String.format(java.util.Locale.ROOT, "[sleep/sleep] %s: observed sleep off - a check costs %.2f us, a tick %.2f us; checks %.1f ms, skipped ticks worth %.1f ms",
+                s.be.getClass().getSimpleName(), check / 1e3, tick / 1e3, ci.checkNs / 1e6, ci.skips * tick / 1e6));
         return true;
     }
 
@@ -111,7 +117,7 @@ public final class SleepEngine {
          * their check (~10 us): 20 000 such machines took a server tick from 12 to 220 ms. When a check costs more than
          * OBSERVED_COST times a tick, the class's observed sleep is turned off for good: its block entities tick as vanilla.
          */
-        long tickNs, ticks, checkNs, checks;
+        long tickNs, ticks, checkNs, checks, skips;
         volatile boolean costly;
 
         ClassInfo(SleepAnalysis.Plan plan) {
@@ -503,6 +509,7 @@ public final class SleepEngine {
         long now = level.getGameTime();
         if (!s.woken && now < s.wakeAt && verifyAsleep(be)) {
             skipped++;
+            if (s.info.observedOnly) s.info.skips++;
             h(s).sleep$setSkipped(h(s).sleep$skipped() + 1);
             return true;
         }
