@@ -1,7 +1,5 @@
 package dev.lull.optsupport;
 
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.Set;
 import net.neoforged.bus.api.EventListener;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -72,26 +70,40 @@ public final class SaveListeners {
         int listeners = 0;
         listeners = ls.length;   // (NeoForge's list holds listeners only, no priority markers)
         int found = 0;
+        String saveDesc = "(L" + SAVE + ";)V";
+        Set<String> supers = Set.of("Lnet/neoforged/bus/api/Event;", "Lnet/neoforged/neoforge/event/level/LevelEvent;", "Lnet/neoforged/neoforge/event/level/ChunkEvent;", "Lnet/neoforged/neoforge/event/level/ChunkDataEvent;");
         for (Object target : cb.registered()) {
             Class<?> c = target instanceof Class<?> k ? k : target.getClass();
             boolean statics = target instanceof Class<?>;
-            for (Class<?> x = c; x != null && x != Object.class; x = x.getSuperclass())
-                for (Method m : x.getDeclaredMethods()) {
-                    if (!m.isAnnotationPresent(SubscribeEvent.class) || m.getParameterCount() != 1) continue;
-                    if (Modifier.isStatic(m.getModifiers()) != statics) continue;
-                    Class<?> p = m.getParameterTypes()[0];
-                    if (p == ChunkDataEvent.Save.class) {
+            ClassLoader loader = c.getClassLoader();
+            // the class chain read as bytecode (no reflection: a method's signature may name a class of a mod not
+            // installed - getDeclaredMethods would throw)
+            for (String internal = c.getName().replace('.', '/'); internal != null && !internal.equals("java/lang/Object"); ) {
+                ClassNode cn = dev.lull.ClassBytes.read(loader, internal, ClassReader.SKIP_FRAMES);
+                if (cn == null) {
+                    why = "no bytes of " + internal;
+                    return false;
+                }
+                for (MethodNode mn : cn.methods) {
+                    if (mn.visibleAnnotations == null || mn.visibleAnnotations.stream().noneMatch(a -> a.desc.equals("Lnet/neoforged/bus/api/SubscribeEvent;"))) continue;
+                    if (((mn.access & Opcodes.ACC_STATIC) != 0) != statics) continue;
+                    org.objectweb.asm.Type[] args = org.objectweb.asm.Type.getArgumentTypes(mn.desc);
+                    if (args.length != 1) continue;
+                    String a = args[0].getDescriptor();
+                    if (mn.desc.equals(saveDesc)) {
                         found++;
-                        String r = check(x, m);
+                        String r = check(cn, mn);
                         if (r != null) {
-                            why = x.getName() + "." + m.getName() + ": " + r;
+                            why = internal + "." + mn.name + ": " + r;
                             return false;
                         }
-                    } else if (p.isAssignableFrom(ChunkDataEvent.Save.class)) {
-                        why = x.getName() + "." + m.getName() + " listens to " + p.getSimpleName();
+                    } else if (supers.contains(a)) {
+                        why = internal + "." + mn.name + " listens to " + a;
                         return false;
                     }
                 }
+                internal = cn.superName;
+            }
         }
         if (found != listeners) {
             why = found + " listener methods found for " + listeners + " listeners (a lambda or a generated one)";
@@ -102,12 +114,8 @@ public final class SaveListeners {
     }
 
     /** null when the method only uses the tag by its own constant keys; else why not */
-    private static String check(Class<?> owner, Method m) throws java.io.IOException {
-        ClassNode cn = dev.lull.ClassBytes.read(owner.getClassLoader(), owner.getName().replace('.', '/'), ClassReader.SKIP_FRAMES);
-        if (cn == null) return "no bytes";
-        String desc = org.objectweb.asm.Type.getMethodDescriptor(m);
-        for (MethodNode mn : cn.methods) {
-            if (!mn.name.equals(m.getName()) || !mn.desc.equals(desc)) continue;
+    private static String check(ClassNode cn, MethodNode mn) {
+        {
             for (AbstractInsnNode in = mn.instructions.getFirst(); in != null; in = in.getNext()) {
                 if (in instanceof LdcInsnNode ldc && ldc.cst instanceof String s && CHUNK_KEYS.contains(s)) return "uses the key " + s;
                 if (in instanceof MethodInsnNode mi) {
@@ -131,6 +139,5 @@ public final class SaveListeners {
             }
             return null;
         }
-        return "method not found in its class bytes";
     }
 }
