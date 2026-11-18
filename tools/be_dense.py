@@ -24,6 +24,7 @@ ap.add_argument('--exclude', default=r'sign|banner|bed$|_head$|skull', help='tic
 ap.add_argument('--server', default=r'F:\release-test\server')
 ap.add_argument('--java', default=r'C:\Users\ha7gawa\.gradle\jdks\eclipse_adoptium-21-amd64-windows.2\bin\java.exe')
 ap.add_argument('--neoforge', default='21.1.251')
+ap.add_argument('--launch', default='', help='the loader args file (default: NeoForge --neoforge); Forge 1.20.1: libraries/net/minecraftforge/forge/1.20.1-47.4.9/win_args.txt')
 ap.add_argument('--flags', default='')
 ap.add_argument('--label', default='')
 ap.add_argument('--heap', default='6G')
@@ -73,7 +74,7 @@ try:
     with open(PROPS, 'w') as f:
         f.writelines('%s=%s\n' % kv for kv in props.items())
     p = subprocess.Popen([a.java, '-Xmx' + a.heap, '-Dlab.dumpTickers=200'] + a.flags.split() + ['@user_jvm_args.txt',
-                          '@libraries/net/neoforged/neoforge/%s/win_args.txt' % a.neoforge, 'nogui'],
+                          '@' + (a.launch or 'libraries/net/neoforged/neoforge/%s/win_args.txt' % a.neoforge), 'nogui'],
                          cwd=D, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8',
                          errors='replace', bufsize=1)
     threading.Thread(target=lambda: [lines.append(l.rstrip('\n')) for l in p.stdout], daemon=True).start()
@@ -146,12 +147,17 @@ try:
         t0 = time.time()
         while time.time() - t0 < a.secs:
             n0 = len(lines)
-            cmd('tick query')
+            cmd('forge tps' if a.launch else 'tick query')   # 1.20.1 has no /tick
             time.sleep(5)
             seg = '\n'.join(lines[n0:])
             m, q = AVG.search(seg), PCT.search(seg)
             if m and q:
                 wins.append((num(m.group(1)), num(q.group(1)), num(q.group(2)), num(q.group(3))))
+            else:
+                f = re.search(r'Overall\s*:\s*Mean tick time: ([\d.,]+) ?ms', seg)
+                if f:
+                    v = num(f.group(1))
+                    wins.append((v, v, v, v))
         cmd('tick query')
         time.sleep(1)
         cmd('stop')
