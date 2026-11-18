@@ -295,6 +295,7 @@
     "QuadDataArraysMixin",
     "WeightedBakedModelAccessor",
     "LightBoxMixin",
+    "CompileWalkMixin",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",
     "SoundChannelHandleAccessor",

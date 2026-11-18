@@ -56,7 +56,7 @@ public final class ClientCounters {
                 + TickThread.report()
                 + RenderThread.report()
                 + FrameThread.report()
-                + (ChunkChurn.ON ? "; " + ChunkChurn.report() + "; " + ChunkChurn.meshReport() : "") + (OcclusionFast.ON ? "; " + OcclusionFast.report() : "") + (LazySections.ON ? "; " + LazySections.report() : "") + (MeshPark.ON ? "; " + MeshPark.report() : "") + (TintBlend.ON ? "; " + TintBlend.report() : "") + (LazyChunkBuffers.made > 0 ? "; " + LazyChunkBuffers.report() : "") + (MeshMemo.ON ? "; " + MeshMemo.report() : "") + (LightSnapshot.SHARDS || LightSnapshot.VERIFY ? "; " + LightSnapshot.report() : "") + (Enclosed.ON ? "; " + Enclosed.report() : "") + (RegionStates.TIME ? "; mesh time: " + RegionStates.timeReport() : "")
+                + (ChunkChurn.ON ? "; " + ChunkChurn.report() + "; " + ChunkChurn.meshReport() : "") + (OcclusionFast.ON ? "; " + OcclusionFast.report() : "") + (LazySections.ON ? "; " + LazySections.report() : "") + (MeshPark.ON ? "; " + MeshPark.report() : "") + (TintBlend.ON ? "; " + TintBlend.report() : "") + (LazyChunkBuffers.made > 0 ? "; " + LazyChunkBuffers.report() : "") + (MeshMemo.ON ? "; " + MeshMemo.report() : "") + (LightSnapshot.SHARDS || LightSnapshot.VERIFY ? "; " + LightSnapshot.report() : "") + (Enclosed.ON ? "; " + Enclosed.report() : "") + (RegionStates.TIME ? "; mesh time: " + RegionStates.timeReport() : "") + (CompileWalk.ON ? "; " + CompileWalk.report() : "")
                 + "; " + dev.lull.ClassBytes.passReport() + (FrameProfile.ON ? "; " + FrameProfile.report() : "")
                 + (FrameProfile.SERVER_ON ? "; " + FrameProfile.serverReport() : "")
                 + (StallProbe.ON ? "; " + StallProbe.report() : "")

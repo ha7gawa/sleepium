@@ -35,6 +35,7 @@ public final class RegionStates {
         rs.y0 = section.minBlockY() - 1;
         rs.z0 = section.minBlockZ() - 1;
         if (TIME) rs.t0 = BEAN.getCurrentThreadCpuTime();
+        rs.innerFilled = false;
         if (FILL) rs.fill(region, section);
     }
 
@@ -47,6 +48,26 @@ public final class RegionStates {
     public static final boolean FILL = Boolean.getBoolean("lab.regionStates.fill");
     private static final BlockState AIR = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
     public static long filled, notFilled;
+    /** this compile's own 16^3 is in the box (fill succeeded) */
+    boolean innerFilled;
+
+    /** the current compile's box on this thread when its own 16^3 was filled, else null (CompileWalk) */
+    public static RegionStates currentFilled() {
+        Object[] s = ThreadSlots.mine();
+        if (s == null) return null;
+        RegionStates rs = (RegionStates) s[ThreadSlots.STATES];
+        return rs != null && rs.region != null && rs.innerFilled ? rs : null;
+    }
+
+    /** the section's own block at (x, y, z) in 0..15 from the filled box */
+    public BlockState inner(int x, int y, int z) {
+        return states[((y + 1) * N + (z + 1)) * N + (x + 1)];
+    }
+
+    /** the section's minimum corner (the box's origin + 1) */
+    public int minX() { return x0 + 1; }
+    public int minY() { return y0 + 1; }
+    public int minZ() { return z0 + 1; }
 
     @SuppressWarnings("unchecked")
     private void fill(Object region, SectionPos section) {
@@ -67,6 +88,7 @@ public final class RegionStates {
                     }
                 }
             filled++;
+            innerFilled = true;
             return;
         }
         var data = pc.data;
@@ -84,6 +106,7 @@ public final class RegionStates {
                     }
                 }
             filled++;
+            innerFilled = true;
             return;
         }
         if (!(st instanceof net.minecraft.util.SimpleBitStorage) || st.getSize() != 4096) {
@@ -106,6 +129,7 @@ public final class RegionStates {
             }
         }
         filled++;
+        innerFilled = true;
     }
 
     public static void end() {
