@@ -284,6 +284,7 @@
     "WeightedQuadsMixin",
     "LazySectionCopyMixin",
     "LazySectionRegionMixin",
+    "StateIdMixin",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",
     "SoundChannelHandleAccessor",

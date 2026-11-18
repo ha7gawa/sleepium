@@ -14,6 +14,16 @@ import org.objectweb.asm.tree.MethodNode;
  * exactly that size (swapPalette walks the whole array, so the size must match), fully overwritten by unpack.
  */
 public final class AllocTrim {
+    /** StateIdMixin: a block state's registry id, kept on the state */
+    public interface StateId {
+        int sleep$id();
+    }
+
+    /** a state's id - kept on it when StateIdMixin is applied, else Block.getId */
+    public static int id(net.minecraft.world.level.block.state.BlockState s) {
+        return s instanceof StateId k ? k.sleep$id() : net.minecraft.world.level.block.Block.getId(s);
+    }
+
     private AllocTrim() {}
 
     /** Block.shouldRenderFace's occlusion cache keyed by a long (AllocTrimFaceMixin): vanilla's size, load factor, no rehash */
