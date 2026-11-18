@@ -256,7 +256,17 @@ public final class CompositeEventBus extends EventBus {
     @Override public void start() { EventSites.invalidate(); super.start(); live = true; }
     @Override public void shutdown() { live = false; EventSites.invalidate(); super.shutdown(); }
     // listener changes: every allocation-free event site back to the normal post, before and after (EventSites)
-    @Override public void register(Object target) { EventSites.invalidate(); super.register(target); EventSites.invalidate(); }
+    /** the objects and classes given to register, in order (SaveListeners finds the listener methods there) */
+    private final java.util.List<Object> targets = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public java.util.List<Object> registered() { return targets; }
+
+    /** the listeners a post of type would reach right now (Forge's array: priority markers included) */
+    public net.minecraftforge.eventbus.api.IEventListener[] listenersOf(Class<?> type) {
+        return holders.get(type).list.getListeners(busId);
+    }
+
+    @Override public void register(Object target) { EventSites.invalidate(); super.register(target); targets.add(target); EventSites.invalidate(); }
     @Override public void unregister(Object object) { EventSites.invalidate(); super.unregister(object); EventSites.invalidate(); }
     @Override public <T extends Event> void addListener(Consumer<T> consumer) { EventSites.invalidate(); super.addListener(consumer); EventSites.invalidate(); }
     @Override public <T extends Event> void addListener(EventPriority priority, Consumer<T> consumer) { EventSites.invalidate(); super.addListener(priority, consumer); EventSites.invalidate(); }
