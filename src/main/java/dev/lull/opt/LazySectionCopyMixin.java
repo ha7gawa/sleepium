@@ -18,6 +18,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class LazySectionCopyMixin implements LazySections.Chunk {
     @Shadow @Final private List<PalettedContainer<BlockState>> sections;
     @Shadow @Final LevelChunk wrapped;
+    @Shadow @Final private boolean debug;
     /** section index -> the live container not copied yet */
     @Unique private PalettedContainer<BlockState>[] sleep$live;
 
@@ -42,6 +43,20 @@ public abstract class LazySectionCopyMixin implements LazySections.Chunk {
                 LazySections.COPIED.incrementAndGet();
             }
         }
+    }
+
+    @Override
+    public boolean sleep$fillable() {
+        return !debug;
+    }
+
+    @Override
+    public PalettedContainer<BlockState> sleep$sectionAt(int y) {   // RenderChunk.getBlockState's own path, minus the block
+        if (sections == null) return null;
+        int l = wrapped.getSectionIndex(y);
+        if (l < 0 || l >= sections.size()) return null;
+        if (sleep$live != null && sleep$live[l] != null) sleep$late(l);
+        return sections.get(l);
     }
 
     @Override

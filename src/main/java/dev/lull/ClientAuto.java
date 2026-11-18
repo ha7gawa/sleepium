@@ -648,7 +648,20 @@ public final class ClientAuto {
         });
     }
 
+    /**
+     * -Dsleep.clientAuto.remeshEvery=S (with remeshRadius=R chunks, 8 by default): in the measured window, every S
+     * seconds the sections within R chunks of the camera are marked dirty - the same set meshed again and again, for a
+     * mesher's cost a section (lab.meshTime) independent of how many sections a flight happened to bring.
+     */
+    private static final int REMESH_EVERY = Integer.getInteger("sleep.clientAuto.remeshEvery", 0), REMESH_R = Integer.getInteger("sleep.clientAuto.remeshRadius", 8);
+
     private static void tick() {
+        if (REMESH_EVERY > 0 && dev.lull.ClientMeter.measuring() && (ticks - windowStart) % (REMESH_EVERY * 20) == 0 && Minecraft.getInstance().player != null) {
+            var p = Minecraft.getInstance().player.blockPosition();
+            int r = REMESH_R * 16;
+            Minecraft.getInstance().levelRenderer.setBlocksDirty(p.getX() - r, -64, p.getZ() - r, p.getX() + r, 319, p.getZ() + r);
+            log("remesh at " + ticks + ": " + dev.lull.optsupport.RegionStates.timeReport());
+        }
         for (java.util.Iterator<Object[]> it = CMDS.iterator(); it.hasNext(); ) {
             Object[] c = it.next();
             if (ticks >= (int) c[0]) {

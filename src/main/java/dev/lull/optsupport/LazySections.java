@@ -24,6 +24,12 @@ public final class LazySections {
 
         /** sections never copied: counted when the chunk copy is dropped (approximately: at the next frame's cache) */
         int sleep$uncopied();
+
+        /** RegionStates fill: false for the debug world (its own block rule) */
+        boolean sleep$fillable();
+
+        /** RegionStates fill: the container getBlockState reads at block height y (copied late if needed), null for air */
+        net.minecraft.world.level.chunk.PalettedContainer<net.minecraft.world.level.block.state.BlockState> sleep$sectionAt(int y);
     }
 
     public static String report() {

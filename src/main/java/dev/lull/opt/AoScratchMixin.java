@@ -44,6 +44,10 @@ public abstract class AoScratchMixin {
     @Overwrite
     public void tesselateWithAO(BlockAndTintGetter level, BakedModel model, BlockState state, BlockPos pos, PoseStack poseStack, VertexConsumer consumer,
                                 boolean checkSides, RandomSource random, long seed, int packedOverlay, ModelData modelData, RenderType renderType) {
+        if (dev.lull.optsupport.Enclosed.ON && checkSides && level != null) {   // lab.enclosedSkip: a block that draws nothing
+            BlockPos.MutableBlockPos em = dev.lull.optsupport.Enclosed.scratch();
+            if (dev.lull.optsupport.Enclosed.skip(level, model, state, pos, em)) return;
+        }
         AoScratch sc = AoScratch.take();
         float[] afloat;
         BitSet bitset;

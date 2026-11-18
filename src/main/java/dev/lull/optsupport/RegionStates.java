@@ -32,13 +32,103 @@ public final class RegionStates {
         rs.x0 = section.minBlockX() - 1;
         rs.y0 = section.minBlockY() - 1;
         rs.z0 = section.minBlockZ() - 1;
+        if (TIME) rs.t0 = BEAN.getCurrentThreadCpuTime();
+        if (FILL) rs.fill(region, section);
+    }
+
+    /**
+     * -Dlab.regionStates.fill (11-18): the section's own 16^3 decoded into the box in one pass at the start (the
+     * container RenderChunk.getBlockState reads, unpacked cell by cell as SimpleBitStorage.get does, each id through the
+     * palette as PalettedContainer.get does) instead of a get() a block on the first read; the one-block border from the
+     * neighbour sections stays read on demand. 13.9 % of the meshing workers were block reads after Enclosed.
+     */
+    public static final boolean FILL = Boolean.getBoolean("lab.regionStates.fill");
+    private static final BlockState AIR = net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+    public static long filled, notFilled;
+
+    @SuppressWarnings("unchecked")
+    private void fill(Object region, SectionPos section) {
+        Object[] chunks = ((net.minecraft.client.renderer.chunk.RenderChunkRegion) region).chunks;
+        if (chunks == null || chunks.length != 9 || !(chunks[4] instanceof LazySections.Chunk c) || !c.sleep$fillable()) {
+            notFilled++;
+            return;
+        }
+        net.minecraft.world.level.chunk.PalettedContainer<BlockState> pc = c.sleep$sectionAt(section.minBlockY());
+        int g = gen;
+        if (pc == null) {
+            for (int y = 1; y <= 16; y++)
+                for (int z = 1; z <= 16; z++) {
+                    int b = (y * N + z) * N + 1;
+                    for (int x = 0; x < 16; x++) {
+                        states[b + x] = AIR;
+                        stamp[b + x] = g;
+                    }
+                }
+            filled++;
+            return;
+        }
+        var data = pc.data;
+        net.minecraft.util.BitStorage st = data.storage();
+        net.minecraft.world.level.chunk.Palette<BlockState> pal = data.palette();
+        int bits = st.getBits();
+        if (bits == 0) {   // one value
+            BlockState v = pal.valueFor(0);
+            for (int y = 1; y <= 16; y++)
+                for (int z = 1; z <= 16; z++) {
+                    int b = (y * N + z) * N + 1;
+                    for (int x = 0; x < 16; x++) {
+                        states[b + x] = v;
+                        stamp[b + x] = g;
+                    }
+                }
+            filled++;
+            return;
+        }
+        if (!(st instanceof net.minecraft.util.SimpleBitStorage) || st.getSize() != 4096) {
+            notFilled++;
+            return;
+        }
+        long[] raw = st.getRaw();
+        int per = 64 / bits;
+        long mask = (1L << bits) - 1L;
+        int i = 0;
+        for (int cell = 0; i < 4096; cell++) {
+            long w = raw[cell];
+            for (int k = 0; k < per && i < 4096; k++, i++) {
+                int id = (int) (w & mask);
+                w >>>= bits;
+                int x = i & 15, z = (i >> 4) & 15, y = i >> 8;
+                int b = ((y + 1) * N + (z + 1)) * N + (x + 1);
+                states[b] = pal.valueFor(id);
+                stamp[b] = g;
+            }
+        }
+        filled++;
     }
 
     public static void end() {
         Object[] s = ThreadSlots.mine();
         if (s == null) return;
         RegionStates rs = (RegionStates) s[ThreadSlots.STATES];
-        if (rs != null) rs.region = null;
+        if (rs != null) {
+            rs.region = null;
+            if (TIME && rs.t0 != 0) {
+                MESH_NS.add(BEAN.getCurrentThreadCpuTime() - rs.t0);
+                MESHES.increment();
+                rs.t0 = 0;
+            }
+        }
+    }
+
+    /** -Dlab.meshTime (11-18): thread CPU time a section compile on our pool's threads, summed (for a mesher's cost a section) */
+    public static final boolean TIME = Boolean.getBoolean("lab.meshTime");
+    private static final java.lang.management.ThreadMXBean BEAN = java.lang.management.ManagementFactory.getThreadMXBean();
+    private static final java.util.concurrent.atomic.LongAdder MESH_NS = new java.util.concurrent.atomic.LongAdder(), MESHES = new java.util.concurrent.atomic.LongAdder();
+    private long t0;
+
+    public static String timeReport() {
+        long n = MESHES.sum();
+        return String.format(java.util.Locale.ROOT, "meshes %d, %.1f us CPU each", n, n == 0 ? 0.0 : MESH_NS.sum() / 1000.0 / n);
     }
 
     /** the box's kept state for (region, pos), or null: then read it and hand it to keep() */
