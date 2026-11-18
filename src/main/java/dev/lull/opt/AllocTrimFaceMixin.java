@@ -34,7 +34,7 @@ public abstract class AllocTrimFaceMixin {
             return false;
         } else if (blockstate.canOcclude()) {
             long key = ((long) dev.lull.optsupport.AllocTrim.id(state) << 32) | ((long) dev.lull.optsupport.AllocTrim.id(blockstate) << 3) | face.ordinal();
-            Long2ByteLinkedOpenHashMap map = dev.lull.optsupport.AllocTrim.FACES.get();
+            Long2ByteLinkedOpenHashMap map = dev.lull.optsupport.AllocTrim.faces();
             byte b0 = map.getAndMoveToFirst(key);
             if (b0 != 127) {
                 return b0 != 0;

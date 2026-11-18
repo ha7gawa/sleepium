@@ -27,7 +27,9 @@ public final class AllocTrim {
     private AllocTrim() {}
 
     /** Block.shouldRenderFace's occlusion cache keyed by a long (AllocTrimFaceMixin): vanilla's size, load factor, no rehash */
-    public static final ThreadLocal<it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap> FACES = ThreadLocal.withInitial(() -> {
+    public static final ThreadLocal<it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap> FACES = ThreadLocal.withInitial(AllocTrim::newFaces);
+
+    private static it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap newFaces() {
         it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap map = new it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap(2048, 0.25F) {
             @Override
             protected void rehash(int newN) {
@@ -35,7 +37,16 @@ public final class AllocTrim {
         };
         map.defaultReturnValue((byte) 127);
         return map;
-    });
+    }
+
+    /** this thread's face cache: on a pool thread its slot, else the ThreadLocal (one map a thread either way) */
+    public static it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap faces() {
+        Object[] s = ThreadSlots.mine();
+        if (s == null) return FACES.get();
+        Object m = s[ThreadSlots.FACES];
+        if (m == null) s[ThreadSlots.FACES] = m = newFaces();
+        return (it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap) m;
+    }
 
     private static final ThreadLocal<int[][]> INTS = ThreadLocal.withInitial(() -> new int[4][]);
 

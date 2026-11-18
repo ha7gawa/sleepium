@@ -19,7 +19,10 @@ public final class AoScratch {
     private static final ThreadLocal<AoScratch> MINE = ThreadLocal.withInitial(AoScratch::new);
 
     public static AoScratch take() {
-        AoScratch s = MINE.get();
+        Object[] slots = ThreadSlots.mine();
+        AoScratch s;
+        if (slots == null) s = MINE.get();
+        else if ((s = (AoScratch) slots[ThreadSlots.AO]) == null) slots[ThreadSlots.AO] = s = new AoScratch();
         if (s.busy) return null;
         s.busy = true;
         java.util.Arrays.fill(s.shape, 0f);

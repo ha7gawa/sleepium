@@ -285,6 +285,8 @@
     "LazySectionCopyMixin",
     "LazySectionRegionMixin",
     "StateIdMixin",
+    "AoCacheSlotMixin",
+    "AoCacheSlotFaceMixin",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",
     "SoundChannelHandleAccessor",
