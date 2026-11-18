@@ -1,6 +1,7 @@
 -Dlab.opt.AmbientParticleSkipMixin=true
 -Dlab.opt.AsyncChunkSaveMixin=true
 -Dlab.opt.AsyncChunkSaveStorageMixin=true
+-Dlab.asyncsave.listeners=true
 -Dlab.opt.BlockCollisionMemoMixin=true
 -Dlab.opt.BlockCollisionsFastMixin=true
 -Dlab.opt.BlockEntityCullNoAllocMixin=true

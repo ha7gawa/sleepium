@@ -5,7 +5,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,13 +21,85 @@ final class OwnedHash {
 
     private static final int DEPTH = 3, MAX_ELEMENTS = 256;
     private static final Map<Class<?>, Field[]> FIELDS = new ConcurrentHashMap<>();
-    private static final ThreadLocal<IdentityHashMap<Object, Boolean>> SEEN = ThreadLocal.withInitial(IdentityHashMap::new);
+    /**
+     * The objects already hashed in this call (cycles, shared objects: hashed once). 11-18: an IdentityHashMap cleared on
+     * every call (clear() fills its whole table) behind a ThreadLocal was half of a check's time; now an identity set
+     * cleared by a generation, the server thread's own in a field. The same answers: "seen before" exactly as before.
+     */
+    static final class Seen {
+        private Object[] keys = new Object[64];
+        private int[] stamp = new int[64];
+        private int gen = 1, size;
+
+        void clear() {
+            if (++gen == 0) {
+                java.util.Arrays.fill(stamp, 0);
+                java.util.Arrays.fill(keys, null);
+                gen = 1;
+            }
+            size = 0;
+        }
+
+        /** true when v was already in the set (as IdentityHashMap.put(v, TRUE) != null) */
+        boolean put(Object v) {
+            int mask = keys.length - 1;
+            int i = mix(System.identityHashCode(v)) & mask;
+            while (stamp[i] == gen) {
+                if (keys[i] == v) return true;
+                i = (i + 1) & mask;
+            }
+            keys[i] = v;
+            stamp[i] = gen;
+            if (++size * 2 > keys.length) grow();
+            return false;
+        }
+
+        private void grow() {
+            Object[] ok = keys;
+            int[] os = stamp;
+            int g = gen;
+            keys = new Object[ok.length * 2];
+            stamp = new int[ok.length * 2];
+            int mask = keys.length - 1;
+            for (int j = 0; j < ok.length; j++) {
+                if (os[j] != g) continue;
+                int i = mix(System.identityHashCode(ok[j])) & mask;
+                while (stamp[i] == g) i = (i + 1) & mask;
+                keys[i] = ok[j];
+                stamp[i] = g;
+            }
+        }
+
+        private static int mix(int h) {
+            h *= 0x9E3779B9;
+            return h ^ (h >>> 16);
+        }
+    }
+
+    private static final ThreadLocal<Seen> SEEN = ThreadLocal.withInitial(Seen::new);
+    private static volatile Thread owner;
+    private static Seen ownerSeen;
+
+    private static Seen seen() {
+        Thread t = Thread.currentThread();
+        if (t == owner) return ownerSeen;
+        if (owner == null) {   // the first caller (the server thread) keeps its set in the field
+            synchronized (OwnedHash.class) {
+                if (owner == null) {
+                    ownerSeen = new Seen();
+                    owner = t;
+                    return ownerSeen;
+                }
+            }
+        }
+        return SEEN.get();
+    }
     private static final Class<?> BE = net.minecraft.world.level.block.entity.BlockEntity.class;
 
     static long of(Object be) {
-        IdentityHashMap<Object, Boolean> seen = SEEN.get();
+        Seen seen = seen();
         seen.clear();
-        seen.put(be, Boolean.TRUE);
+        seen.put(be);
         long h = 17;
         for (Field f : fields(be.getClass(), true)) h = h * 1_000_003L + value(get(f, be), 1, seen);
         return h;
@@ -60,7 +131,7 @@ final class OwnedHash {
         });
     }
 
-    private static long value(Object v, int depth, IdentityHashMap<Object, Boolean> seen) {
+    private static long value(Object v, int depth, Seen seen) {
         if (v == null) return 0;
         if (v instanceof Number n) return v instanceof Double || v instanceof Float ? Double.doubleToLongBits(n.doubleValue()) : n.longValue();
         if (v instanceof Boolean b) return b ? 1231 : 1237;
@@ -74,7 +145,7 @@ final class OwnedHash {
                 || v instanceof net.minecraft.core.Holder<?> || v instanceof net.minecraft.resources.ResourceLocation
                 || v instanceof net.minecraft.core.Vec3i || v instanceof Class<?> || v instanceof Thread || c.isSynthetic() || c.isHidden())
             return System.identityHashCode(v);
-        if (seen.put(v, Boolean.TRUE) != null || depth > DEPTH) return 31;
+        if (seen.put(v) || depth > DEPTH) return 31;
         if (v instanceof net.minecraft.world.item.ItemStack st)   // by value: item, count, components
             return st.isEmpty() ? 0 : System.identityHashCode(st.getItem()) * 31L + st.getCount() * 7L + st.getComponents().hashCode();
         if (c.isArray()) {

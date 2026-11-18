@@ -1,6 +1,7 @@
 lab.opt.AmbientParticleSkipMixin	chunks	true	exp/ambient-skip (client): doAnimateTick asks the biome of every random position it samples (twice 667 per tick) only for its ambient particle.	
 lab.opt.AsyncChunkSaveMixin	saving	true	exp/async-chunk-save: see AsyncChunkSave (ChunkMap.save: the tag with placeholders, then the deferred store).	
 lab.opt.AsyncChunkSaveStorageMixin	saving	true	AsyncChunkSaveMixin: reads wait for a pending save of their position; flush and close wait for all of them.	lab.opt.AsyncChunkSaveMixin
+lab.asyncsave.listeners	saving	true	Chunk saves stay off the main thread also when mods listen to chunk saves only to keep their own data (Immersive Engineering, Mekanism and the like).	lab.opt.AsyncChunkSaveMixin
 lab.opt.BlockCollisionMemoMixin	ticks	true	exp/collision-memo: resting entities ask the same block question every tick (items: noCollision on their deflated box, ~36 block reads each; JFR 4000 items: 28 % of the server thread in BlockCollisions.computeNext).	
 lab.opt.BlockCollisionsFastMixin	ticks	true	exp/collision-mask: BlockCollisions' state read of a cell its section's mask (CollisionMask) proves can never collide answers air without reading the section - every collision query of every entity (moves, noCollision, supporting blocks) and of mods.	
 lab.opt.BlockEntityCullNoAllocMixin	entities_render	true	exp/frame-garbage (client): renderLevel's block-entity frustum tests through NoAllocChecks (no AABB for the default box).	lab.opt.FrameGarbageMixin
@@ -17,9 +18,9 @@ lab.opt.ChunkTickMemoChunkMixin	ticks	true	ChunkTickMemoMixin: the remembered an
 lab.opt.ChunkTickMemoEpochMixin	ticks	true	ChunkTickMemoMixin: every write of the chunk-visibility map goes through here.	lab.opt.ChunkTickMemoMixin
 lab.opt.ChunkTickMemoMixin	ticks	true	exp/chunk-tick-memo: see ChunkTickMemo.	
 lab.opt.ChunkUploadMixin	chunks	true	ChunkMultiDraw: a section layer's mesh is also copied into its region arena before vanilla uploads it.	lab.opt.ChunkMultiDrawMixin
-lab.opt.UploadBindMixin	chunks	true	ChunkUploadMixin: a section mesh our arenas take skips the bind of the section's own VAO (never drawn; the costliest part of an upload).	lab.opt.ChunkUploadMixin
-lab.opt.LazyChunkBufferMixin	chunks	true	Chunk sections' buffers take their GL names at their first bind, not when the view area is built (only sections that hold something have names; Adreno/LTW phones die past ~65 000 names: distance 8+).	
-lab.opt.LazyChunkBufferAreaMixin	chunks	true	LazyChunkBufferMixin: marks the view area's section building.	lab.opt.LazyChunkBufferMixin
+lab.opt.UploadBindMixin	ticks	true	ChunkMultiDraw (11-17): a section layer's upload whose mesh goes to our arenas skips vanilla's bind of the section's own VAO - never drawn while the arenas draw the layer, and the frame thread's costliest part of an upload (the hardest orbit over the horde: 1.1 ms of the slowest frames' 1.6 ms of up	
+lab.opt.LazyChunkBufferMixin	ticks	true	LazyChunkBuffers: a section's buffer made while the view area is built gets no GL names in its constructor; its first bind (vanilla binds before every upload and every draw) makes them.	
+lab.opt.LazyChunkBufferAreaMixin	ticks	true	LazyChunkBufferMixin: the buffers made while the view area builds its sections are the lazy ones.	
 lab.opt.ClientBiomeMemoMixin	chunks	true	exp/client-biome-memo (client): the render thread's noise-biome lookups (fog colour: 216 per frame, sky colour, the ambient particles of animateTick: ~1300 per tick) answered from a per-level memo of quart position -> biome holder.	
 lab.opt.ClientChunkCacheBiomeMixin	chunks	true	ClientBiomeMemoMixin: every change of the chunk data (or of which chunks count as present) clears the biome memo.	lab.opt.ClientBiomeMemoMixin
 lab.opt.ClientEventSiteMixin	ticks	true	exp/client-event-sites (client): EventSiteMixin's carrier for the client.	
@@ -199,13 +200,11 @@ lab.opt.ParticleLightMemoMixin	entities_render	true	A particle's light read once
 lab.opt.ParticleShapeMemoMixin	entities_render	true	Particles' block-shape questions answered once per tick and block instead of once per particle (with parallel particles).	
 lab.opt.SoundNoWaitMixin	ticks	true	Sounds start without waiting for the sound thread to hand out a channel (a mod that works there - Sound Physics Remastered - held every frame up next to a crowd of mobs); when that thread is far behind a new sound is dropped, as the game drops one when no channel is free.	
 lab.opt.FrustumRegionMixin	chunks	true	Chunk sections in view picked from flat arrays instead of the occlusion graph's linked set: no stall when the camera turns at far view distances (32 chunks: 167 -> 1100 fps while turning), the same sections in the same order.	
+lab.chunkmd.parallelLists	ticks	true		
+lab.tintBlend	ticks	true		
+lab.viewAreaStrips	ticks	true		
 lab.voxel.stream	chunks	false	GPU terrain: chunk sections meshed on the graphics card from the blocks as the server sends them, far terrain as coarser cells (level of detail beyond 6 chunks, coarser again beyond 10). Less CPU per frame and fewer triangles: on an Intel N100 a flight 88 -> 166 fps. Near terrain looks the same; far terrain is simplified. Blocks whose look mods compute from the world are drawn the vanilla way. Stands aside (vanilla terrain) when another mod replaces the chunk renderer: Sodium, Embeddium and the shader mods on them.	
 lab.voxel.stream.lodNear	chunks	false	GPU terrain: level of detail closer (from 4 chunks, coarser from 8) - for weak graphics; the middle distance looks coarser.	lab.voxel.stream
 lab.voxel.stream.cone	chunks	false	GPU terrain: terrain toward the screen edges and behind goes coarse sooner. A few more fps; after a fast turn detail fills in over a moment.	lab.voxel.stream
 lab.chunkmd.occlusion	chunks	false	GPU occlusion culling of chunk sections (two phases, exact). Pays off where most of the loaded terrain is hidden.	
-lab.chunkmd.parallelLists	chunks	true	Terrain draw lists built in parts on the client pool and merged in order (exact): flying fast at far view distances.	
-lab.tintBlend	chunks	true	Biome blending by running sums (exact, the same colours): chunk meshing with a large Biome Blend several times cheaper.	
-lab.viewAreaStrips	chunks	true	The chunk grid follows the camera by the columns that move only (exact): no hitch at each chunk border crossed.	
-lab.meshMemo	chunks	false	A chunk section whose blocks, light and biomes did not change is not meshed again (exact, experimental): circling flights.	
 lab.prender.fieldFlow	threads	false	Entities next to mods that hook their drawing (Shoulder Surfing, Entity Model Features...): at start Sleepium reads what such a mod passes from the entity dispatcher into the models; a mod that passes nothing a model reads no longer keeps every entity on the render thread, and what a worker read is checked again when the frame is put together. Up to a few seconds at start in large packs.	lab.opt.ParallelEntitiesMixin
-lab.decoupled	threads	false	Decoupled frames (experimental, at your own risk): the frame on its own thread and clock, mobs ticked on worker threads and drawn from tick-rate poses - smooth frames even during long ticks; not exact (interpolated). Needs a restart.	
