@@ -40,7 +40,7 @@ public final class MixinYield {
     /** the same question without a trace (needsYielded's providers: the plugin may never ask about them - a flag is off) */
     private static String conflict(String targetClassName, String mixinClassName) {
         if (Boolean.getBoolean("lab.yield.off")) return null;   // (tests: the conflict itself, nothing of ours gives way)
-        if (mixinClassName.contains(".BeCensus")) return null;   // measuring only: it changes nothing, it never gives way
+        if (mixinClassName.contains(".BeCensus") || mixinClassName.contains(".Scout")) return null;   // measuring only: it changes nothing, it never gives way
         String why = DECIDED.computeIfAbsent(mixinClassName, k -> {
             String r = decide(targetClassName, mixinClassName);
             return r == null ? "" : r;
