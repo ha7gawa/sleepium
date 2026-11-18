@@ -280,6 +280,7 @@
     "MeshThreadsMixin",
     "KeyframeLookupMixin",
     "ModelPartChildrenAccessor",
+    "AoScratchMixin",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",
     "SoundChannelHandleAccessor",
