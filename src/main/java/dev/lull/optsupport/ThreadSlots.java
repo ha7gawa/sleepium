@@ -11,7 +11,7 @@ import dev.lab.runtime.LabRuntime;
 public final class ThreadSlots {
     private ThreadSlots() {}
 
-    public static final int AO = 0, FACES = 1, AO_CACHE = 2, STATES = 3;
+    public static final int AO = 0, FACES = 1, AO_CACHE = 2, STATES = 3, POS = 4, TYPES = 5, QUAD = 6;
 
     /** the current thread's slots when it is one of our pool's, else null */
     public static Object[] mine() {
