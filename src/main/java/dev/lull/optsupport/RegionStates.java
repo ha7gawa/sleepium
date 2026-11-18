@@ -26,6 +26,8 @@ public final class RegionStates {
         if (rs == null) s[ThreadSlots.STATES] = rs = new RegionStates();
         if (++rs.gen == 0) {
             java.util.Arrays.fill(rs.stamp, 0);
+            java.util.Arrays.fill(rs.lstamp, 0);
+            java.util.Arrays.fill(rs.sstamp, 0);
             rs.gen = 1;
         }
         rs.region = region;
@@ -144,6 +146,33 @@ public final class RegionStates {
         int dx = pos.getX() - x0, dy = pos.getY() - y0, dz = pos.getZ() - z0;
         if (dx < 0 || dy < 0 || dz < 0 || dx >= N || dy >= N || dz >= N) return -1;
         return (dy * N + dz) * N + dx;
+    }
+
+    /**
+     * -Dlab.lightBox (11-18, with lab.opt.LightBoxMixin): the AO light reads of a mesh (ModelBlockRenderer.Cache's
+     * getLightColor / getShadeBrightness: vanilla keeps the last 100 positions of the compile, by position) kept for the
+     * whole box - each position's value computed once, the same call vanilla's cache makes on a miss. (Vanilla reads
+     * the live light engine while it meshes: where light changes mid-mesh its answer depends on its cache's evictions;
+     * here every read of the mesh sees the first.) 1/3 of a section's meshing was AO, mostly these lookups.
+     */
+    public static final boolean LIGHT = Boolean.getBoolean("lab.lightBox");
+    private final int[] light = new int[N * N * N], lstamp = new int[N * N * N], sstamp = new int[N * N * N];
+    private final float[] shade = new float[N * N * N];
+
+    public int light(int i, net.minecraft.world.level.BlockAndTintGetter level, BlockState state, BlockPos pos) {
+        if (lstamp[i] == gen) return light[i];
+        int v = net.minecraft.client.renderer.LevelRenderer.getLightColor(level, state, pos);
+        light[i] = v;
+        lstamp[i] = gen;
+        return v;
+    }
+
+    public float shade(int i, net.minecraft.world.level.BlockAndTintGetter level, BlockState state, BlockPos pos) {
+        if (sstamp[i] == gen) return shade[i];
+        float v = state.getShadeBrightness(level, pos);
+        shade[i] = v;
+        sstamp[i] = gen;
+        return v;
     }
 
     public BlockState kept(int i) {

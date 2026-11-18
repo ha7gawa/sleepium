@@ -294,6 +294,7 @@
     "ChunkRenderTypeSetAccessor",
     "QuadDataArraysMixin",
     "WeightedBakedModelAccessor",
+    "LightBoxMixin",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",
     "SoundChannelHandleAccessor",
