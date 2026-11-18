@@ -58,6 +58,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.prender.tickPoses");
         if (simple.equals("ViewAreaStripsMixin"))   // repositionCamera visits the moved columns only
             on = Boolean.getBoolean("lab.viewAreaStrips");
+        if (simple.equals("MeshThreadsMixin"))   // at most lab.meshThreads section meshes at once
+            on = Integer.getInteger("lab.meshThreads", 0) > 0;
         if (simple.startsWith("MeshMemo"))   // a section with its mesh's inputs is not meshed again (MeshMemo)
             on = Boolean.getBoolean("lab.meshMemo");
         if (simple.startsWith("TintBlend"))   // biome blending by running sums (TintBlend)
