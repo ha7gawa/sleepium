@@ -278,6 +278,8 @@
     "OcclusionViewAreaAccessor",
     "OcclusionChunkEpochMixin",
     "MeshThreadsMixin",
+    "KeyframeLookupMixin",
+    "ModelPartChildrenAccessor",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",
     "SoundChannelHandleAccessor",
