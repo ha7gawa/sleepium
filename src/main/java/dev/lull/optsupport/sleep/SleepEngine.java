@@ -64,6 +64,27 @@ public final class SleepEngine {
      * on what is observed while they run, as before 1.1.8 - faster idle machines, not proven exact. Read when a class
      * is analysed (a change takes a restart).
      */
+    /** a check may cost at most this share of a tick (lab.sleep.observedCost, percent) */
+    static final double OBSERVED_COST = Integer.getInteger("lab.sleep.observedCost", 50) / 100.0;
+    /** samples of each before the rule decides */
+    static final int COST_SAMPLES = Integer.getInteger("lab.sleep.costSamples", 200);
+    public static long costlyClasses;
+    private static long tickT0;
+
+    /** observed-only: true (and decided for good) when the class's check costs more than its tick is worth */
+    static boolean costly(Sleeper s) {
+        ClassInfo ci = s.info;
+        if (ci.costly) return true;
+        if (ci.ticks < COST_SAMPLES || ci.checks < COST_SAMPLES) return false;
+        double tick = (double) ci.tickNs / ci.ticks, check = (double) ci.checkNs / ci.checks;
+        if (check <= OBSERVED_COST * tick) return false;
+        ci.costly = true;
+        costlyClasses++;
+        System.out.println(String.format(java.util.Locale.ROOT, "[sleep/sleep] %s: observed sleep off - a check costs %.2f us, a tick %.2f us",
+                s.be.getClass().getSimpleName(), check / 1e3, tick / 1e3));
+        return true;
+    }
+
     static boolean observedModSleep() {
         return Boolean.getBoolean("lab.sleep.ObservedModSleep");
     }
@@ -84,6 +105,14 @@ public final class SleepEngine {
          * neighbour change wakes it
          */
         boolean observedOnly;
+        /**
+         * observed-only cost (11-18): a tick's time while awake and observed, and a check's time (the owned hash and the
+         * neighbours' hashes: on every observed tick and every skipped one). Mods' cheap ticks (0.5 us) cost far less than
+         * their check (~10 us): 20 000 such machines took a server tick from 12 to 220 ms. When a check costs more than
+         * OBSERVED_COST times a tick, the class's observed sleep is turned off for good: its block entities tick as vanilla.
+         */
+        long tickNs, ticks, checkNs, checks;
+        volatile boolean costly;
 
         ClassInfo(SleepAnalysis.Plan plan) {
             this(plan, false, null);
@@ -227,16 +256,29 @@ public final class SleepEngine {
         if (!VERIFY) return true;
         Sleeper s = sleeper(be);
         if (s == null || s.state != State.ASLEEP) return true;
+        if (s.info.observedOnly && s.info.costly) {
+            request(s, "observed sleep costs more than the tick");
+            return false;
+        }
         // only the block entity's own fields (the cache lines the skip reads anyway): primitives by value, references by
         // identity. Changes inside referenced containers arrive as events (container hooks, setChanged, block updates).
         if (s.info.snapper.same(be, s.prev, s.refs) && (!s.info.deep && s.neighbours == null || sameLists(s))
-                && (!s.info.observedOnly || OwnedHash.of(be) == s.ownedAtSleep && watchedSame(s))) {
+                && (!s.info.observedOnly || observedSame(s, be))) {
             verifiedSkips++;
             return true;
         }
         externalWakes++;
         request(s, "external change");
         return false;
+    }
+
+    /** the observed-only check of a sleeper, timed for its class (costly) */
+    private static boolean observedSame(Sleeper s, BlockEntity be) {
+        long t0 = System.nanoTime();
+        boolean same = OwnedHash.of(be) == s.ownedAtSleep && watchedSame(s);
+        s.info.checkNs += System.nanoTime() - t0;
+        s.info.checks++;
+        return same;
     }
 
     private static final Map<Class<?>, String> BYPASS = new java.util.concurrent.ConcurrentHashMap<>();
@@ -526,6 +568,11 @@ public final class SleepEngine {
             if (s == null) return;   // analysed in the background: vanilla's tick meanwhile
         }
         if (s.state == State.NEVER) return;
+        if (s.info.observedOnly && costly(s)) {
+            s.state = State.NEVER;   // (an asleep one was woken by verifyAsleep first)
+            return;
+        }
+        if (s.info.observedOnly) tickT0 = System.nanoTime();
         if (level.getGameTime() < s.observeFrom) {
             s.prevValid = false;   // not observed: the next observation starts a fresh sequence
             return;
@@ -600,7 +647,15 @@ public final class SleepEngine {
         boolean clockOnly = s.prevValid && s.prevTick == now - 1 && BeTickStats.writes == w0 && seed(level) == seed0
                 && readHash == s.prevReadHash && unobserved == u0;
         if (s.info.observedOnly) {   // what it owns (an energy storage spent every tick, a tank, a timer object) counts too
+            long t1 = System.nanoTime();
+            if (tickT0 != 0) {
+                s.info.tickNs += t1 - tickT0;
+                s.info.ticks++;
+                tickT0 = 0;
+            }
             long owned = OwnedHash.of(be);
+            s.info.checkNs += System.nanoTime() - t1;
+            s.info.checks++;
             if (owned != s.prevOwned) clockOnly = false;
             s.prevOwned = owned;
         }

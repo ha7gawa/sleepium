@@ -154,7 +154,16 @@
     "ScoutEffectsMixin",
     "ScoutRemoveMixin",
     "LightLayerCacheMixin",
-    "LightTimingMixin"
+    "LightTimingMixin",
+    "DistanceManagerHystMixin",
+    "PlayerTicketHystMixin",
+    "ChunkMapHystMixin",
+    "BeCensusLevelMixin",
+    "BeCensusEffectsMixin",
+    "BeCensusMiscMixin",
+    "BeCensusTicksMixin",
+    "BeCensusRandomMixin",
+    "BeCensusEntityMixin"
   ],
   "client": [
     "ClientTickProfileMixin",
@@ -296,9 +305,6 @@
     "WeightedBakedModelAccessor",
     "LightBoxMixin",
     "CompileWalkMixin",
-    "DistanceManagerHystMixin",
-    "PlayerTicketHystMixin",
-    "ChunkMapHystMixin",
     "ClientStorageHystMixin",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",

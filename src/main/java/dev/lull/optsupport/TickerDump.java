@@ -15,7 +15,9 @@ public final class TickerDump {
     private static int ticks;
 
     public static void tick(MinecraftServer server) {
-        if (AT <= 0 || ++ticks != AT) return;
+        ++ticks;
+        if (BeCensus.ON && ticks % 100 == 0) System.out.println("[sleep/census] " + BeCensus.report());
+        if (AT <= 0 || ticks != AT) return;
         for (ServerLevel level : server.getAllLevels()) {
             int n = 0;
             for (TickingBlockEntity t : level.blockEntityTickers) {
