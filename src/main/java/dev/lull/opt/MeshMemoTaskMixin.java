@@ -82,7 +82,7 @@ public abstract class MeshMemoTaskMixin implements dev.lull.optsupport.MeshMemo.
             hd.sleep$setIncoming(0);
             return;
         }
-        if (dev.lull.optsupport.MeshMemo.LIGHT_EPOCH.get() != sleep$lightEpoch || (sleep$lightEpoch & 1) != 0) {   // (odd: a batch was running)
+        if (dev.lull.optsupport.MeshMemo.LIGHT_GUARD && (dev.lull.optsupport.MeshMemo.LIGHT_EPOCH.get() != sleep$lightEpoch || (sleep$lightEpoch & 1) != 0)) {   // (odd: a batch was running)
             dev.lull.optsupport.MeshMemo.LIGHT_MOVED.incrementAndGet();
             hd.sleep$setIncoming(0);
             return;

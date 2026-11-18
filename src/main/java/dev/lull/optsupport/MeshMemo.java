@@ -186,8 +186,8 @@ public final class MeshMemo {
                 for (int dz = -1; dz <= 1; dz++)
                     for (int dx = -1; dx <= 1; dx++) {
                         SectionPos p = SectionPos.of(cx + dx, cy + dy, cz + dz);
-                        h = layer(h, bl.getDataLayerData(p));
-                        DataLayer sky = sl.getDataLayerData(p);
+                        h = layer(h, visible(bl, p));
+                        DataLayer sky = visible(sl, p);
                         if (sky != null) h = layer(h, sky);
                         else {   // its values where the 18^3 box reads them (a missing sky layer: light from above)
                             int x0 = dx < 0 ? 15 : 0, x1 = dx > 0 ? 0 : 15, y0 = dy < 0 ? 15 : 0, y1 = dy > 0 ? 0 : 15, z0 = dz < 0 ? 15 : 0, z1 = dz > 0 ? 0 : 15;
@@ -222,6 +222,19 @@ public final class MeshMemo {
             HASH_NANOS.addAndGet(System.nanoTime() - t0);
         }
     }
+
+    /**
+     * The light layer a compile reads: the storage's visible copy (LightEngine.getLightValue -> getDataLayer(pos, false)).
+     * getDataLayerData gives the packet's queued layer before runLightUpdates applies it - newer than what the compile
+     * reads, which made a memo's hash and its mesh disagree (and needed the global LIGHT_EPOCH guard, 11-18).
+     */
+    private static DataLayer visible(LayerLightEventListener l, SectionPos p) {
+        if (l instanceof net.minecraft.world.level.lighting.LightEngine<?, ?> e) return e.storage.getDataLayer(p.asLong(), false);
+        return l.getDataLayerData(p);
+    }
+
+    /** -Dlab.meshMemo.lightGuard=true: also no memo for a compile that ran across any light batch (the old, global guard) */
+    public static final boolean LIGHT_GUARD = Boolean.getBoolean("lab.meshMemo.lightGuard");
 
     /** a section with a translucent layer: not memoised (its quads were sorted for that compile's camera) */
     public static boolean translucent(SectionRenderDispatcher.RenderSection s) {
