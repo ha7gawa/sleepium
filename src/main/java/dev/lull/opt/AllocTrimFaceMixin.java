@@ -34,6 +34,18 @@ public abstract class AllocTrimFaceMixin {
             return false;
         } else if (blockstate.canOcclude()) {
             long key = ((long) dev.lull.optsupport.AllocTrim.id(state) << 32) | ((long) dev.lull.optsupport.AllocTrim.id(blockstate) << 3) | face.ordinal();
+            if (dev.lull.optsupport.AllocTrim.FACE_TABLE) {   // lab.faceTable: a direct-mapped table instead of the LRU
+                dev.lull.optsupport.AllocTrim.FaceTable t = dev.lull.optsupport.AllocTrim.faceTable();
+                int sl = dev.lull.optsupport.AllocTrim.FaceTable.slot(key);
+                if (t.keys[sl] == key) return t.vals[sl] != 0;
+                VoxelShape voxelshape = state.getFaceOcclusionShape(level, offset, face);
+                if (voxelshape.isEmpty()) return true;
+                VoxelShape voxelshape1 = blockstate.getFaceOcclusionShape(level, pos, face.getOpposite());
+                boolean flag = Shapes.joinIsNotEmpty(voxelshape, voxelshape1, BooleanOp.ONLY_FIRST);
+                t.keys[sl] = key;
+                t.vals[sl] = (byte) (flag ? 1 : 0);
+                return flag;
+            }
             Long2ByteLinkedOpenHashMap map = dev.lull.optsupport.AllocTrim.faces();
             byte b0 = map.getAndMoveToFirst(key);
             if (b0 != 127) {

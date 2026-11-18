@@ -48,6 +48,39 @@ public final class AllocTrim {
         return (it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap) m;
     }
 
+    /**
+     * -Dlab.faceTable (11-18): shouldRenderFace's answers in a direct-mapped table of the thread (65 536 entries: the
+     * key, the answer) instead of the linked LRU of 2048 (Long2ByteLinkedOpenHashMap.getAndMoveToFirst: 3.3 % of the
+     * meshing workers in flight). Same key, same computation on a miss. For pairs whose face shapes do not depend on the
+     * position (all vanilla blocks) every cache gives vanilla's answer; where a mod's shape does depend on it, vanilla's
+     * own answer depends on which thread meshed what before (its LRU is per thread) - no order to be exact to.
+     */
+    public static final boolean FACE_TABLE = Boolean.getBoolean("lab.faceTable");
+
+    public static final class FaceTable {
+        public final long[] keys = new long[1 << 16];
+        public final byte[] vals = new byte[1 << 16];
+
+        FaceTable() {
+            java.util.Arrays.fill(keys, -1L);
+        }
+
+        public static int slot(long key) {
+            long h = key * 0x9E3779B97F4A7C15L;
+            return (int) (h >>> 48);
+        }
+    }
+
+    private static final ThreadLocal<FaceTable> FACE_TABLES = ThreadLocal.withInitial(FaceTable::new);
+
+    public static FaceTable faceTable() {
+        Object[] s = ThreadSlots.mine();
+        if (s == null) return FACE_TABLES.get();
+        Object m = s[ThreadSlots.FACE_TABLE];
+        if (m == null) s[ThreadSlots.FACE_TABLE] = m = new FaceTable();
+        return (FaceTable) m;
+    }
+
     private static final ThreadLocal<int[][]> INTS = ThreadLocal.withInitial(() -> new int[4][]);
 
     /** an int[n] for one use on this thread (its content is garbage: the caller overwrites all of it) */
