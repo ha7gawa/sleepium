@@ -287,6 +287,8 @@
     "StateIdMixin",
     "AoCacheSlotMixin",
     "AoCacheSlotFaceMixin",
+    "RegionStatesMixin",
+    "RegionStatesCompileMixin",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",
     "SoundChannelHandleAccessor",
