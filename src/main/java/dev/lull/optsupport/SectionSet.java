@@ -21,8 +21,13 @@ import org.joml.FrustumIntersection;
  * reread then.
  */
 public final class SectionSet extends LinkedHashSet<Object> {
-    private Object[] sec = new Object[256];
-    private int[] ox = new int[256], oy = new int[256], oz = new int[256], rid = new int[256], sidx = new int[256];
+    /**
+     * the last sets' size and largest section index (11-18): a new set (one per full graph update) is made at that size
+     * at once instead of doubling from 256 - in flight at distance 32 the doublings were ~6 MB of garbage an update.
+     */
+    private static volatile int sizeHint = 256, posHint = 0;
+    private Object[] sec = new Object[sizeHint];
+    private int[] ox = new int[sec.length], oy = new int[sec.length], oz = new int[sec.length], rid = new int[sec.length], sidx = new int[sec.length];
     private int n, regions, epoch = -1;
     private int[] rx = new int[64], ry = new int[64], rz = new int[64];
     private final Long2IntOpenHashMap regionOf = new Long2IntOpenHashMap();
@@ -39,7 +44,7 @@ public final class SectionSet extends LinkedHashSet<Object> {
     private static final int[] MOVED = new int[LOG];
     private static long movedHead;
     private long consumed = -1;
-    private int[] posOf = new int[0];   // RenderSection.index -> position + 1
+    private int[] posOf = new int[posHint];   // RenderSection.index -> position + 1
     private boolean noIndex;
 
     /** RenderSection.setOrigin (SectionOriginEpochMixin) */
@@ -68,7 +73,7 @@ public final class SectionSet extends LinkedHashSet<Object> {
      * walk). Reads come from the arrays in order; anything else than add moves the nodes into LinkedHashSet for good.
      */
     private final boolean own = OcclusionFast.ON;
-    private Object[] nodeArr = own ? new Object[256] : null;
+    private Object[] nodeArr = own ? new Object[sec.length] : null;
     private boolean delegated;
 
     private void delegate() {
@@ -105,11 +110,15 @@ public final class SectionSet extends LinkedHashSet<Object> {
         sidx[n] = s.index;
         if (s.index < 0) noIndex = true;
         else {
-            if (s.index >= posOf.length) posOf = java.util.Arrays.copyOf(posOf, Math.max(s.index + 1, posOf.length * 2));
+            if (s.index >= posOf.length) {
+                posOf = java.util.Arrays.copyOf(posOf, Math.max(s.index + 1, posOf.length * 2));
+                if (posOf.length > posHint) posHint = posOf.length;
+            }
             posOf[s.index] = n + 1;
         }
         place(n, s);
         n++;
+        if (n > sizeHint) sizeHint = sec.length;
         return true;
     }
 
