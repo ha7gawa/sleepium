@@ -45,6 +45,7 @@ public final class SleepMod {
         modBus.addListener(net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent.class, dev.lull.net.BulkPayloads::register);
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.net.Bulk.pump(e.getServer()));
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.api.Travel.tick());
+        if (dev.lull.optsupport.TickerDump.AT > 0) gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.optsupport.TickerDump.tick(e.getServer()));
         gameBus.addListener(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent.class, e -> {
             if (e.getEntity() instanceof net.minecraft.server.level.ServerPlayer sp) dev.lull.net.Bulk.onLogout(sp);
         });
