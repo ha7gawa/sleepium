@@ -303,7 +303,9 @@ public abstract class OcclusionFastMixin {
                             int col = idx >= 0 ? idx % gx + (idx / gxy) * gx : -1;
                             BlockPos o = section1.getOrigin();
                             long ck = ChunkPos.asLong(o.getX() >> 4, o.getZ() >> 4);
-                            if (col >= 0 && col < memo.colGen.length && memo.colGen[col] == gen && memo.colKey[col] == ck) {
+                            // (kept across walks while none of the four neighbour chunks came or went and the view did not move)
+                            int ep = OcclusionFast.viewEpoch(), st = OcclusionFast.neighbourStamp(o.getX() >> 4, o.getZ() >> 4);
+                            if (col >= 0 && col < memo.colGen.length && memo.colGen[col] == ep && memo.colStamp[col] == st && memo.colKey[col] == ck) {
                                 all = memo.colOk[col];
                                 colsKept++;
                             } else {
@@ -313,7 +315,8 @@ public abstract class OcclusionFastMixin {
                                         && section1.doesChunkExistAt(section1.relativeOrigins[Direction.SOUTH.ordinal()]);
                                 cols++;
                                 if (col >= 0 && col < memo.colGen.length) {
-                                    memo.colGen[col] = gen;
+                                    memo.colGen[col] = ep;
+                                    memo.colStamp[col] = st;
                                     memo.colKey[col] = ck;
                                     memo.colOk[col] = all;
                                 }

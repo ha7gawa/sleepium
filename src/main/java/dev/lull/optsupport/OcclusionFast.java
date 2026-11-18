@@ -32,22 +32,47 @@ public final class OcclusionFast {
         public int gen;
         public int[] ray = new int[0];          // section index * 3 + axis -> gen when the ray passed
         public long[] colKey = new long[0];     // grid column -> its chunk position at the check
-        public int[] colGen = new int[0];       // grid column -> gen when checked
+        public int[] colGen = new int[0];       // grid column -> the view epoch when checked (0: never)
+        public int[] colStamp = new int[0];     // grid column -> its neighbours' newest stamp then
         public boolean[] colOk = new boolean[0];
 
         public void begin(int sections, int columns) {
             if (++gen == 0) {   // wrapped: forget everything
                 java.util.Arrays.fill(ray, 0);
-                java.util.Arrays.fill(colGen, 0);
                 gen = 1;
             }
             if (ray.length < sections * 3) ray = new int[sections * 3];
             if (colGen.length < columns) {
                 colKey = new long[columns];
                 colGen = new int[columns];
+                colStamp = new int[columns];
                 colOk = new boolean[columns];
             }
         }
+    }
+
+    /** which chunks are in range changed (OcclusionChunkEpochMixin): every column answer is stale */
+    private static volatile int viewEpoch = 1;
+    /** a chunk arrived or was dropped: its slot (x, z mod 128) stamped with a new number */
+    private static final java.util.concurrent.atomic.AtomicInteger STAMPS = new java.util.concurrent.atomic.AtomicInteger(1);
+    private static final int[] STAMP = new int[128 * 128];
+
+    public static void viewChanged() {
+        viewEpoch++;
+    }
+
+    public static void chunkChanged(int x, int z) {
+        STAMP[(x & 127) * 128 + (z & 127)] = STAMPS.incrementAndGet();
+    }
+
+    public static int viewEpoch() {
+        return viewEpoch;
+    }
+
+    /** the newest stamp of a column's four neighbour chunks */
+    public static int neighbourStamp(int cx, int cz) {
+        return Math.max(Math.max(STAMP[((cx - 1) & 127) * 128 + (cz & 127)], STAMP[((cx + 1) & 127) * 128 + (cz & 127)]),
+                Math.max(STAMP[(cx & 127) * 128 + ((cz - 1) & 127)], STAMP[(cx & 127) * 128 + ((cz + 1) & 127)]));
     }
 
     public static final ThreadLocal<Memo> MEMO = ThreadLocal.withInitial(Memo::new);

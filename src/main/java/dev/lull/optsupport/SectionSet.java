@@ -120,7 +120,21 @@ public final class SectionSet extends LinkedHashSet<Object> {
         oz[i] = o.getZ();
         int x = ox[i] >> SHIFT, y = oy[i] >> SHIFT, z = oz[i] >> SHIFT;
         long key = ((long) x & 0x1FFFFF) << 42 | ((long) y & 0x1FFFFF) << 21 | ((long) z & 0x1FFFFF);
-        int r = regionOf.get(key);
+        int r;
+        int slot = -1;
+        if (own) {   // OcclusionFast: a direct-mapped slot in front of the map (the same ids: the map gives them out)
+            if (slotKey == null) {
+                slotKey = new long[SLOTS];
+                slotId = new int[SLOTS];
+                java.util.Arrays.fill(slotId, -1);
+            }
+            slot = ((x & 31) << 9) | ((z & 31) << 4) | (y & 15);
+            if (slotId[slot] >= 0 && slotKey[slot] == key) {
+                rid[i] = slotId[slot];
+                return;
+            }
+        }
+        r = regionOf.get(key);
         if (r < 0) {
             r = regions++;
             if (r == rx.length) {
@@ -134,7 +148,15 @@ public final class SectionSet extends LinkedHashSet<Object> {
             regionOf.put(key, r);
         }
         rid[i] = r;
+        if (slot >= 0) {
+            slotKey[slot] = key;
+            slotId[slot] = r;
+        }
     }
+
+    private static final int SLOTS = 32 * 32 * 16;
+    private long[] slotKey;
+    private int[] slotId;
 
     @Override public boolean remove(Object o) { delegate(); broken = true; return super.remove(o); }
     @Override public void clear() { delegate(); broken = true; super.clear(); }
@@ -226,6 +248,7 @@ public final class SectionSet extends LinkedHashSet<Object> {
             if (full) {
                 regionOf.clear();
                 regions = 0;
+                if (slotId != null) java.util.Arrays.fill(slotId, -1);
                 for (int i = 0; i < n; i++) place(i, (SectionRenderDispatcher.RenderSection) sec[i]);
                 places++;
                 placeNs += System.nanoTime() - t0;
