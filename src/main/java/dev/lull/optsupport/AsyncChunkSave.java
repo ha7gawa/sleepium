@@ -71,7 +71,8 @@ public final class AsyncChunkSave {
         // a LevelChunk
         if (!(chunk instanceof LevelChunk) && !(chunk instanceof net.minecraft.world.level.chunk.ProtoChunk)) return false;
         if (((StorageAccess) storage).sleep$legacyHandler() != null) return false;
-        return NeoForge.EVENT_BUS instanceof CompositeEventBus cb && !cb.mayHaveListeners(ChunkDataEvent.Save.class);
+        return NeoForge.EVENT_BUS instanceof CompositeEventBus cb && (!cb.mayHaveListeners(ChunkDataEvent.Save.class)
+                || SaveListeners.ON && SaveListeners.onlyOwnKeys(cb));   // lab.asyncsave.listeners: listeners that keep to their own keys
     }
 
     /** ChunkMap.save's ChunkSerializer.write, main thread. */
