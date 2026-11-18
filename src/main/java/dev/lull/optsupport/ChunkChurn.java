@@ -47,6 +47,7 @@ public final class ChunkChurn {
         long h = inputs(pos, region);
         HASH_NANOS.addAndGet(System.nanoTime() - t);
         Long prev = LAST.put(pos.asLong(), h);
+        LAST_SAME.set(prev != null && prev == h);
         if (!window()) return;
         COMPILED.incrementAndGet();
         if (prev != null && prev == h) SAME.incrementAndGet();
@@ -70,6 +71,8 @@ public final class ChunkChurn {
         return h;
     }
 
+    private static final ThreadLocal<Boolean> LAST_SAME = ThreadLocal.withInitial(() -> false);
+    private static final AtomicLong SAME_BE = new AtomicLong(), SAME_TRANSLUCENT = new AtomicLong(), SAME_PLAIN = new AtomicLong();
     private static final AtomicLong EMPTY = new AtomicLong(), EMPTY_SOLID = new AtomicLong(), QUADS = new AtomicLong(), OTHER = new AtomicLong();
     private static final AtomicLong[] DIR = {new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong()};
     private static final java.util.concurrent.ConcurrentHashMap<String, AtomicLong> LAYER_QUADS = new java.util.concurrent.ConcurrentHashMap<>();
@@ -78,6 +81,13 @@ public final class ChunkChurn {
     public static void results(net.minecraft.core.SectionPos pos, net.minecraft.client.renderer.chunk.RenderChunkRegion region,
                                net.minecraft.client.renderer.chunk.SectionCompiler.Results r) {
         if (!window() || r == null) return;
+        if (LAST_SAME.get()) {   // a mesh from the same inputs as the last one at this position: could it be kept?
+            boolean be = !r.blockEntities.isEmpty() || !r.globalBlockEntities.isEmpty();
+            boolean tr = r.renderedLayers.containsKey(net.minecraft.client.renderer.RenderType.translucent());
+            if (be) SAME_BE.incrementAndGet();
+            else if (tr) SAME_TRANSLUCENT.incrementAndGet();
+            else SAME_PLAIN.incrementAndGet();
+        }
         if (r.renderedLayers.isEmpty()) {
             EMPTY.incrementAndGet();
             var m = new net.minecraft.core.BlockPos.MutableBlockPos();
@@ -120,7 +130,8 @@ public final class ChunkChurn {
         long q = Math.max(1, QUADS.get());
         StringBuilder l = new StringBuilder();
         LAYER_QUADS.forEach((k, v) -> l.append(k).append(' ').append(v.get()).append(", "));
-        return String.format(java.util.Locale.ROOT, "meshes (window): %d sections meshed empty (%d of them all opaque inside), quads %d (%s); faces down/up/north/south/west/east %.1f/%.1f/%.1f/%.1f/%.1f/%.1f %%, not axis-aligned %.1f %%",
+        return String.format(java.util.Locale.ROOT, "same-input meshes: %d plain (could be kept), %d with block entities, %d with a translucent layer; ", SAME_PLAIN.get(), SAME_BE.get(), SAME_TRANSLUCENT.get())
+                + String.format(java.util.Locale.ROOT, "meshes (window): %d sections meshed empty (%d of them all opaque inside), quads %d (%s); faces down/up/north/south/west/east %.1f/%.1f/%.1f/%.1f/%.1f/%.1f %%, not axis-aligned %.1f %%",
                 EMPTY.get(), EMPTY_SOLID.get(), QUADS.get(), l, 100.0 * DIR[0].get() / q, 100.0 * DIR[1].get() / q, 100.0 * DIR[2].get() / q,
                 100.0 * DIR[3].get() / q, 100.0 * DIR[4].get() / q, 100.0 * DIR[5].get() / q, 100.0 * OTHER.get() / q);
     }
