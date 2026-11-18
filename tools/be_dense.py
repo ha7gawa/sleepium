@@ -27,6 +27,7 @@ ap.add_argument('--neoforge', default='21.1.251')
 ap.add_argument('--flags', default='')
 ap.add_argument('--label', default='')
 ap.add_argument('--heap', default='6G')
+ap.add_argument('--log', default='', help='write every server line here')
 ap.add_argument('--types', default='', help='a file of block ids (space separated) to place: no first pass')
 ap.add_argument('--nojar', action='store_true', help='without our jar (vanilla behaviour; needs --types)')
 a = ap.parse_args()
@@ -135,7 +136,10 @@ try:
             cx = 1000 // 16 + k * 2
             x0 = cx * 16
             cmd('forceload add %d 0' % x0)
-            cmd('fill %d -59 0 %d %d 15 %s' % (x0, x0 + 15, -59 + layers - 1, e))
+            if a.per < 256:   # rows of 16 on one layer
+                cmd('fill %d -59 0 %d -59 %d %s' % (x0, x0 + 15, max(1, a.per // 16) - 1, e))
+            else:
+                cmd('fill %d -59 0 %d %d 15 %s' % (x0, x0 + 15, -59 + layers - 1, e))
         start = len(lines)
         time.sleep(a.warm)
         wins = []
@@ -166,6 +170,8 @@ finally:
     for f in os.listdir(keep):
         shutil.move(os.path.join(keep, f), os.path.join(D, 'mods', f))
 
+if a.log:
+    open(a.log, 'w', encoding='utf-8').write('\n'.join(lines))
 if result:
     print('%s: %d ticking types x %d a chunk, %d windows, mspt avg %.2f, p50 %.2f, p95 %.2f, p99 %.2f' % ((a.label or 'run', result[0], a.per) + result[1:]))
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'run', 'be_dense.csv'), 'a') as f:
