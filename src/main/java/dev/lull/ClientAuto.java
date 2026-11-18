@@ -373,7 +373,7 @@ public final class ClientAuto {
             boolean v = b != flipA;
             if (ClientMeter.measuring()) {
                 flipField.setBoolean(null, v);
-                log("flip w=" + win + " frame=" + ClientMeter.frameIndex() + " value=" + v + " (" + (b ? "B" : "A") + ")");
+                log("flip w=" + win + " frame=" + ClientMeter.frameIndex() + " value=" + v + " (" + (b ? "B" : "A") + ")" + (dev.lull.optsupport.RegionStates.TIME ? " | " + dev.lull.optsupport.RegionStates.timeReport() : ""));
             } else if (win > 0) {   // the window is over: back to A
                 flipField.setBoolean(null, flipA);
                 log("flip done, " + flipField.getName() + " back to " + flipA);
