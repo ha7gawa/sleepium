@@ -273,6 +273,8 @@
     "UploadBindMixin",
     "LazyChunkBufferMixin",
     "LazyChunkBufferAreaMixin",
+    "OcclusionFastMixin",
+    "OcclusionViewAreaAccessor",
     "SoundNoWaitMixin",
     "SoundChannelAccessAccessor",
     "SoundChannelHandleAccessor",

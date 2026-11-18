@@ -70,6 +70,61 @@ public final class ChunkChurn {
         return h;
     }
 
+    private static final AtomicLong EMPTY = new AtomicLong(), EMPTY_SOLID = new AtomicLong(), QUADS = new AtomicLong(), OTHER = new AtomicLong();
+    private static final AtomicLong[] DIR = {new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong()};
+    private static final java.util.concurrent.ConcurrentHashMap<String, AtomicLong> LAYER_QUADS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** a section's mesh done (11-18, what a mesh holds): empty ones (all opaque inside?), quads per layer, faces by direction */
+    public static void results(net.minecraft.core.SectionPos pos, net.minecraft.client.renderer.chunk.RenderChunkRegion region,
+                               net.minecraft.client.renderer.chunk.SectionCompiler.Results r) {
+        if (!window() || r == null) return;
+        if (r.renderedLayers.isEmpty()) {
+            EMPTY.incrementAndGet();
+            var m = new net.minecraft.core.BlockPos.MutableBlockPos();
+            boolean solid = true;
+            for (int y = 0; y < 16 && solid; y++)
+                for (int z = 0; z < 16 && solid; z++)
+                    for (int x = 0; x < 16; x++) {
+                        m.set(pos.minBlockX() + x, pos.minBlockY() + y, pos.minBlockZ() + z);
+                        if (!region.getBlockState(m).isSolidRender(region, m)) {
+                            solid = false;
+                            break;
+                        }
+                    }
+            if (solid) EMPTY_SOLID.incrementAndGet();
+            return;
+        }
+        for (var e : r.renderedLayers.entrySet()) {
+            var d = e.getValue().drawState();
+            int quads = d.vertexCount() / 4;
+            QUADS.addAndGet(quads);
+            String ln = e.getKey().toString();
+            int lb = ln.indexOf('['), lc = ln.indexOf(':');
+            if (lb >= 0 && lc > lb) ln = ln.substring(lb + 1, lc);
+            LAYER_QUADS.computeIfAbsent(ln, k -> new AtomicLong()).addAndGet(quads);
+            var f = d.format();
+            if (!f.contains(com.mojang.blaze3d.vertex.VertexFormatElement.NORMAL)) continue;
+            int off = f.getOffset(com.mojang.blaze3d.vertex.VertexFormatElement.NORMAL), stride = f.getVertexSize();
+            java.nio.ByteBuffer b = e.getValue().vertexBuffer();
+            for (int q = 0; q < quads; q++) {
+                int at = b.position() + q * 4 * stride + off;
+                int nx = b.get(at), ny = b.get(at + 1), nz = b.get(at + 2);
+                int dir = nx == 0 && nz == 0 ? (ny < 0 ? 0 : 1) : ny == 0 && nx == 0 ? (nz < 0 ? 2 : 3) : ny == 0 && nz == 0 ? (nx < 0 ? 4 : 5) : -1;
+                if (dir < 0) OTHER.incrementAndGet();
+                else DIR[dir].incrementAndGet();
+            }
+        }
+    }
+
+    public static String meshReport() {
+        long q = Math.max(1, QUADS.get());
+        StringBuilder l = new StringBuilder();
+        LAYER_QUADS.forEach((k, v) -> l.append(k).append(' ').append(v.get()).append(", "));
+        return String.format(java.util.Locale.ROOT, "meshes (window): %d sections meshed empty (%d of them all opaque inside), quads %d (%s); faces down/up/north/south/west/east %.1f/%.1f/%.1f/%.1f/%.1f/%.1f %%, not axis-aligned %.1f %%",
+                EMPTY.get(), EMPTY_SOLID.get(), QUADS.get(), l, 100.0 * DIR[0].get() / q, 100.0 * DIR[1].get() / q, 100.0 * DIR[2].get() / q,
+                100.0 * DIR[3].get() / q, 100.0 * DIR[4].get() / q, 100.0 * DIR[5].get() / q, 100.0 * OTHER.get() / q);
+    }
+
     public static String report() {
         return String.format(java.util.Locale.ROOT, "chunk churn (window): received %d, forgotten %d, received again %d (within 30 s %d), sections meshed %d (inputs as at their last mesh %d; hashing %.0f us a section)",
                 received, dropped, resent, resentWithin30s, COMPILED.get(), SAME.get(), HASH_NANOS.get() / 1e3 / Math.max(1, LAST.size()));

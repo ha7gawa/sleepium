@@ -62,9 +62,33 @@ public final class SectionSet extends LinkedHashSet<Object> {
         }
     }
 
+    /**
+     * OcclusionFast (lab.occlusionFast): the set's own arrays are the set - a node is in it when its section's index is
+     * (graph nodes are equal by their section's origin: one node a section), no hashing of nodes (21 % of the graph's
+     * walk). Reads come from the arrays in order; anything else than add moves the nodes into LinkedHashSet for good.
+     */
+    private final boolean own = OcclusionFast.ON;
+    private Object[] nodeArr = own ? new Object[256] : null;
+    private boolean delegated;
+
+    private void delegate() {
+        if (!own || delegated) return;
+        delegated = true;
+        for (int i = 0; i < n; i++) super.add(nodeArr[i]);
+    }
+
+    private boolean arrays() {
+        return own && !delegated;
+    }
+
     @Override
     public boolean add(Object node) {
-        if (!super.add(node)) return false;
+        if (arrays()) {
+            int si = ((dev.lull.opt.SectionNodeAccessor) node).sleep$section().index;
+            if (si < 0) delegate();
+            else if (si < posOf.length && posOf[si] != 0) return false;
+        }
+        if (!arrays() && !super.add(node)) return false;
         if (n == sec.length) {
             int c = n * 2;
             sec = java.util.Arrays.copyOf(sec, c);
@@ -73,7 +97,9 @@ public final class SectionSet extends LinkedHashSet<Object> {
             oz = java.util.Arrays.copyOf(oz, c);
             rid = java.util.Arrays.copyOf(rid, c);
             sidx = java.util.Arrays.copyOf(sidx, c);
+            if (own) nodeArr = java.util.Arrays.copyOf(nodeArr, c);
         }
+        if (own) nodeArr[n] = node;
         SectionRenderDispatcher.RenderSection s = ((dev.lull.opt.SectionNodeAccessor) node).sleep$section();
         sec[n] = s;
         sidx[n] = s.index;
@@ -110,11 +136,62 @@ public final class SectionSet extends LinkedHashSet<Object> {
         rid[i] = r;
     }
 
-    @Override public boolean remove(Object o) { broken = true; return super.remove(o); }
-    @Override public void clear() { broken = true; super.clear(); }
-    @Override public boolean removeAll(Collection<?> c) { broken = true; return super.removeAll(c); }
-    @Override public boolean retainAll(Collection<?> c) { broken = true; return super.retainAll(c); }
-    @Override public boolean removeIf(java.util.function.Predicate<? super Object> f) { broken = true; return super.removeIf(f); }
+    @Override public boolean remove(Object o) { delegate(); broken = true; return super.remove(o); }
+    @Override public void clear() { delegate(); broken = true; super.clear(); }
+    @Override public boolean removeAll(Collection<?> c) { delegate(); broken = true; return super.removeAll(c); }
+    @Override public boolean retainAll(Collection<?> c) { delegate(); broken = true; return super.retainAll(c); }
+    @Override public boolean removeIf(java.util.function.Predicate<? super Object> f) { delegate(); broken = true; return super.removeIf(f); }
+
+    // reads, from the arrays while they are the set
+    @Override public int size() { return arrays() ? n : super.size(); }
+    @Override public boolean isEmpty() { return arrays() ? n == 0 : super.isEmpty(); }
+
+    @Override
+    public boolean contains(Object o) {
+        if (!arrays()) return super.contains(o);
+        if (!(o instanceof dev.lull.opt.SectionNodeAccessor a)) return false;
+        int si = a.sleep$section().index;
+        return si >= 0 && si < posOf.length && posOf[si] != 0;
+    }
+
+    @Override
+    public java.util.Iterator<Object> iterator() {
+        if (!arrays()) return super.iterator();
+        return new java.util.Iterator<>() {
+            int i;
+            @Override public boolean hasNext() { return i < n; }
+            @Override public Object next() {
+                if (i >= n) throw new java.util.NoSuchElementException();
+                return nodeArr[i++];
+            }
+        };
+    }
+
+    @Override public Object[] toArray() { return arrays() ? java.util.Arrays.copyOf(nodeArr, n) : super.toArray(); }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T[] toArray(T[] a) {
+        if (!arrays()) return super.toArray(a);
+        if (a.length < n) a = (T[]) java.lang.reflect.Array.newInstance(a.getClass().getComponentType(), n);
+        System.arraycopy(nodeArr, 0, a, 0, n);
+        if (a.length > n) a[n] = null;
+        return a;
+    }
+
+    @Override
+    public void forEach(java.util.function.Consumer<? super Object> action) {
+        if (!arrays()) {
+            super.forEach(action);
+            return;
+        }
+        for (int i = 0; i < n; i++) action.accept(nodeArr[i]);
+    }
+
+    @Override
+    public java.util.Spliterator<Object> spliterator() {
+        return arrays() ? java.util.Spliterators.spliterator(java.util.Arrays.copyOf(nodeArr, n), java.util.Spliterator.DISTINCT | java.util.Spliterator.ORDERED) : super.spliterator();
+    }
 
     public boolean usable() {
         return !broken && n == size();
