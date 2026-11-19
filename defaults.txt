@@ -101,6 +101,7 @@
 -Dlab.opt.OverworldFogMixin=true
 -Dlab.opt.ParallelEntitiesMixin=true
 -Dlab.opt.ParallelReloadMixin=true
+-Dlab.opt.SkullSetShareMixin=true
 -Dlab.opt.PartBatchMixin=true
 -Dlab.opt.PartDrawMixin=true
 -Dlab.opt.PartFrameMixin=true

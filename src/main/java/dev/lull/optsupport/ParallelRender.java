@@ -98,6 +98,8 @@ public final class ParallelRender {
 
     /** true while ParallelRender builds its renderer sets: objects made now belong to a worker set */
     public static volatile boolean buildingSets;
+    /** SkullSetShareMixin: the skull models of the set being built (baked once a set; null between sets) */
+    public static java.util.Map<net.minecraft.world.level.block.SkullBlock.Type, net.minecraft.client.model.SkullModelBase> setSkulls;
 
     /**
      * Thrown inside a job to hand it to the render thread: transient (state not ready yet: a texture without GL id, a
@@ -200,11 +202,13 @@ public final class ParallelRender {
         try {
             for (int i = 0; i < THREADS + (TickPoses.ON ? 2 : 1); i++) {   // one more: the render thread helps (and one for TickPoses' pairs)
                 if (EmfAdapter.active()) EmfAdapter.beginSet();   // EMF's model roots so far: the render thread's
+                setSkulls = null;   // SkullSetShareMixin: a set's own skull models
                 Set s = new Set(e);
                 if (EmfAdapter.active() && s.locals != null) EmfAdapter.endSet(s.locals);   // the ones this set's renderers baked
                 SETS.add(s);
             }
         } finally {
+            setSkulls = null;
             buildingSets = false;
         }
         System.out.printf("[sleep/opt] parallel render: %d renderer sets built in %.1f ms%n", THREADS, (System.nanoTime() - t0) / 1e6);
