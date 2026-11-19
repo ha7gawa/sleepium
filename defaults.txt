@@ -103,6 +103,7 @@
 -Dlab.opt.ParallelEntitiesMixin=true
 -Dlab.opt.ParallelReloadMixin=true
 -Dlab.opt.SkullSetShareMixin=true
+-Dlab.opt.ItemRendererSetBewlrMixin=true
 -Dlab.opt.PartBatchMixin=true
 -Dlab.opt.PartDrawMixin=true
 -Dlab.opt.PartFrameMixin=true
