@@ -4,6 +4,37 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.3.1 - 2026-11-19
+
+Fixes: modded machines that got slower with Sleepium, a rare deadlock at world generation, Entity Model Features heads
+and skulls, items in item frames, vanilla hoppers, and a quieter log.
+
+- **Fix: worlds with many modded machines ran slower with Sleepium than without it (since 1.2.0).** Sleepium lets a
+  machine "sleep" while nothing in it changes, and for mods' machines it checks every tick that nothing changed. For
+  machines whose own tick is cheap, that check cost more than the tick it saved. Now Sleepium measures the check per
+  kind of machine and stops it where it does not pay off. A test world with 562 kinds of block entities from 13 mods
+  (Create, Mekanism, Immersive Engineering, Industrial Foregoing, Thermal, ...) x 32 each: 1.21.1 150 -> 16.4 ms a tick
+  (15.6 without Sleepium), 1.20.1 135 -> 19.5 ms (19.8 without Sleepium).
+- **Fix: a rare freeze (deadlock) while chunks were generated** with C2ME, ModernFix and Chunky (GitHub issue #10).
+  Sleepium's analysis passed some classes through Mixin's transformer while the game ran, and two threads could take
+  Mixin's locks in opposite order. It no longer does that while the game runs; classes it has not seen yet are
+  analysed from the next start on.
+- **Fix: Entity Model Features turned off its custom heads and skulls** in bigger worlds ("created more than 64
+  times" in the log). Sleepium's extra render threads each built their own skull models; now they are built once per
+  thread set. Switch: `lab.opt.SkullSetShareMixin`.
+- **Fix: shields, chests, heads and banners in item frames or on the ground** were drawn by the extra render threads
+  with the main thread's renderer at the same time. That failed now and then (Sleepium then drew them again on the main
+  thread, so it cost time). Each render thread set now uses its own. Switch: `lab.opt.ItemRendererSetBewlrMixin`.
+- **Vanilla hoppers sleep fully again** (since 1.2.0 they slept only with the per-tick check, which cost as much as
+  the hopper's tick). Hopper test world on a low-power Intel N100 PC: 1.20.1 7.4 -> 2.4 ms a tick (7.1 without
+  Sleepium), 1.21.1 1.9 -> 0.85 ms (3.2 without Sleepium).
+- **Chunk saves stay on their own thread with Immersive Engineering and Mekanism.** These mods listen to chunk saves
+  only to keep their own data, which works the same on Sleepium's save thread (checked on 1.5 million chunk sections).
+  Switch: `lab.asyncsave.listeners`.
+- **Quieter log** (GitHub issue #8): entity sleep prints one summary line from time to time instead of a line for every
+  kind of mob. `-Dsleep.entsleep.verbose=true` brings the per-kind lines back; `/sleepium report` says why a kind cannot
+  sleep.
+
 ## 1.3.0 - 2026-11-18
 
 Much smoother flight over large worlds, Android at render distances above 7, an experimental decoupled-frames mode,
