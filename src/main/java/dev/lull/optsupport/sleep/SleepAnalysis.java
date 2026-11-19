@@ -643,6 +643,8 @@ final class SleepAnalysis {
 
     /** this analysis met a call on the block entity through an interface outside its class chain and did not follow it */
     private boolean skippedSelfDispatch;
+    /** -Dlab.sleep.observedSelfFirst: a resolvable self-dispatch also goes observed-only (1.2.0-1.3.0's order) */
+    private static final boolean OBSERVED_SELF_FIRST = Boolean.getBoolean("lab.sleep.observedSelfFirst");
     /** block-entity classes whose tick the analysis did not follow into a call on the block entity: observed sleep only */
     private static final Set<Class<?>> OBSERVED_ONLY = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
@@ -924,13 +926,18 @@ final class SleepAnalysis {
     private String[] selfDispatch(MethodInsnNode mi, Frame<SourceValue>[] fr, int i, MethodNode m, Set<String> beChain, Class<?> beClass) {
         if (entityMode || mi.getOpcode() == Opcodes.INVOKESTATIC || beChain.contains(mi.owner)
                 || !onThis(fr[i], Type.getArgumentTypes(mi.desc).length + 1, fr, m)) return null;
-        if (SleepEngine.observedModSleep()) {   // not followed: the class may sleep only observed (SleepEngine: OwnedHash, any change wakes)
-            skippedSelfDispatch = true;
-            return null;
-        }
         String decl = ownerOf(internal(beClass), mi.name, mi.desc);
         MethodNode target = decl == null ? null : method(decl, mi.name, mi.desc);
-        if (target == null || (target.access & Opcodes.ACC_ABSTRACT) != 0) {
+        // resolved in the block entity's class: followed as its own code (the proof), also with ObservedModSleep on -
+        // since 1.2.0 the observed mode skipped even resolvable calls, and vanilla's hopper (its static helpers call
+        // Container methods on the hopper) slept only observed: the owned hash cost as much as the tick, no gain
+        // (11-19; -Dlab.sleep.observedSelfFirst=true: the 1.2.0-1.3.1 order)
+        boolean resolved = target != null && (target.access & Opcodes.ACC_ABSTRACT) == 0;
+        if (SleepEngine.observedModSleep() && (!resolved || OBSERVED_SELF_FIRST)) {
+            skippedSelfDispatch = true;   // not followed: the class may sleep only observed (SleepEngine: OwnedHash, any change wakes)
+            return null;
+        }
+        if (!resolved) {
             if (reject == null) reject = "calls " + simple(mi.owner) + "." + mi.name + " on the block entity, not resolved in its class";
             return new String[0];
         }
