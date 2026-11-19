@@ -121,6 +121,23 @@ public final class EntitySleep {
     private static final Set<String> FORBID_V = Set.of("position", "blockPosition", "chunkPosition", "bb", "feetBlockState", "levelCallback",
             "removalReason", "entityData", "level", "xo", "yo", "zo", "xOld", "yOld", "zOld", "passengers", "vehicle", "uuid", "id");
 
+    /** -Dsleep.entsleep.verbose: one line per analysed entity type (as before 1.3.1); else a summary (GitHub issue #8) */
+    static final boolean VERBOSE = Boolean.getBoolean("sleep.entsleep.verbose");
+    private static final java.util.concurrent.atomic.AtomicInteger ANALYSED = new java.util.concurrent.atomic.AtomicInteger(),
+            ELIGIBLE_TYPES = new java.util.concurrent.atomic.AtomicInteger();
+    private static final java.util.concurrent.atomic.AtomicLong ANALYSIS_MS = new java.util.concurrent.atomic.AtomicLong();
+
+    /** counts an analysed entity type; a summary line when the count reaches a power of two (1, 2, 4, 8, ...) */
+    private static void analysed(boolean eligible, long ms) {
+        if (eligible) ELIGIBLE_TYPES.incrementAndGet();
+        ANALYSIS_MS.addAndGet(ms);
+        int n = ANALYSED.incrementAndGet();
+        if (Integer.bitCount(n) == 1)
+            System.out.println("[sleep/entsleep] entity sleep: " + n + " entity type" + (n == 1 ? "" : "s") + " analysed so far - " + ELIGIBLE_TYPES.get()
+                    + " can sleep, " + (n - ELIGIBLE_TYPES.get()) + " cannot; " + ANALYSIS_MS.get() + " ms of background analysis"
+                    + " (one line per type: -Dsleep.entsleep.verbose=true; why a type cannot: /sleepium report)");
+    }
+
     // ------------------------------------------------------------------ per class
 
     static final class EClass {
@@ -1024,11 +1041,12 @@ public final class EntitySleep {
         if (s == null) {
             EClass c = AsyncAnalysis.get(S().CLASSES, e.getClass(), k -> {
                 EClass x = new EClass(k, e, e.level().isClientSide);
-                System.out.println("[sleep/entsleep] " + k.getSimpleName() + " (" + x.analysisMs + " ms): " + (x.refuse == null ? "ELIGIBLE fields " + x.n + " (final "
+                if (VERBOSE) System.out.println("[sleep/entsleep] " + k.getSimpleName() + " (" + x.analysisMs + " ms): " + (x.refuse == null ? "ELIGIBLE fields " + x.n + " (final "
                         + java.util.Arrays.stream(x.f).filter(q -> Modifier.isFinal(q.getModifiers())).count() + ", primitive "
                         + java.util.Arrays.stream(x.f).filter(q -> q.getType().isPrimitive()).count() + ") period " + x.period
                         + " clocks=" + java.util.Arrays.stream(x.clocks).mapToObj(i -> x.f[i].getName()).toList()
                         + " conds=" + x.plan.conds().stream().map(SleepAnalysis.Cond::text).toList() : "no: " + x.refuse));
+                else analysed(x.refuse == null, x.analysisMs);
                 return x;
             });
             if (c == null) {   // its class is being analysed in the background: vanilla's tick meanwhile
