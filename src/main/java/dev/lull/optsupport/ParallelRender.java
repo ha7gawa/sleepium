@@ -99,6 +99,8 @@ public final class ParallelRender {
 
     /** true while ParallelRender builds its renderer sets: objects made now belong to a worker set */
     public static volatile boolean buildingSets;
+    /** -Dlab.prender.setBeDispatcher (default on): each renderer set has its own BlockEntityRenderDispatcher */
+    static final boolean SET_BE_DISPATCHER = !"false".equals(System.getProperty("lab.prender.setBeDispatcher"));
     /** SkullSetShareMixin: the skull models of the set being built (baked once a set; null between sets) */
     public static java.util.Map<net.minecraft.world.level.block.SkullBlock.Type, net.minecraft.client.model.SkullModelBase> setSkulls;
 
@@ -166,9 +168,20 @@ public final class ParallelRender {
             Minecraft mc = Minecraft.getInstance();
             EntityRenderDispatcher d = mc.getEntityRenderDispatcher();
             var rm = mc.getResourceManager();
-            BlockEntityWithoutLevelRenderer bewlr = new BlockEntityWithoutLevelRenderer(mc.getBlockEntityRenderDispatcher(), mc.getEntityModels());
+            // the set's own block-entity renderers (11-19): an item drawn through BEWLR on a worker (a chest, shield, head,
+            // banner in an item frame or dropped) used the game's dispatcher - the render thread's ChestRenderer etc. and their
+            // model parts, whose iterators and poses raced (item frames failed on workers, lids could be drawn at another angle).
+            // -Dlab.prender.setBeDispatcher=false: the game's dispatcher as before.
+            ItemRenderer[] irOfSet = new ItemRenderer[1];
+            net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher bed = mc.getBlockEntityRenderDispatcher();
+            if (SET_BE_DISPATCHER) {
+                bed = new net.minecraft.client.renderer.blockentity.BlockEntityRenderDispatcher(mc.font, mc.getEntityModels(), mc::getBlockRenderer, () -> irOfSet[0], () -> d);
+                bed.onResourceManagerReload(rm);
+            }
+            BlockEntityWithoutLevelRenderer bewlr = new BlockEntityWithoutLevelRenderer(bed, mc.getEntityModels());
             bewlr.onResourceManagerReload(rm);
             ItemRenderer ir = new ItemRenderer(mc, mc.getTextureManager(), mc.getModelManager(), mc.getItemColors(), bewlr);
+            irOfSet[0] = ir;
             ir.onResourceManagerReload(rm);
             ItemInHandRenderer hand = new ItemInHandRenderer(mc, d, ir);
             EntityRendererProvider.Context ctx = new EntityRendererProvider.Context(d, ir, mc.getBlockRenderer(), hand, rm, mc.getEntityModels(), mc.font);

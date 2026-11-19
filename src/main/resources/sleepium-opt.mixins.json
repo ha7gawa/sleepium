@@ -326,6 +326,7 @@
     "ParallelEntitiesMixin",
     "ParallelReloadMixin",
     "SkullSetShareMixin",
+    "ItemRendererSetBewlrMixin",
     "EntityRenderDispatcherInvoker",
     "EntityRendererAccessor",
     "LevelRendererInvoker",
