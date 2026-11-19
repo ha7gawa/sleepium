@@ -38,6 +38,22 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.3.1: fixes for mod packs
+
+- **Worlds full of modded machines no longer run slower than without Sleepium.** Since 1.2.0, the per-tick check
+  that lets mods' machines sleep could cost more than the machine's own tick. Sleepium now measures it per kind of
+  machine and stops it where it does not pay off. 562 kinds of machines from 13 mods (Create, Mekanism, Immersive
+  Engineering, Industrial Foregoing, Thermal, ...) x 32 each: 1.21.1 **150 → 16.4 ms** a tick (15.6 without
+  Sleepium), 1.20.1 **135 → 19.5 ms** (19.8 without).
+- **Vanilla hoppers sleep fully again**: on an Intel N100, 1.20.1 7.4 → 2.4 ms a tick, 1.21.1 1.9 → 0.85 ms.
+- **Fixed: a rare freeze while chunks generate** with C2ME, ModernFix and Chunky (GitHub issue #10).
+- **Fixed: Entity Model Features heads and skulls** switched off in bigger worlds, and items in item frames drawn
+  unsafely by the extra render threads.
+- **Quieter log**: entity sleep prints a summary line instead of a line per mob type.
+
+Checked before release on both versions: every exactness scene identical to vanilla, frames identical to 1.3.0 bit
+for bit, production clients with Embeddium / Oculus / Sodium / EMF.
+
 ## New in 1.3.0: the frame and the tick go their own ways (experimental)
 
 In vanilla one thread does everything in turn: it ticks the world, then draws a frame, then ticks again. When a tick
