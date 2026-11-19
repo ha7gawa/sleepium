@@ -292,6 +292,7 @@
     "BufferSourceAccessor",
     "ParallelEntitiesMixin",
     "ParallelReloadMixin",
+    "SkullSetShareMixin",
     "EntityRenderDispatcherInvoker",
     "EntityRendererAccessor",
     "LevelRendererInvoker",
