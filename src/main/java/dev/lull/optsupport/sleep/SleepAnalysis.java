@@ -645,6 +645,10 @@ final class SleepAnalysis {
     private boolean skippedSelfDispatch;
     /** -Dlab.sleep.observedSelfFirst: a resolvable self-dispatch also goes observed-only (1.2.0-1.3.0's order) */
     private static final boolean OBSERVED_SELF_FIRST = Boolean.getBoolean("lab.sleep.observedSelfFirst");
+    /** this run takes self-dispatches the observed way at once (the fallback run of analyze) */
+    private boolean selfFirst = OBSERVED_SELF_FIRST;
+    /** this run followed a self-dispatch it resolved in the class */
+    private boolean resolvedSelfDispatch;
     /** block-entity classes whose tick the analysis did not follow into a call on the block entity: observed sleep only */
     private static final Set<Class<?>> OBSERVED_ONLY = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
@@ -657,6 +661,17 @@ final class SleepAnalysis {
         SleepAnalysis a = new SleepAnalysis(beClass.getClassLoader());
         try {
             Plan p = a.run(beClass, blockClass);
+            if (!p.eligible() && a.resolvedSelfDispatch && SleepEngine.observedModSleep()) {
+                // the proof through the resolved self-calls refused it: as before 1.3.1, the class may still sleep observed
+                // (Thermal's machines: their energy storage is owned state the proof refuses, observed sleep keeps them)
+                SleepAnalysis b = new SleepAnalysis(beClass.getClassLoader());
+                b.selfFirst = true;
+                Plan q = b.run(beClass, blockClass);
+                if (b.skippedSelfDispatch && q.eligible()) {
+                    OBSERVED_ONLY.add(beClass);
+                    return q;
+                }
+            }
             if (a.skippedSelfDispatch && p.eligible()) OBSERVED_ONLY.add(beClass);
             return p;
         } catch (Exception | LinkageError e) {
@@ -933,7 +948,7 @@ final class SleepAnalysis {
         // Container methods on the hopper) slept only observed: the owned hash cost as much as the tick, no gain
         // (11-19; -Dlab.sleep.observedSelfFirst=true: the 1.2.0-1.3.1 order)
         boolean resolved = target != null && (target.access & Opcodes.ACC_ABSTRACT) == 0;
-        if (SleepEngine.observedModSleep() && (!resolved || OBSERVED_SELF_FIRST)) {
+        if (SleepEngine.observedModSleep() && (!resolved || selfFirst)) {
             skippedSelfDispatch = true;   // not followed: the class may sleep only observed (SleepEngine: OwnedHash, any change wakes)
             return null;
         }
@@ -941,6 +956,7 @@ final class SleepAnalysis {
             if (reject == null) reject = "calls " + simple(mi.owner) + "." + mi.name + " on the block entity, not resolved in its class";
             return new String[0];
         }
+        resolvedSelfDispatch = true;
         return new String[] {decl};
     }
 
