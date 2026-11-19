@@ -71,6 +71,10 @@ def check(ids):
     srv = Server(SAVE_ALL).__enter__()   # save_breakers stops it (or its successors)
     try:
         srv.wait_for(r'Done \(')
+        # no autosave during the one-block check: its placed blocks' saved data must not be written yet - with slow ids
+        # (20 s timeouts) the 5-min autosave fell mid-check on 1.20.1 after IF's mycelial generators put a null key into
+        # their MycelialDataManager, and the server died (11-19); save_breakers below finds such blocks on purpose
+        srv.ask('save-off', r'[Ss]aving|already', 20)
         for b in ids:
             try:
                 m = srv.ask('setblock 0 -50 0 ' + b, r'Changed the block|Could not set the block|Unknown block type|Incorrect argument|Unknown or incomplete|threw an exception', 20)
@@ -83,6 +87,7 @@ def check(ids):
             # a block whose placing or removing throws (a mod's own bug, e.g. PneumaticCraft's programmable controller) stays out
             if m.group(0) in ('Changed the block', 'Could not set the block') and r.group(0) != 'threw an exception':
                 good.append(b)
+        srv.ask('save-on', r'[Ss]aving|already', 20)
     except BaseException:
         srv.__exit__(None, None, None)
         raise
