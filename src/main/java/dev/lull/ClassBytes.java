@@ -177,8 +177,8 @@ public final class ClassBytes {
     public static String passMax = "";
 
     public static String passReport() {
-        return String.format(java.util.Locale.ROOT, "analysis passes through Mixin's transformer: %d, %.0f ms in all, the longest %.0f ms (%s); %s%s",
-                passes, passNanos / 1e6, passMaxNanos / 1e6, passMax, RunCapture.report(),
+        return String.format(java.util.Locale.ROOT, "analysis passes through Mixin's transformer: %d, %.0f ms in all, the longest %.0f ms (%s), not passed (no capture yet) %d; %s%s",
+                passes, passNanos / 1e6, passMaxNanos / 1e6, passMax, skippedPasses, RunCapture.report(),
                 CAPTURE_VERIFY ? ", verified " + captureVerified + ", mismatches " + captureMismatches : "");
     }
 
@@ -334,10 +334,24 @@ public final class ClassBytes {
             }
             return cn;
         }
+        // no pass while the game runs (issue #10): Mixin's transformClass takes its processor lock and then loads classes
+        // (the launch plugin's processor list), a class load anywhere else takes the list and then the processor - a
+        // C2ME worker in our pass and the server thread loading a class deadlocked (1.2.6, Chunky). Not captured: read
+        // as before Mixin (the touched methods stay unseen - the analyses' conservative path) and captured at its load
+        // from the next start on. -Dlab.analysis.pass=true: the pass as before.
+        if (!PASS) {
+            if (RunCapture.ON) RunCapture.wanted(internalName);
+            skippedPasses++;
+            return null;
+        }
         ClassNode pass = readRunningPass(loader, internalName);
         if (pass != null && RunCapture.ON) RunCapture.wanted(internalName);   // kept at its load from the next start on
         return pass;
     }
+
+    /** -Dlab.analysis.pass: a class not captured is put through Mixin's transformer while the game runs (off: issue #10) */
+    private static final boolean PASS = Boolean.getBoolean("lab.analysis.pass");
+    public static long skippedPasses;
 
     private static ClassNode readRunningPass(ClassLoader loader, String internalName) {
         try (InputStream in = (loader != null ? loader : ClassLoader.getSystemClassLoader()).getResourceAsStream(internalName + ".class")) {
