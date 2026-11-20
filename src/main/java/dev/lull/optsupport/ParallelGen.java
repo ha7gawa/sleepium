@@ -56,8 +56,44 @@ public final class ParallelGen {
 
     private ParallelGen() {}
 
+    /** -Dlab.gen.cap=N: at most N generation step bodies at once (0: no cap, the whole background pool) - the client in
+     * singleplayer shares the machine with the integrated server's generation (11-20, 1.3.2 measurement) */
+    static final int CAP = Integer.getInteger("lab.gen.cap", 0);
+    /** -Dlab.gen.lowest: step bodies run at the lowest thread priority (the client's meshing and the server thread first) */
+    static final boolean LOWEST = Boolean.getBoolean("lab.gen.lowest");
+    private static final java.util.concurrent.ConcurrentLinkedQueue<Runnable> CAPPED = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private static final java.util.concurrent.atomic.AtomicInteger CAP_RUNNING = new java.util.concurrent.atomic.AtomicInteger();
+    private static final Executor CAPPED_POOL = ParallelGen::capped;
+
     private static Executor pool() {
-        return Util.backgroundExecutor();
+        return CAP > 0 ? CAPPED_POOL : Util.backgroundExecutor();
+    }
+
+    /** queues r; starts queued bodies on the background pool while fewer than CAP run */
+    private static void capped(Runnable r) {
+        CAPPED.add(r);
+        drainCapped();
+    }
+
+    private static void drainCapped() {
+        while (!CAPPED.isEmpty()) {
+            int n = CAP_RUNNING.get();
+            if (n >= CAP) return;
+            if (!CAP_RUNNING.compareAndSet(n, n + 1)) continue;
+            Runnable r = CAPPED.poll();
+            if (r == null) {
+                CAP_RUNNING.decrementAndGet();
+                continue;   // another drainer took it; the loop re-checks the queue
+            }
+            Util.backgroundExecutor().execute(() -> {
+                try {
+                    r.run();
+                } finally {
+                    CAP_RUNNING.decrementAndGet();
+                    drainCapped();
+                }
+            });
+        }
     }
 
     public static boolean shouldOffload(ChunkStatus s) {
@@ -116,11 +152,15 @@ public final class ParallelGen {
 
     private static <T> T run(Supplier<CompletableFuture<T>> vanilla) {
         BYPASS.set(true);
+        Thread t = Thread.currentThread();
+        int prio = t.getPriority();
+        if (LOWEST) t.setPriority(Thread.MIN_PRIORITY);
         try {
             // these steps return completedFuture: join() only unwraps, it never blocks here
             return vanilla.get().join();
         } finally {
             BYPASS.set(false);
+            if (LOWEST) t.setPriority(prio);
         }
     }
 
