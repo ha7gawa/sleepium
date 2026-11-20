@@ -172,6 +172,7 @@
     "RenderThreadMixin",
     "RenderThreadModelDataMixin",
     "AtlasIdAccessor",
+    "AtlasDoubleTickMixin",
     "AtlasDoubleUploadMixin",
     "AtlasDoubleReleaseMixin",
     "FrameThreadMixin",
