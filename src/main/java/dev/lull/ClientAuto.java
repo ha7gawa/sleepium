@@ -119,6 +119,8 @@ public final class ClientAuto {
     /** -Dsleep.clientAuto.framehash=true: freeze, then hash the frame's pixels and save it as a PNG (render exactness) */
     private static final boolean FRAMEHASH = Boolean.getBoolean("sleep.clientAuto.framehash");
     private static int hashAt = -1, idleTicks, sceneAt;
+    private static final int ANIM_TICKS = Integer.getInteger("sleep.clientAuto.animTicks", 0);
+    private static int animUntil = -1;
     /** -Dsleep.clientAuto.shot=S: a screenshot S seconds into the measured window, nothing frozen (moving scenes) */
     private static final double SHOT_S = Double.parseDouble(System.getProperty("sleep.clientAuto.shot", "-1"));   // seconds, fractions allowed
     private static int shotAt = -1;
@@ -211,9 +213,12 @@ public final class ClientAuto {
         }
         if (FRAMEHASH) {
             // no /tick freeze: frozen, the server stops sending the light that new sections need to be built
-            dev.lull.optsupport.ClientCounters.freezeTextures = true;
+            // -Dsleep.clientAuto.animTicks=N (11-20, the double atlas check): the animations reset, then run N ticks, then
+            // freeze - two runs with the same N hash the same animated frames (the atlas content after N ticks)
+            dev.lull.optsupport.ClientCounters.freezeTextures = ANIM_TICKS == 0;
             resetAnimations();
-            hashAt = ticks + 60;
+            animUntil = ANIM_TICKS > 0 ? ticks + ANIM_TICKS : -1;
+            hashAt = ticks + 60 + ANIM_TICKS;
             // -Dsleep.clientAuto.remesh=true: the scene's sections re-meshed first (the plain re-mesh path, light as it is
             // now): every renderer takes the light at the same moment, whatever each kept since the last light change
             if (Boolean.getBoolean("sleep.clientAuto.remesh")) Minecraft.getInstance().levelRenderer.setBlocksDirty(-16, 216, 0, 64, 272, 80);
@@ -733,6 +738,11 @@ public final class ClientAuto {
         }
         if (abAt >= 0 && ticks >= abAt) abTick(Minecraft.getInstance());
         if (FLIP != null && flipFrom >= 0) flipTick();
+        if (animUntil >= 0 && ticks >= animUntil) {
+            dev.lull.optsupport.ClientCounters.freezeTextures = true;
+            animUntil = -1;
+            log("frame hash: animations frozen after " + ANIM_TICKS + " ticks");
+        }
         if (hashAt >= 0 && ticks >= hashAt) {
             // only when the renderer is idle: every section built and uploaded (the scene's sections may still be queued)
             Minecraft m = Minecraft.getInstance();

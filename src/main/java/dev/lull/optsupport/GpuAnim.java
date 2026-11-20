@@ -55,6 +55,27 @@ public final class GpuAnim {
         return c;
     }
     private static final boolean VERIFY = Boolean.getBoolean("lab.gpuAnim.verify");
+    /**
+     * -Dlab.gpuAnim.scratch (lab, 11-20, a measurement only - the picture stops animating): every animation write of an
+     * atlas tick goes into an unused texture of the atlas's size instead of the atlas. The Pi's tiled V3D spent ~10 ms an
+     * atlas tick writing into the atlas it was still reading: this shows the same work without that conflict.
+     */
+    public static final boolean SCRATCH = Boolean.getBoolean("lab.gpuAnim.scratch");
+    private static final Map<Integer, Integer> SCRATCHES = new java.util.HashMap<>();
+
+    public static int scratchFor(int atlasId) {
+        Integer s = SCRATCHES.get(atlasId);
+        if (s != null) return s;
+        GlStateManager._bindTexture(atlasId);
+        int w = GL11C.glGetTexLevelParameteri(GL11C.GL_TEXTURE_2D, 0, GL11C.GL_TEXTURE_WIDTH);
+        int h = GL11C.glGetTexLevelParameteri(GL11C.GL_TEXTURE_2D, 0, GL11C.GL_TEXTURE_HEIGHT);
+        int levels = GL11C.glGetTexParameteri(GL11C.GL_TEXTURE_2D, org.lwjgl.opengl.GL12C.GL_TEXTURE_MAX_LEVEL);
+        int id = TextureUtil.generateTextureId();
+        TextureUtil.prepareImage(id, Math.min(levels, 8), w, h);
+        SCRATCHES.put(atlasId, id);
+        LOG.info("[sleep/opt] gpu anim: SCRATCH target {} for atlas {} ({}x{}, {} levels) - animation writes go there (measurement only)", id, atlasId, w, h, levels);
+        return id;
+    }
     /** the atlas cycleAnimationFrames is ticking (0 outside it: the first frames at stitching go vanilla's way) */
     public static int atlas;
     private static final Map<SpriteContents, Integer> SHEETS = new java.util.concurrent.ConcurrentHashMap<>();   // (concurrent: the frame thread's atlas ticks and the main thread's release during a reload; the audit 11-16)
@@ -209,13 +230,19 @@ public final class GpuAnim {
             copies++;
             return true;
         }
+        int levels = 0;
         for (int i = 0; i < mips.length; i++) {
             if ((w >> i) <= 0 || (h >> i) <= 0) break;   // NeoForge's bound, as in upload
+            levels++;
             if (blit) {
                 if (!blitCopy(sheet, i, frameX >> i, frameY >> i, x >> i, y >> i, w >> i, h >> i)) return i == 0 ? false : true;
             } else {
                 GL43C.glCopyImageSubData(sheet, GL11C.GL_TEXTURE_2D, i, frameX >> i, frameY >> i, 0, atlas, GL11C.GL_TEXTURE_2D, i, x >> i, y >> i, 0, w >> i, h >> i, 1);
             }
+        }
+        if (AtlasDouble.ON) {
+            if (blit) AtlasDouble.record(x, y, w, h);
+            else AtlasDouble.recordCopy(sheet, frameX, frameY, x, y, w, h, levels);
         }
         copyNs += System.nanoTime() - t0;
         if (VERIFY && readBack) verify(mips[0], x, y, frameX, frameY, w, h);
@@ -290,6 +317,11 @@ public final class GpuAnim {
      * only) -> 3.15 ms - so opt-in; the copies alone (the default with the feature) gain or tie everywhere measured.
      */
     static final boolean PBO = ON && Boolean.getBoolean("lab.gpuAnim.pbo");
+
+    /** the ring would carry the interpolated frames (AtlasDouble: no replay then - the unpack buffer binding) */
+    static boolean pbo() {
+        return pboCapable && PBO;
+    }
     // 8 segments of 256 KiB (a tick's interpolated frames are ~15 KiB): a segment comes back ~4 client ticks later, long
     // read by then - with 3 the fence wait blocked the render thread in a GPU-bound scene (1.20.1 N100: tick 2.5 -> 3.6 ms)
     private static final int SEG = 1 << 18, NSEG = 8;
@@ -846,6 +878,10 @@ public final class GpuAnim {
     public static String interpChoice = "not decided";
 
     /** the blend's windows are running: the other measured choices wait (each would measure the other's switching) */
+    public static boolean blendsMayDraw() {   // (AtlasDouble: the GPU blends' windows or the GPU chosen)
+        return INTERP && !interpBroken && (tunePhase == 2 || tunePhase == 3 || tunePhase == 4);
+    }
+
     public static boolean measuring() {
         return tunePhase >= 1 && tunePhase <= 3;
     }
