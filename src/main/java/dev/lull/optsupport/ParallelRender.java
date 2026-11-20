@@ -94,7 +94,7 @@ public final class ParallelRender {
     /** The current job's part records (null outside jobs, and in verify mode: the bytes are compared there). */
     public static PartBatch.JobParts jobParts() {
         Job j = CURRENT.get();
-        return j == null || VERIFY ? null : j.parts;
+        return j == null || VERIFY || j.check ? null : j.parts;
     }
 
     /** true while ParallelRender builds its renderer sets: objects made now belong to a worker set */
@@ -254,6 +254,8 @@ public final class ParallelRender {
         final List<com.mojang.blaze3d.pipeline.RenderCall> calls = new ArrayList<>();
         /** TickPoses captures: preparations (prepare), run by the render thread */
         final List<com.mojang.blaze3d.pipeline.RenderCall> prep = new ArrayList<>();
+        /** the in-place check picked this job when it was queued: its parts (GeckoLib bones) rendered as bytes, comparable */
+        boolean check, decided;
         /** records of model parts drawn from VRAM (GeckoLib bones), queued at the merge */
         final PartBatch.JobParts parts = new PartBatch.JobParts();
         final java.util.IdentityHashMap<Object, Object> locals = new java.util.IdentityHashMap<>();
@@ -487,6 +489,11 @@ public final class ParallelRender {
             }
             j.tick = TickPoses.pairFor(e, pool());   // (the job then interpolates the pair instead of rendering)
         }
+        // the in-place check decided now (11-21): a picked job renders its GeckoLib bones as bytes on the worker (no
+        // parts), so the check compares them too - before, jobs with parts were never checked (a worker-wrong GeckoLib
+        // renderer would have stayed on the workers)
+        j.decided = CHECK && CHECK_PARTS && INNER && j.parallel && j.tick == null && !j.hold && j.snap == null;
+        j.check = j.decided && pick(e.getType());
         j.claimed.set(!j.parallel);   // set last: a stale pool entry of this reused job may run it only when it is a complete parallel job
         jobs++;
         if (size == 1) frameEntitiesAt = System.nanoTime();   // (the job just queued is the frame's first)
@@ -1041,6 +1048,8 @@ public final class ParallelRender {
     private static final int CHECK_FIRST = Integer.getInteger("lab.prender.checkFirst", 8);
     private static final int CHECK_EVERY = Integer.getInteger("lab.prender.checkEvery", 512);
     private static final int CHECK_LIMIT = 2;
+    /** -Dlab.prender.checkParts=false: jobs with parts (GeckoLib bones, items from VRAM) never checked, as before 11-21 */
+    private static final boolean CHECK_PARTS = !"false".equals(System.getProperty("lab.prender.checkParts"));
     /** merged inside another mod's dispatcher hooks: one job in 16 checked (their per-entity state may reach the bytes) */
     private static final boolean CHECK_DENSE = !DISPATCH_UNTOUCHED;
     /** render thread: per entity type {jobs merged, mismatches}; counted again after a resource reload */
@@ -1049,8 +1058,14 @@ public final class ParallelRender {
 
     /** Is this merge one of the checked ones? (render thread) */
     private static boolean sampled(Job j) {
-        if (!CHECK || j.parts.size() > 0) return false;   // parts: our own path for GeckoLib bones (verify mode checks it)
-        int[] c = CHECKS.computeIfAbsent(j.entity.getType(), t -> new int[2]);
+        if (!CHECK) return false;
+        if (j.decided) return j.check;   // picked when queued (its bones as bytes)
+        if (j.parts.size() > 0) return false;   // parts recorded: not comparable as bytes
+        return pick(j.entity.getType());
+    }
+
+    private static boolean pick(net.minecraft.world.entity.EntityType<?> type) {
+        int[] c = CHECKS.computeIfAbsent(type, t -> new int[2]);
         int n = c[0]++;
         return n < CHECK_FIRST || n % (CHECK_DENSE ? 16 : CHECK_EVERY) == 0;
     }
