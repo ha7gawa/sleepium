@@ -777,7 +777,7 @@ public final class ParallelRender {
         if (++CHECKS.get(type)[1] == CHECK_LIMIT) {
             WORKER_REFUSED.add(type);
             System.out.println("[sleep/opt] parallel render: " + type + " kept on the render thread: rendered inside the call another mod wraps, it differs from the worker's ("
-                    + describe(VERIFY_OUT, j.out).split("\n")[0] + ")");
+                    + describe(VERIFY_OUT, j.out).replace("\n", ";") + ")");
         }
         j.calls.clear();
         j.parts.clear();
