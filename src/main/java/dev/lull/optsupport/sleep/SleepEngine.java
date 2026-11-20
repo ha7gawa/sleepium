@@ -82,7 +82,13 @@ public final class SleepEngine {
         if (ci.ticks < COST_SAMPLES || ci.checks < COST_SAMPLES) return false;
         double tick = (double) ci.tickNs / ci.ticks, check = (double) ci.checkNs / ci.checks;
         boolean perCheck = check > OBSERVED_COST * tick;
-        boolean overall = ci.checks >= 4L * COST_SAMPLES && ci.checkNs > ci.skips * tick;
+        // the overall part waits until the class has been watched for twice the idle ticks a sleeper needs first: before
+        // that no instance can have slept, and with many instances the checks reach their count in a tick or two - the
+        // class was turned off with "skipped ticks worth 0.0 ms" before it could pay off (11-19, vanilla hoppers x 1024)
+        long now = s.be.getLevel() != null ? s.be.getLevel().getGameTime() : 0;
+        if (ci.firstCheckTick == Long.MIN_VALUE) ci.firstCheckTick = now;
+        boolean overall = ci.checks >= 4L * COST_SAMPLES && now - ci.firstCheckTick >= 2L * OBSERVED_STABLE
+                && ci.checkNs > ci.skips * tick;
         if (!perCheck && !overall) return false;
         ci.costly = true;
         costlyClasses++;
@@ -118,6 +124,8 @@ public final class SleepEngine {
          * OBSERVED_COST times a tick, the class's observed sleep is turned off for good: its block entities tick as vanilla.
          */
         long tickNs, ticks, checkNs, checks, skips;
+        /** the level's game time of the class's first cost decision (the overall part waits 2 x OBSERVED_STABLE from it) */
+        long firstCheckTick = Long.MIN_VALUE;
         volatile boolean costly;
 
         ClassInfo(SleepAnalysis.Plan plan) {
