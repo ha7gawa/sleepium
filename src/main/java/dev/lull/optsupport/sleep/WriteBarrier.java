@@ -53,6 +53,54 @@ public final class WriteBarrier {
 
     private WriteBarrier() {}
 
+    private static final boolean SERVER = isDedicatedServer();
+    private static final Map<String, Boolean> CLIENT_ONLY = new HashMap<>();
+
+    private static boolean isDedicatedServer() {
+        try {
+            return net.minecraftforge.fml.loading.FMLEnvironment.dist == net.minecraftforge.api.distmarker.Dist.DEDICATED_SERVER;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Mixin's class info of a call's or a field's owner - except, on Forge's dedicated server, a client-only class
+     * (@OnlyIn(Dist.CLIENT): LocalPlayer, Minecraft, MenuAccess, ... named in entity classes): ClassInfo.forName loads it
+     * through the transformers and Forge's RuntimeDistCleaner refuses it (11-20: errors in the server log with the mob
+     * sleep flags). Such a class never exists on that server, so no call on it ever runs: outside every root, not random.
+     */
+    static ClassInfo info(String x) {
+        if (SERVER && clientOnly(x)) return null;
+        return ClassInfo.forName(x);
+    }
+
+    /** the class's raw bytes (no transformers) carry @OnlyIn(Dist.CLIENT) */
+    static boolean clientOnly(String x) {
+        Boolean r = CLIENT_ONLY.get(x);
+        if (r != null) return r;
+        boolean found = false;
+        try (java.io.InputStream in = WriteBarrier.class.getClassLoader().getResourceAsStream(x + ".class")) {
+            if (in != null) {
+                ClassNode cn = new ClassNode();
+                new org.objectweb.asm.ClassReader(in.readAllBytes()).accept(cn, org.objectweb.asm.ClassReader.SKIP_CODE
+                        | org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+                for (java.util.List<org.objectweb.asm.tree.AnnotationNode> l : java.util.Arrays.asList(cn.invisibleAnnotations, cn.visibleAnnotations))
+                    if (l != null) for (org.objectweb.asm.tree.AnnotationNode a : l)
+                        if (a.desc.equals("Lnet/minecraftforge/api/distmarker/OnlyIn;") && a.values != null)
+                            for (int i = 0; i + 1 < a.values.size(); i += 2)
+                                if ("value".equals(a.values.get(i)) && a.values.get(i + 1) instanceof String[] e && "CLIENT".equals(e[1])) found = true;
+            }
+        } catch (Throwable t) {
+            // unreadable: the old way (Mixin's lookup)
+        }
+        if (found) clientOnlySkipped++;
+        CLIENT_ONLY.put(x, found);
+        return found;
+    }
+
+    public static int clientOnlySkipped;
+
     /** root index of a class (internal name), -1 if outside every root hierarchy */
     static synchronized int rootOf(String owner) {
         Integer r = ROOT_OF.get(owner);
@@ -61,7 +109,7 @@ public final class WriteBarrier {
         for (String x = owner; x != null && found < 0; ) {
             for (int k = 0; k < ROOTS.length; k++) if (ROOTS[k].equals(x)) found = k;
             if (found >= 0) break;
-            ClassInfo ci = ClassInfo.forName(x);
+            ClassInfo ci = info(x);
             x = ci == null ? null : ci.getSuperName();
         }
         ROOT_OF.put(owner, found);
@@ -80,7 +128,7 @@ public final class WriteBarrier {
             String x = todo.poll();
             if (x == null || !seen.add(x)) continue;
             if (x.equals(RANDOM)) found = true;
-            ClassInfo ci = ClassInfo.forName(x);
+            ClassInfo ci = info(x);
             if (ci == null) continue;
             if (ci.getSuperName() != null) todo.add(ci.getSuperName());
             todo.addAll(ci.getInterfaces());
