@@ -26,6 +26,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
     private boolean sleep$decide(String targetClassName, String mixinClassName) {
         String simple = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
         boolean on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt." + simple);
+        if (simple.startsWith("AtlasDouble") || simple.equals("AtlasIdAccessor")) on = Boolean.getBoolean("lab.atlasDouble");   // (lab, 11-20: the double atlas)
         // helpers that belong to a feature flag
         if (simple.equals("EntitySectionIterMixin") || simple.equals("ClassInstanceMultiMapAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.EntitySectionScanMixin")

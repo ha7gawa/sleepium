@@ -161,6 +161,10 @@
     "EntityFluidLoopMixin"
   ],
   "client": [
+    "AtlasIdAccessor",
+    "AtlasDoubleUploadMixin",
+    "AtlasDoubleReleaseMixin",
+    "TexParamCacheMixin",
     "ParallelAnimationMixin",
     "FrameThreadMixin",
     "FrameThreadSodiumChunksMixin",
