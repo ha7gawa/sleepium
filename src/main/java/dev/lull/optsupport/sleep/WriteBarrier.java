@@ -81,6 +81,8 @@ public final class WriteBarrier {
         if (r != null) return r;
         boolean found = false;
         try (java.io.InputStream in = WriteBarrier.class.getClassLoader().getResourceAsStream(x + ".class")) {
+            // (no bytes for a vanilla client class: absent from the server jar - MenuAccess - Mixin's lookup only warns)
+            if (in == null && x.startsWith("net/minecraft/client/")) found = true;
             if (in != null) {
                 ClassNode cn = new ClassNode();
                 new org.objectweb.asm.ClassReader(in.readAllBytes()).accept(cn, org.objectweb.asm.ClassReader.SKIP_CODE
