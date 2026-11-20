@@ -81,8 +81,8 @@ public final class AtlasDouble {
     // ------------------------------------------------------------------ measured per machine (11-21)
 
     /**
-     * -Dlab.atlasDouble.way=tune (default) / on / off. Measured by whole atlas ticks (GpuAnim's tickDone time, the
-     * catch-up included) in windows A B B A (A one atlas, B the copies; 100 ticks each, warm-ups not counted): the means
+     * -Dlab.atlasDouble.way=tune (default) / on / off. Measured by whole client ticks (Minecraft.tick, the atlas ticks
+     * and every wait they cause inside) in windows A B B A (A one atlas, B the copies; 100 ticks each, warm-ups not counted): the means
      * (A1 + A2) / 2 against (B1 + B2) / 2 cancel a steady drift - the first version (A then B) chose the copies on the
      * N100 from a warming-up first window (1.9 against 0.9 ms; its steady ticks are 1.1 against 1.6). The copies kept for
      * a 10 % shorter tick; the choice kept in the calibration file. 11-21, the Pi's steady scene: replay 4.9 ms against
@@ -111,16 +111,21 @@ public final class AtlasDouble {
         return ON && !GpuAnim.blendsMayDraw() && (phase == 4 || phase == 0 && STEP_COPIES[step]);
     }
 
-    /** an atlas tick is done (GpuAnimAtlasMixin, after the swap): the measuring */
+    /** an atlas tick is done (GpuAnimAtlasMixin, after the swap) */
     public static void tickDone(long ns) {
         if (!ON) return;
         // GpuAnim's GPU blends (its measuring windows, or chosen): no copies - 11-21 the host's frame hash differed with
         // the copies on while the blends were measured (c94c63bd against 5a6d291d); not proven exact with them
-        if (GpuAnim.blendsMayDraw()) {
-            if (!STATES.isEmpty()) dropAll();
-            return;
-        }
-        if (phase >= 4) return;
+        if (GpuAnim.blendsMayDraw() && !STATES.isEmpty()) dropAll();
+    }
+
+    /**
+     * A client tick is done (AtlasDoubleTickMixin: Minecraft.tick's whole time): the measuring. By client ticks, not
+     * atlas ticks: 11-21 on the Pi the atlas tick alone chose wrongly twice (one atlas 3.1 / 4.5-6.5 ms in the windows
+     * against ~10 later) while the whole tick is where the waits land (34 against 9.5 ms).
+     */
+    public static void clientTick(long ns) {
+        if (!ON || phase >= 4 || GpuAnim.blendsMayDraw()) return;
         if (!calibChecked) {
             calibChecked = true;
             String c = Calibration.get("atlas2");
@@ -134,8 +139,7 @@ public final class AtlasDouble {
         if (GpuAnim.measuring()) return;
         net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
         if (mc.level == null || mc.screen != null) return;   // in a world, nothing over it
-        // not in a world's first minute: 11-21 the Pi measured 3.1 ms an atlas tick with one atlas there (the GPU not yet
-        // loaded: little to wait for) against ~10+ ms later - and chose wrongly
+        // not in a world's first minute: 11-21 the Pi measured little difference there (the GPU not yet loaded)
         if (mc.level != tuneLevel) {
             tuneLevel = mc.level;
             levelSince = System.nanoTime();
@@ -155,7 +159,7 @@ public final class AtlasDouble {
         double one = (SLOT[0] + SLOT[3]) / 2, two = (SLOT[1] + SLOT[2]) / 2;
         boolean on = two < one * 0.9;   // (a tie: the one atlas, vanilla's way)
         phase = on ? 4 : 5;
-        choice = String.format(java.util.Locale.ROOT, "%s (an atlas tick %.3f ms with the copies [%.3f, %.3f], %.3f with one atlas [%.3f, %.3f])",
+        choice = String.format(java.util.Locale.ROOT, "%s (a client tick %.3f ms with the copies [%.3f, %.3f], %.3f with one atlas [%.3f, %.3f])",
                 on ? "on" : "off", two / 1e6, SLOT[1] / 1e6, SLOT[2] / 1e6, one / 1e6, SLOT[0] / 1e6, SLOT[3] / 1e6);
         LOG.info("[sleep/opt] atlas double: {}", choice);
         Calibration.put("atlas2", on ? "on" : "off", choice);

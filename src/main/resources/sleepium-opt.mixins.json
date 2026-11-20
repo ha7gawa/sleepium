@@ -162,6 +162,7 @@
   ],
   "client": [
     "AtlasIdAccessor",
+    "AtlasDoubleTickMixin",
     "AtlasDoubleUploadMixin",
     "AtlasDoubleReleaseMixin",
     "TexParamCacheMixin",
