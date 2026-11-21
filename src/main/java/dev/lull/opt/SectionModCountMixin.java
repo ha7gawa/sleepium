@@ -58,6 +58,11 @@ public abstract class SectionModCountMixin implements BlockCollisionMemo.Counted
         return sleep$mod;
     }
 
+    @Override
+    public void sleep$touch() {
+        sleep$mod++;
+    }
+
     @Redirect(method = "setBlockState(IIILnet/minecraft/world/level/block/state/BlockState;Z)Lnet/minecraft/world/level/block/state/BlockState;",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/chunk/PalettedContainer;getAndSet(IIILjava/lang/Object;)Ljava/lang/Object;"))
     private Object sleep$set(PalettedContainer<Object> states, int x, int y, int z, Object state) {

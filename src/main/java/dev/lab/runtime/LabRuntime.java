@@ -73,6 +73,8 @@ public final class LabRuntime extends AbstractExecutorService {
     public static final class LabThread extends Thread {
         final LabRuntime owner;
         final Worker worker;
+        /** per-thread state of hot paths kept on the thread itself (dev.lull.optsupport.ThreadSlots) */
+        public final Object[] slots = new Object[16];
 
         LabThread(LabRuntime owner, Worker worker, String name) {
             super(worker, name);

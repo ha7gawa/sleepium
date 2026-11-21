@@ -166,8 +166,23 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenSkip") || Boolean.getBoolean("lab.opt.WorldgenShare");
         if (simple.startsWith("WorldgenShare"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenShare");
+        // 11-21 lab-fill: the interpolator half of the lazy interpolation flag
+        if (simple.equals("NoiseLazyInterpolatorMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseLazyInterpMixin");
+        if (simple.equals("NoiseMathWrapMixin"))   // part of the Perlin octave flag
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseMathMixin");
+        // the surface step's helpers belong to their feature's flag
+        if (simple.equals("SurfaceBiomeCellsContextMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SurfaceBiomeCellsMixin");
+        if (simple.equals("SurfaceConditionsContextMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SurfaceConditionsMixin");
+        if (simple.equals("SurfacePlanContextMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SurfacePlanMixin");
         if (simple.equals("WorldgenAllocPlacementMixin") || simple.equals("WorldgenAllocJointMixin"))   // FEATURES: not yet verified
             on = Boolean.getBoolean("lab.opt.WorldgenFeatureAlloc");
+        if (simple.equals("PlacementFilterInvoker") || simple.equals("RepeatingPlacementInvoker") || simple.equals("HeightRangePlacementAccessor")
+                || simple.equals("RandomOffsetPlacementAccessor") || simple.equals("HeightmapPlacementAccessor") || simple.equals("EnvironmentScanPlacementAccessor"))
+            on = Boolean.getBoolean("lab.opt.WorldgenFeatureAlloc");   // PlacementWalk's views of the modifiers
+        if (simple.equals("HeightmapsChunkAccessor") || simple.equals("HeightmapDataAccessor"))   // OreScan's views of the heightmaps
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenOreScanMixin");
+        if (simple.equals("ShapeFullMemoShapeMixin"))   // the slot of ShapeFullMemoMixin's answer
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ShapeFullMemoMixin");
         if (simple.equals("WorldgenReactorMixin") || simple.startsWith("Reactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenReactor");
         if (simple.startsWith("MainReactor") || simple.equals("EventLoopQueueAccessor") || simple.equals("ChunkCacheExecutorAccessor"))
