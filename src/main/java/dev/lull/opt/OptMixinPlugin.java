@@ -228,6 +228,13 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SaveTicks");
         if (simple.startsWith("SaveStreams"))   // chunk records encoded through per-thread streams (optsupport/SaveStreams)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SaveStreams");
+        if (simple.startsWith("ParallelBeSave"))   // block entities' tags of a saved chunk made on the pool (ParallelBeSave, notes/88)
+            on = Boolean.getBoolean("lab.opt.ParallelBeSave") || simple.equals("ParallelBeSaveMixin") && Boolean.getBoolean("lab.save.stats");
+        if (simple.equals("LabPoolsExitMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.LabPoolsMixin");   // (notes/88)
+        if (simple.startsWith("EagerSaveScan"))   // the eager-save walk over accessible holders only (EagerSaveScan, notes/88)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.EagerSaveScan");
+        if (simple.equals("SaveTraceMixin")) on = Boolean.getBoolean("lab.save.stats");   // measurement only (notes/88)
+        if (simple.equals("SaveCooldownMixin")) on = System.getProperty("lab.save.cooldown") != null;   // option: eager-save cooldown (notes/88)
         if (simple.equals("AsyncChunkSaveEncodeMixin") || simple.equals("AsyncChunkSaveStorageMixin"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.AsyncChunkSaveMixin");
         if (simple.equals("ChunkTickMemoChunkMixin") || simple.equals("ChunkTickMemoEpochMixin"))
