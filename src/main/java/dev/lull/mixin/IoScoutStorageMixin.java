@@ -18,10 +18,13 @@ public abstract class IoScoutStorageMixin {
     @WrapMethod(method = "read")
     private CompoundTag sleep$read(ChunkPos pos, Operation<CompoundTag> original) {
         long t = System.nanoTime();
+        CompoundTag r = null;
         try {
-            return original.call(pos);
+            return r = original.call(pos);
         } finally {
-            IoScout.read(info().type(), System.nanoTime() - t);
+            RegionStorageInfo info = info();
+            IoScout.read(info.type(), System.nanoTime() - t);
+            if (IoScout.POS) IoScout.readPos(info.dimension().location().getPath(), info.type(), pos.toLong(), r != null);
         }
     }
 }

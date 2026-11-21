@@ -19,14 +19,26 @@ public abstract class IoScoutWorkerMixin {
 
     @WrapMethod(method = "store")
     private java.util.concurrent.CompletableFuture<Void> sleep$store(ChunkPos pos, net.minecraft.nbt.CompoundTag data, Operation<java.util.concurrent.CompletableFuture<Void>> original) {
-        IoScout.stored(storageInfo().type());
+        RegionStorageInfo info = storageInfo();
+        IoScout.stored(info.type());
+        if (data == null) IoScout.nullStore(info.type());
+        if (IoScout.POS) {
+            String status = data == null ? "null" : data.contains("Status") ? data.getString("Status") : "-";
+            IoScout.storePos(info.dimension().location().getPath(), info.type(), pos.toLong(), status);
+            if (!"chunk".equals(info.type())) IoScout.storer(info.type() + (data == null ? " null" : ""), IoScout.caller("store"));
+        }
         return original.call(pos, data);
     }
 
     @WrapMethod(method = "loadAsync")
     private java.util.concurrent.CompletableFuture<java.util.Optional<net.minecraft.nbt.CompoundTag>> sleep$load(ChunkPos pos,
             Operation<java.util.concurrent.CompletableFuture<java.util.Optional<net.minecraft.nbt.CompoundTag>>> original) {
-        IoScout.loaded(storageInfo().type());
+        RegionStorageInfo info = storageInfo();
+        IoScout.loaded(info.type());
+        if (IoScout.POS) {
+            IoScout.loadPos(info.dimension().location().getPath(), info.type(), pos.toLong());
+            if ("chunk".equals(info.type())) IoScout.loader(IoScout.caller("loadAsync"));
+        }
         return original.call(pos);
     }
 
@@ -39,5 +51,21 @@ public abstract class IoScoutWorkerMixin {
     @org.spongepowered.asm.mixin.injection.Inject(method = "runStore", at = @org.spongepowered.asm.mixin.injection.At("RETURN"))
     private void sleep$runStoreEnd(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
         IoScout.endWrite(pendingWrites.size());
+    }
+
+    /** the writer's thread names its storage type for RegionBitmap.allocate (ChunkIo's writer has no runStore) */
+    @org.spongepowered.asm.mixin.injection.Inject(method = "storePendingChunk", at = @org.spongepowered.asm.mixin.injection.At("HEAD"))
+    private void sleep$writerStart(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        IoScout.writerBegin(storageInfo().type());
+    }
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "storePendingChunk", at = @org.spongepowered.asm.mixin.injection.At("RETURN"))
+    private void sleep$writerEnd(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        IoScout.writerEnd();
+    }
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "close", at = @org.spongepowered.asm.mixin.injection.At("RETURN"))
+    private void sleep$closed(org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        if ("chunk".equals(storageInfo().type())) IoScout.closing();
     }
 }
