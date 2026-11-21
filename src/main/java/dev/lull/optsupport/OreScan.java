@@ -50,7 +50,7 @@ public final class OreScan {
 
     static {
         if (VERIFY) Runtime.getRuntime().addShutdownHook(new Thread(() -> System.out.println("[sleep/featcpu] final: " + summary() + "; "
-                + PaletteCopy.summary()), "featcpu-verify-summary"));
+                + PaletteCopy.summary() + "; " + RegionBlockVerify.summary()), "featcpu-verify-summary"));
     }
     private final ChunkAccess[] chunks = new ChunkAccess[16];
     private final BitStorage[] data = new BitStorage[16];
@@ -60,6 +60,20 @@ public final class OreScan {
     private int[] want = new int[3 * 256], got = new int[3 * 256];
     private int nWant, nGot;
     private final BitSet vbits = new BitSet(512);
+    /**
+     * Reject filter: per chunk of the current region the highest column of its OCEAN_FLOOR_WG heightmap (as getHeight +
+     * 1 gives it). A box all of whose chunks are lower than the ore's lowest y has no column that passes, which is
+     * vanilla's answer after its full walk. Valid for the region's lifetime: every chunk of a FEATURES region has
+     * persisted status >= CARVERS (the step's requirement), whose heightmapsAfter are the final heightmaps - vanilla's
+     * ProtoChunk.setBlockState updates only those, primeHeightmaps only adds missing ones, setHeightmap is a load-time
+     * call - so the WORLDGEN heightmaps no longer change. Only filled for plain ProtoChunks at >= CARVERS with the
+     * heightmap present, and only for chunks the region has (hasChunk); anything else never rejects.
+     */
+    private java.lang.ref.WeakReference<WorldGenLevel> region;
+    private final long[] maxKey = new long[32];
+    private final int[] maxVal = new int[32];
+    private int maxN;
+    private static final int UNKNOWN = Integer.MIN_VALUE;
 
     private OreScan() {}
 
@@ -97,6 +111,7 @@ public final class OreScan {
             chunks[s] = null;
             data[s] = null;
         }
+        if (reject(level, l, cx0, cz0, nz, slots)) return false;
         try {
             for (int l1 = k; l1 <= k + j1; l1++) {
                 int sx = ((l1 >> 4) - cx0) * nz;
@@ -116,6 +131,42 @@ public final class OreScan {
                 data[s] = null;
             }
         }
+    }
+
+    private boolean reject(WorldGenLevel level, int l, int cx0, int cz0, int nz, int slots) {
+        if (region == null || region.get() != level) {
+            region = new java.lang.ref.WeakReference<>(level);
+            maxN = 0;
+        }
+        for (int s = 0; s < slots; s++) {
+            int m = chunkMax(level, cx0 + s / nz, cz0 + s % nz);
+            if (m == UNKNOWN || l <= m) return false;
+        }
+        return true;
+    }
+
+    private int chunkMax(WorldGenLevel level, int cx, int cz) {
+        long key = net.minecraft.world.level.ChunkPos.asLong(cx, cz);
+        for (int i = 0; i < maxN; i++)
+            if (maxKey[i] == key) return maxVal[i];
+        if (!level.hasChunk(cx, cz)) return UNKNOWN;
+        int m = UNKNOWN;
+        ChunkAccess c = level.getChunk(cx, cz);
+        if (c.getClass() == ProtoChunk.class && c.getPersistedStatus().isOrAfter(net.minecraft.world.level.chunk.status.ChunkStatus.CARVERS)) {
+            Heightmap hm = ((ChunkHeightmapsAccessor) c).sleep$heightmaps().get(Heightmap.Types.OCEAN_FLOOR_WG);
+            if (hm != null && hm.getClass() == Heightmap.class) {
+                HeightmapDataAccessor a = (HeightmapDataAccessor) hm;
+                BitStorage d = a.sleep$data();
+                int top = Integer.MIN_VALUE;
+                for (int i = 0; i < 256; i++) top = Math.max(top, d.get(i));
+                m = top + a.sleep$chunk().getMinBuildHeight();
+            }
+        }
+        if (maxN < maxKey.length) {
+            maxKey[maxN] = key;
+            maxVal[maxN++] = m;
+        }
+        return m;
     }
 
     private void load(WorldGenLevel level, int s, int x, int z) {
