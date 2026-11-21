@@ -317,8 +317,11 @@ public final class SurfaceWriter {
                 }
                 SurfaceTree.Node[] p = tree.prepare(start, y, i2, y - k2 + 1, j2);
                 if (p == null) continue;   // the pruned tree evaluates nothing: null, and no updateY (see SurfaceTree)
-                ctx.updateY(i2, y - k2 + 1, j2, x, y, z);
-                r = SurfaceTree.eval(p, start, x, y, z);
+                r = tree.constant;
+                if (r == null) {
+                    ctx.updateY(i2, y - k2 + 1, j2, x, y, z);
+                    r = SurfaceTree.eval(p, start, x, y, z);
+                }
             } else {
                 ctx.updateY(i2, y - k2 + 1, j2, x, y, z);
                 r = rule.tryApply(x, y, z);
@@ -347,6 +350,17 @@ public final class SurfaceWriter {
      */
     private void write(int k, int y, int l, int x, int z, BlockState state) {
         LevelChunkSection s = sections[(y - minY) >> 4];
+        if (state == def) {
+            // the block is the default block already: vanilla's section write changes nothing (the palette has it, the
+            // storage keeps its id, the counts go -1 +1); its heightmap updates are kept
+            for (int h = 0; h < nh; h++) {
+                if (y <= cur[h] - 2) continue;
+                hms[h].update(k, y, l, state);
+                cur[h] = hms[h].getFirstAvailable(k, l);
+            }
+            if (!state.getFluidState().isEmpty()) chunk.markPosForPostprocessing(mark.set(x, y, z));
+            return;
+        }
         if (!(s.hasOnlyAir() && state.is(Blocks.AIR))) {
             PalettedContainer<BlockState> pc = s.getStates();
             PalettedContainer.Data<BlockState> d = pc.data;

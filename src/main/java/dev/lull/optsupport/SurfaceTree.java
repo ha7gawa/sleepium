@@ -41,6 +41,12 @@ import net.minecraft.world.level.levelgen.placement.CaveSurface;
  */
 public final class SurfaceTree {
     public static final boolean ON = Boolean.getBoolean("lab.opt.SurfaceTree");
+    /**
+     * -Dlab.surface.treeHeights: height and water tests decided too. Exact (verified), but slower on .103: overworld
+     * surface 3356 / 3262 -> 3810 / 3955 us/call (15 tests per block instead of 5; the overworld's deep blocks keep the
+     * badlands biome test anyway), nether 3717 / 3676 -> 3639 / 3876 - off by default
+     */
+    private static final boolean HEIGHTS = Boolean.getBoolean("lab.surface.treeHeights");
     private static final ConcurrentHashMap<Class<?>, Field> OUTER = new ConcurrentHashMap<>();
     private static final int MAX = 24, DEPTH = 0, Y = 1, WATER = 2;
     private static volatile boolean logged;
@@ -102,7 +108,7 @@ public final class SurfaceTree {
         while (c instanceof SurfaceRules.NotCondition n) c = n.target();
         if (index.containsKey(c)) return true;
         Object src = source(c);
-        if (src == null) return true;
+        if (src == null || !HEIGHTS && !(src instanceof SurfaceRules.StoneDepthCheck)) return true;
         int idx = -1;
         for (int i = 0; i < nc; i++) if (key[i].equals(src)) idx = i;
         if (idx < 0) {
@@ -191,9 +197,22 @@ public final class SurfaceTree {
             if (v) sig |= 1 << c;
         }
         Node[] p = lookup(sig);
-        for (int i = start; i < p.length; i++) if (p[i] != null) return p;
+        for (int i = start; i < p.length; i++) {
+            Node n = p[i];
+            if (n != null) {
+                constant = n instanceof Const k ? k.s : null;
+                return p;
+            }
+        }
         return null;
     }
+
+    /**
+     * after prepare: the state when the first rule left from start is a plain state rule (the result, with nothing
+     * evaluated before it - no updateY needed either), else null
+     */
+    @Nullable
+    public BlockState constant;
 
     /** vanilla's root sequence from rule index start over pruned rules (after updateY) */
     @Nullable
