@@ -919,10 +919,15 @@ public final class ClientAuto {
                     double t = since(tpStart);
                     srv.execute(() -> {
                         var cs = srv.overworld().getChunkSource();
-                        int n = 0;
+                        // the circle the client tracks (as allChunksIn), not the square: a pack's corners may never load
+                        int n = 0, want = 0;
                         for (int dx = -r; dx <= r; dx++)
-                            for (int dz = -r; dz <= r; dz++) if (cs.getChunkNow((tp[0] >> 4) + dx, (tp[1] >> 4) + dz) != null) n++;
-                        if (n == (2 * r + 1) * (2 * r + 1) && tpServerFullAt < 0) tpServerFullAt = t;
+                            for (int dz = -r; dz <= r; dz++)
+                                if (dx * dx + dz * dz <= r * r) {
+                                    want++;
+                                    if (cs.getChunkNow((tp[0] >> 4) + dx, (tp[1] >> 4) + dz) != null) n++;
+                                }
+                        if (n == want && tpServerFullAt < 0) tpServerFullAt = t;
                     });
                 }
                 if (meshedStable(mc) || since(phaseStart) > 60) {
