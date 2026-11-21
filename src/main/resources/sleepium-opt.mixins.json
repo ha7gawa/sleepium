@@ -74,6 +74,8 @@
     "WorldgenColumnMemoMixin",
     "WorldgenShareSlicesMixin",
     "WorldgenNoiseOnceMixin",
+    "NoiseMathMixin",
+    "NoiseMathWrapMixin",
     "PersistentPoolsMixin",
     "LabPoolsMixin",
     "TickMemoMixin",
