@@ -8,6 +8,7 @@ import net.minecraft.server.level.WorldGenRegion;
 import net.minecraft.util.BitStorage;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.WorldGenLevel;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ProtoChunk;
 import net.minecraft.util.RandomSource;
@@ -75,7 +76,7 @@ public final class OreScan {
      * persisted status >= CARVERS (the step's requirement), whose heightmapsAfter are the final heightmaps - vanilla's
      * ProtoChunk.setBlockState updates only those, primeHeightmaps only adds missing ones, setHeightmap is a load-time
      * call - so the WORLDGEN heightmaps no longer change. Only filled for plain ProtoChunks at >= CARVERS with the
-     * heightmap present, and only for chunks the region has (hasChunk); anything else never rejects.
+     * heightmap present, and only for chunks at most 1 from the region's centre; anything else never rejects.
      */
     private java.lang.ref.WeakReference<WorldGenLevel> region;
     private final long[] maxKey = new long[32];
@@ -157,7 +158,10 @@ public final class OreScan {
         long key = net.minecraft.world.level.ChunkPos.asLong(cx, cz);
         for (int i = 0; i < maxN; i++)
             if (maxKey[i] == key) return maxVal[i];
-        if (!level.hasChunk(cx, cz)) return UNKNOWN;
+        // only the chunks at most 1 from the centre (FEATURES' safe distances: farther ones may reach FULL meanwhile, and
+        // an ImposterProtoChunk answers OCEAN_FLOOR_WG from the final OCEAN_FLOOR heightmap)
+        ChunkPos centre = ((WorldGenRegion) level).getCenter();
+        if (Math.abs(cx - centre.x) > 1 || Math.abs(cz - centre.z) > 1 || !level.hasChunk(cx, cz)) return UNKNOWN;
         int m = UNKNOWN;
         ChunkAccess c = level.getChunk(cx, cz);
         if (c.getClass() == ProtoChunk.class && c.getPersistedStatus().isOrAfter(net.minecraft.world.level.chunk.status.ChunkStatus.CARVERS)) {

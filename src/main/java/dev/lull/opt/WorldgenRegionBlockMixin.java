@@ -4,6 +4,7 @@ import dev.lull.optsupport.RegionBlockVerify;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -32,7 +33,9 @@ import org.spongepowered.asm.mixin.Unique;
  * the same section (x >> 4, y >> 4, z >> 4) as a position inside the build height is inside it too and has the same
  * section index. The answer is then computed from that section exactly as ProtoChunk does it (hasOnlyAir read each
  * time: sections change). Only filled from a chunk whose class is ProtoChunk (not ImposterProtoChunk / LevelChunk /
- * a mod's subclass) and a y inside its build height; anything else is answered by vanilla's lines. Other steps go the
+ * a mod's subclass), at most 1 chunk from the region's centre (the distances WorldgenShareRegionMixin finds safe for
+ * FEATURES: the FEATURES region also reaches STRUCTURE_STARTS chunks 8 away, which may reach FULL meanwhile) and a y
+ * inside its build height; anything else is answered by vanilla's lines. Other steps go the
  * vanilla way. A region is used by the one thread that runs its step (as the memo of WorldgenShareRegionMixin).
  *
  * <p>-Dlab.featcpu.verify=true: every remembered answer is compared with vanilla's lookup.
@@ -40,6 +43,7 @@ import org.spongepowered.asm.mixin.Unique;
 @Mixin(WorldGenRegion.class)
 public abstract class WorldgenRegionBlockMixin {
     @Shadow @Final private ChunkStep generatingStep;
+    @Shadow @Final private ChunkAccess center;
 
     @Shadow
     public abstract ChunkAccess getChunk(int chunkX, int chunkZ);
@@ -66,8 +70,10 @@ public abstract class WorldgenRegionBlockMixin {
                 if (RegionBlockVerify.ON) RegionBlockVerify.check(r, this.getChunk(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(z)).getBlockState(pos), pos);
                 return r;
             }
-            ChunkAccess c = this.getChunk(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(z));
-            if (c.getClass() == ProtoChunk.class && !c.isOutsideBuildHeight(y)) {
+            int cx = SectionPos.blockToSectionCoord(x), cz = SectionPos.blockToSectionCoord(z);
+            ChunkAccess c = this.getChunk(cx, cz);
+            ChunkPos centre = this.center.getPos();
+            if (c.getClass() == ProtoChunk.class && Math.abs(cx - centre.x) <= 1 && Math.abs(cz - centre.z) <= 1 && !c.isOutsideBuildHeight(y)) {
                 LevelChunkSection sec = c.getSection(c.getSectionIndex(y));
                 sleep$lastSection = sec;
                 sleep$lastKey = key;
