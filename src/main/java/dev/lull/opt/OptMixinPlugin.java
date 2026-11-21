@@ -180,6 +180,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenSkip") || Boolean.getBoolean("lab.opt.WorldgenShare");
         if (simple.startsWith("WorldgenShare"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenShare");
+        if (simple.equals("NoiseMathWrapMixin"))   // part of the Perlin octave flag
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseMathMixin");
         if (simple.equals("WorldgenAllocPlacementMixin") || simple.equals("WorldgenAllocJointMixin"))   // FEATURES: not yet verified
             on = Boolean.getBoolean("lab.opt.WorldgenFeatureAlloc");
         if (simple.equals("WorldgenReactorMixin") || simple.startsWith("Reactor"))
