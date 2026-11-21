@@ -73,6 +73,7 @@
     "WorldgenShareCoordinateMixin",
     "WorldgenColumnMemoMixin",
     "WorldgenShareSlicesMixin",
+    "WorldgenNoiseOnceMixin",
     "PersistentPoolsMixin",
     "LabPoolsMixin",
     "TickMemoMixin",
