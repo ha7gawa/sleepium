@@ -199,6 +199,10 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.equals("LightTimingMixin")) on = Boolean.getBoolean("lab.lighttime");   // measurement only
         if (simple.startsWith("Scout") && simple.endsWith("Mixin"))   // measurement only, never with lab.opt.all
             on = Boolean.getBoolean("lab.scout");
+        if (simple.startsWith("SaveDirect"))   // palettes without the codec machinery (optsupport/SavePalettes)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SaveDirect");
+        if (simple.startsWith("SaveStreams"))   // chunk records encoded through per-thread streams (optsupport/SaveStreams)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SaveStreams");
         if (simple.equals("AsyncChunkSaveEncodeMixin") || simple.equals("AsyncChunkSaveStorageMixin"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.AsyncChunkSaveMixin");
         if (simple.equals("ChunkTickMemoChunkMixin") || simple.equals("ChunkTickMemoEpochMixin"))

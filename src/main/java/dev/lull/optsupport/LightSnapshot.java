@@ -60,6 +60,16 @@ public final class LightSnapshot {
         Shards shards;
 
         public Long2ObjectOpenHashMap<DataLayer> snapshot(Long2ObjectOpenHashMap<DataLayer> live) {
+            if (!SaveStats.ON) return snapshot0(live);
+            long b = SaveStats.bytes(), t = System.nanoTime();
+            try {
+                return snapshot0(live);
+            } finally {
+                SaveStats.add(SaveStats.LIGHT, b, t);
+            }
+        }
+
+        private Long2ObjectOpenHashMap<DataLayer> snapshot0(Long2ObjectOpenHashMap<DataLayer> live) {
             snapshots.incrementAndGet();
             Long2ObjectOpenHashMap<DataLayer> out;
             if (SHARDS) {

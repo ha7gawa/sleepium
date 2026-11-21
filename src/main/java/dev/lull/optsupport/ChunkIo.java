@@ -76,6 +76,24 @@ public final class ChunkIo {
 
     /** a region file's chunk record: 4 bytes length, 1 byte version, the compressed NBT — RegionFile.ChunkBuffer's bytes */
     public static byte[] encode(CompoundTag tag, RegionFileVersion version) throws IOException {
+        if (!SaveStats.ON) return encode0(tag, version);
+        long b = SaveStats.bytes(), t = System.nanoTime();
+        try {
+            return encode0(tag, version);
+        } finally {
+            SaveStats.add(SaveStats.RECORD, b, t);
+        }
+    }
+
+    private static byte[] encode0(CompoundTag tag, RegionFileVersion version) throws IOException {
+        if (SaveStreams.ON) {
+            byte[] r = SaveStreams.encode(tag, version);
+            if (r != null) return r;
+        }
+        return encodeVanilla(tag, version);
+    }
+
+    static byte[] encodeVanilla(CompoundTag tag, RegionFileVersion version) throws IOException {
         Buffer b = new Buffer(version.getId());
         try (DataOutputStream out = new DataOutputStream(version.wrap(b))) {
             NbtIo.write(tag, out);
@@ -190,7 +208,7 @@ public final class ChunkIo {
 
     public static String report() {
         long b = batches.get();
-        return String.format("chunk io: written %d in %d batches (%.1f per batch, max %d), cleared %d; encoded on the pool %d, on the IOWorker %d, stale %d; reads of pending entries %d",
+        return (SaveStreams.ON ? SaveStreams.report() + "; " : "") + String.format("chunk io: written %d in %d batches (%.1f per batch, max %d), cleared %d; encoded on the pool %d, on the IOWorker %d, stale %d; reads of pending entries %d",
                 written.get(), b, b == 0 ? 0 : written.get() / (double) b, maxBatch.get(), cleared.get(), encodedPool.get(), encodedInline.get(), stale.get(), pendingReads.get());
     }
 
