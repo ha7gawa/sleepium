@@ -25,6 +25,7 @@ final class GenTimeline {
     private static final TreeMap<String, Long> SUM = new TreeMap<>();
     private static long samples, runSum, workerSum, lowSamples;
     private static int tick;
+    private static final TreeMap<String, Integer> TOP = new TreeMap<>();
     private static java.lang.reflect.Method visible;
 
     private GenTimeline() {}
@@ -48,18 +49,37 @@ final class GenTimeline {
         } catch (ReflectiveOperationException e) {
             counts.put("error " + e.getClass().getSimpleName(), 1);
         }
-        int running = 0, workers = 0;
-        for (ThreadInfo ti : MX.getThreadInfo(MX.getAllThreadIds(), 0)) {
-            if (ti == null || !ti.getThreadName().startsWith("Worker-Main")) continue;
-            workers++;
-            if (ti.getThreadState() == Thread.State.RUNNABLE) running++;
+        int running = 0, workers = 0, io = 0;
+        String main = "?";
+        for (ThreadInfo ti : MX.getThreadInfo(MX.getAllThreadIds(), 1)) {
+            if (ti == null) continue;
+            String n = ti.getThreadName();
+            boolean run = ti.getThreadState() == Thread.State.RUNNABLE;
+            if (n.startsWith("Worker-Main")) {
+                workers++;
+                if (run) {
+                    running++;
+                    StackTraceElement[] st = ti.getStackTrace();
+                    if (st.length > 0) TOP.merge(st[0].getClassName().substring(st[0].getClassName().lastIndexOf('.') + 1) + "." + st[0].getMethodName(), 1, Integer::sum);
+                }
+            } else if (n.startsWith("IO-Worker") && run) io++;
+            else if (n.equals("Server thread")) {
+                StackTraceElement[] st = ti.getStackTrace();
+                main = run ? (st.length > 0 ? st[0].getMethodName() : "run") : "wait";
+            }
         }
         samples++;
         runSum += running;
         workerSum += workers;
         if (running * 2 < workers) lowSamples++;
         counts.forEach((k, v) -> SUM.merge(k, (long) v, Long::sum));
-        LINES.append(String.format(Locale.ROOT, "  %6.2f s  workers %2d/%2d  ", secs, running, workers));
+        LINES.append(String.format(Locale.ROOT, "  %6.2f s  workers %2d/%2d  io %d  main %-14s ", secs, running, workers, io, main.length() > 14 ? main.substring(0, 14) : main));
+        if (running <= 2 && !TOP.isEmpty()) {   // the few busy workers of a quiet sample: what they run (top frame)
+            LINES.append("[");
+            TOP.forEach((k, v) -> LINES.append(k).append(' '));
+            LINES.append("] ");
+        }
+        TOP.clear();
         counts.forEach((k, v) -> LINES.append(k).append(' ').append(v).append("  "));
         LINES.append('\n');
     }
