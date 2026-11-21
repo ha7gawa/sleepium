@@ -115,6 +115,7 @@
     "BlockCollisionMemoMixin",
     "SectionModCountMixin",
     "ProtoSetNoLockMixin",
+    "IOWorkerRegionScanMixin",
     "BlockCollisionsFastMixin",
     "EntityCollisionMemoMixin",
     "EventSiteMixin",
