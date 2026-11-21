@@ -158,6 +158,7 @@ final class GenBench {
         }
         String par = dev.lull.optsupport.ParallelGen.ENABLED ? "; " + dev.lull.optsupport.ParallelGen.report() : "";
         if (dev.lull.optsupport.GenReactor.ENABLED) par += "; " + dev.lull.optsupport.GenReactor.report();
+        if (dev.lull.optsupport.GenGraph.ENABLED) par += "; " + dev.lull.optsupport.GenGraph.report();
         if (dev.lull.optsupport.FullRing.ENABLED) par += "; " + dev.lull.optsupport.FullRing.report();
         if (dev.lull.optsupport.LightNotifyRing.ENABLED) par += "; " + dev.lull.optsupport.LightNotifyRing.report();
         if (dev.lull.optsupport.GenReactor.ENABLED) par += "; " + dev.lull.optsupport.ReadJournal.report();

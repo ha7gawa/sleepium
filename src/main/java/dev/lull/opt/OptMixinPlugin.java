@@ -195,6 +195,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ShapeFullMemoMixin");
         if (simple.equals("WorldgenReactorMixin") || simple.startsWith("Reactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenReactor");
+        if (simple.startsWith("GenGraph")) on = Boolean.getBoolean("lab.opt.GenGraph");
+        if (simple.equals("WorldgenReactorMixin") && Boolean.getBoolean("lab.opt.GenGraph")) on = false;   // the graph replaces its runGenerationTask
         if (simple.startsWith("MainReactor") || simple.equals("EventLoopQueueAccessor") || simple.equals("ChunkCacheExecutorAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.MainReactor");
         if (simple.startsWith("MainReactorScout")) on = Boolean.getBoolean("lab.reactor.scout");   // measurement only
@@ -315,6 +317,10 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         }
         // the worldgen reactor removes the worldgen actor; FEATURES of neighbouring chunks are then kept apart only by
         // ParallelGen's 3x3 claims (ParallelWorldgenMixin): without them two chunks' features write one section at once
+        if (Boolean.getBoolean("lab.opt.GenGraph") && !Boolean.getBoolean("lab.opt.WorldgenReactor")) {   // the reactor's chunk-load, FULL and gate helpers
+            System.setProperty("lab.opt.WorldgenReactor", "true");
+            System.out.println("[sleep/opt] lab.opt.GenGraph uses WorldgenReactor's helpers (its runGenerationTask stays off): turned on");
+        }
         if (Boolean.getBoolean("lab.opt.WorldgenReactor") && !Boolean.getBoolean("lab.opt.ParallelWorldgenMixin") && !Boolean.getBoolean("lab.opt.all")) {
             System.setProperty("lab.opt.ParallelWorldgenMixin", "true");
             System.out.println("[sleep/opt] lab.opt.WorldgenReactor needs ParallelWorldgenMixin (its FEATURES claims): turned on");
