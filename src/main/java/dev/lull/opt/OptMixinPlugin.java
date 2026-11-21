@@ -184,7 +184,9 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.equals("ShapeFullMemoShapeMixin"))   // the slot of ShapeFullMemoMixin's answer
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ShapeFullMemoMixin");
         if (simple.equals("WorldgenReactorMixin") || simple.startsWith("Reactor"))
-            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenReactor");
+            // (11-21 lab-sched: -Dlab.opt.<part>=false leaves one part out - WorldgenReactorMixin (the mailbox),
+            // ReactorChunkLoadMixin (the load hops), ReactorFullMixin (FullRing) - to attribute the gain)
+            on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenReactor")) && !"false".equals(System.getProperty("lab.opt." + simple));
         if (simple.startsWith("MainReactor") || simple.equals("EventLoopQueueAccessor") || simple.equals("ChunkCacheExecutorAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.MainReactor");
         if (simple.startsWith("MainReactorScout")) on = Boolean.getBoolean("lab.reactor.scout");   // measurement only
