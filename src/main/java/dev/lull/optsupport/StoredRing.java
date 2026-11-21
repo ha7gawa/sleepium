@@ -28,7 +28,7 @@ import net.minecraft.world.level.chunk.storage.RegionFileVersion;
  * its region record bytes (the same bytes ChunkIo / vanilla write) and kept in a bounded byte ring per IOWorker
  * instead of going to the IOWorker. A later store of the position replaces it (a later status, a FULL chunk, goes to
  * the IOWorker and the held record is dropped: never written). Loads and scans of a held position read its bytes.
- * Held records go to the IOWorker - decoded and stored as vanilla would - when they are older than holdMs, when the
+ * Held records go to the IOWorker - their bytes handed to ChunkIo's pending entry as they are - when they are older than holdMs, when the
  * ring needs their space, and at every synchronize (flushWorker, save-all flush) and close: the world on disk after a
  * stop is the same as vanilla's. A crash loses only held early proto chunks - regenerated as they were.
  *
@@ -51,7 +51,8 @@ public final class StoredRing {
 
     public static final AtomicLong held = new AtomicLong(), replaced = new AtomicLong(), dropped = new AtomicLong(), released = new AtomicLong(),
             releasedAge = new AtomicLong(), releasedSpace = new AtomicLong(), releasedSync = new AtomicLong(), loadHits = new AtomicLong(),
-            scanHits = new AtomicLong(), heldBytes = new AtomicLong(), maxLive = new AtomicLong(), verifyBad = new AtomicLong(), encodeFails = new AtomicLong();
+            scanHits = new AtomicLong(), heldBytes = new AtomicLong(), maxHeldBytes = new AtomicLong(), maxLive = new AtomicLong(), verifyBad = new AtomicLong(),
+            encodeFails = new AtomicLong(), releaseAllNs = new AtomicLong();
 
     /** stores through the IOWorker (bypassing the ring) */
     private final BiFunction<ChunkPos, CompoundTag, CompletableFuture<Void>> through;
@@ -126,7 +127,7 @@ public final class StoredRing {
             slotHead++;
             index.put(key, s);
             live++;
-            heldBytes.addAndGet(rec.length);
+            maxHeldBytes.accumulateAndGet(heldBytes.addAndGet(rec.length), Math::max);
             maxLive.accumulateAndGet(live, Math::max);
             held.incrementAndGet();
             releaseOld(now);
@@ -183,16 +184,13 @@ public final class StoredRing {
         }
     }
 
-    /** under the lock: the record goes to the IOWorker (queued in its mailbox), then leaves the index */
+    /**
+     * under the lock: the record goes to the IOWorker (queued in its mailbox) as it is - ChunkIo's pending entry takes
+     * the bytes, no decode and encode again (the ring is on only with ChunkIo) - then leaves the index
+     */
     private void release(int s) {
-        CompoundTag tag;
         CompletableFuture<Void> fut = slotFut[s];
-        try {
-            tag = ChunkIo.decode(copy(s));
-        } catch (IOException e) {
-            throw new RuntimeException("StoredRing: a held record does not decode", e);
-        }
-        CompletableFuture<Void> f = through.apply(new ChunkPos(slotPos[s]), tag);
+        CompletableFuture<Void> f = through.apply(new ChunkPos(slotPos[s]), new ChunkIo.Encoded(copy(s)));
         slotLive[s] = false;
         slotFut[s] = null;
         index.remove(slotPos[s]);
@@ -256,6 +254,15 @@ public final class StoredRing {
 
     /** every held record to the IOWorker (synchronize, close) */
     public void releaseAll() {
+        long t = System.nanoTime();
+        try {
+            releaseAll0();
+        } finally {
+            releaseAllNs.addAndGet(System.nanoTime() - t);
+        }
+    }
+
+    private void releaseAll0() {
         synchronized (this) {
             while (slotHead > slotTail) {
                 int t = (int) (slotTail % SLOTS);
@@ -288,8 +295,8 @@ public final class StoredRing {
     }
 
     public static String report() {
-        return String.format("stored ring: held %d (replaced %d, dropped by a later status %d), released %d (age %d, space %d, sync/close %d), loads from the ring %d, scans %d, max live %d, held now %.1f MB, encode failures %d",
-                held.get(), replaced.get(), dropped.get(), released.get(), releasedAge.get(), releasedSpace.get(), releasedSync.get(), loadHits.get(), scanHits.get(), maxLive.get(),
-                heldBytes.get() / 1048576.0, encodeFails.get());
+        return String.format("stored ring: held %d (replaced %d, dropped by a later status %d), released %d (age %d, space %d, sync/close %d; hand-overs at sync/close %.1f ms), loads from the ring %d, scans %d, max live %d, held now %.1f MB (peak %.1f MB), encode failures %d",
+                held.get(), replaced.get(), dropped.get(), released.get(), releasedAge.get(), releasedSpace.get(), releasedSync.get(), releaseAllNs.get() / 1e6, loadHits.get(), scanHits.get(),
+                maxLive.get(), heldBytes.get() / 1048576.0, maxHeldBytes.get() / 1048576.0, encodeFails.get());
     }
 }

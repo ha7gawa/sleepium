@@ -93,7 +93,7 @@ public abstract class ChunkIoWorkerMixin implements dev.lull.optsupport.ChunkIoW
     /** counted before vanilla queues the store: its task may run, and post the writer, before store() returns */
     @Inject(method = "store", at = @At("HEAD"))
     private void sleep$count(ChunkPos pos, CompoundTag tag, CallbackInfoReturnable<CompletableFuture<Void>> cir) {
-        if (tag != null) sleep$inFlight.incrementAndGet();
+        if (tag != null && !(tag instanceof ChunkIo.Encoded)) sleep$inFlight.incrementAndGet();
     }
 
     /** after vanilla queued the store (FOREGROUND, FIFO): the encode's result is queued behind it, never before */
@@ -102,6 +102,16 @@ public abstract class ChunkIoWorkerMixin implements dev.lull.optsupport.ChunkIoW
         ChunkIo.watch(this.storage.info().type() + " store " + pos + (tag == null ? " (clear)" : ""), cir.getReturnValue());
         if (tag == null) {
             if (sleep$verify != null) sleep$verify.remove(pos.toLong());
+            return;
+        }
+        if (tag instanceof ChunkIo.Encoded enc) {   // already made (StoredRing): the writer takes its bytes as they are
+            if (sleep$verify != null) {
+                try {
+                    sleep$verify.put(pos.toLong(), ChunkIo.canonical(ChunkIo.decode(enc.record)));
+                } catch (IOException e) {
+                    LOGGER.error("ChunkIo verify: a made record of {} does not decode", pos, e);
+                }
+            }
             return;
         }
         if (sleep$verify != null) sleep$verify.put(pos.toLong(), ChunkIo.canonical(tag));
@@ -152,7 +162,8 @@ public abstract class ChunkIoWorkerMixin implements dev.lull.optsupport.ChunkIoW
                 if (o instanceof ChunkIo.Entry e) {
                     ChunkIo.pendingReads.incrementAndGet();
                     CompoundTag data = e.sleep$data();
-                    if (data == ChunkIo.DROPPED) return Either.left(Optional.of(ChunkIo.decode(e.sleep$bytes())));
+                    byte[] rec = ChunkIo.record(e, data);
+                    if (rec != null) return Either.left(Optional.of(ChunkIo.decode(rec)));
                     return Either.left(Optional.ofNullable(data == null ? null : data.copy()));
                 }
                 return Either.left(Optional.ofNullable(this.storage.read(chunkPos)));
@@ -174,7 +185,8 @@ public abstract class ChunkIoWorkerMixin implements dev.lull.optsupport.ChunkIoW
                 Object o = this.pendingWrites.get(chunkPos);
                 if (o instanceof ChunkIo.Entry e) {
                     CompoundTag data = e.sleep$data();
-                    if (data == ChunkIo.DROPPED) ChunkIo.scan(e.sleep$bytes(), visitor);
+                    byte[] rec = ChunkIo.record(e, data);
+                    if (rec != null) ChunkIo.scan(rec, visitor);
                     else if (data != null) data.acceptAsRoot(visitor);
                 } else {
                     this.storage.scanChunk(chunkPos, visitor);
@@ -200,7 +212,7 @@ public abstract class ChunkIoWorkerMixin implements dev.lull.optsupport.ChunkIoW
             Map.Entry<ChunkPos, Object> me = it.next();
             ChunkIo.Entry e = (ChunkIo.Entry) me.getValue();
             CompoundTag data = e.sleep$data();
-            if (data != null && data != ChunkIo.DROPPED) continue;   // its encode is on the pool
+            if (data != null && data != ChunkIo.DROPPED && !(data instanceof ChunkIo.Encoded)) continue;   // its encode is on the pool
             it.remove();
             pos.add(me.getKey());
             entries.add(e);
@@ -237,7 +249,7 @@ public abstract class ChunkIoWorkerMixin implements dev.lull.optsupport.ChunkIoW
                 for (int i : group) {
                     ChunkIo.Entry e = entries.get(i);
                     CompoundTag tag = e.sleep$data();
-                    byte[] bytes = tag == ChunkIo.DROPPED ? e.sleep$bytes() : null;
+                    byte[] bytes = tag == null ? null : ChunkIo.record(e, tag);
                     if (tag == null) {   // a store of null: the chunk is cleared, as vanilla does
                         try {
                             region.clear(pos.get(i));

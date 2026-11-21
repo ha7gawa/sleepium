@@ -204,6 +204,9 @@
 -Dlab.opt.LightSnapshotMixin=true
 -Dlab.opt.AllocTrim=true
 -Dlab.opt.ChunkIo=true
+# region files written through to the drive (vanilla's DSYNC, contiguous records in one write) instead of two
+# FlushFileBuffers per batch: vanilla's durability and world size; world NVMe 42 -> 11 % busy while generating (notes/87)
+-Dlab.chunkio.writeThrough=true
 -Dlab.opt.FireCheckLoopMixin=true
 -Dlab.opt.FluidScanDryMixin=true
 -Dlab.opt.GpuAnim=true

@@ -41,6 +41,9 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.LightSnapshotMixin");
         if (simple.startsWith("ChunkIo"))   // one feature: encode on the pool, batched region writes (notes/38)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkIo");
+        if (simple.equals("StoredRingMixin"))   // early proto chunks held as records: released into ChunkIo's pending entries (notes/85)
+            on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.StoredRingMixin"))
+                    && (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkIo"));
         if (simple.startsWith("JobSite"))   // one feature: brains' job sites counted, PoiCompetitorScan's walk skipped when alone
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.JobSiteIndex");
         if (simple.startsWith("RenderThread"))   // the render thread's hooks (RenderThread)

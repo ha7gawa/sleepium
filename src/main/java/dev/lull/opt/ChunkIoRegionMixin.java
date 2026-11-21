@@ -33,7 +33,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *
  * <p>ChunkIoWriter (notes/86): with a cadence, a batch only writes its records and updates the header in memory; at
  * most once per cadence a round forces the file and then writes the header (durable at the next round's force). Old
- * sectors / .mcc files wait for the header that stops pointing at them to be durable. Header deltas and growth steps.
+ * sectors / .mcc files wait for the header that stops pointing at them to be durable.
  */
 @Mixin(RegionFile.class)
 public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
@@ -64,10 +64,6 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
     /** sectors in sleep$freeNow and sleep$freeLater */
     @Unique private int sleep$held;
     @Unique private long sleep$lastRound;
-    /** growth: the file's size as we made it (-1 unknown), its size at open */
-    @Unique private long sleep$size = -1, sleep$size0 = -1;
-    @Unique private boolean sleep$grown;
-    @Unique private static final ByteBuffer SLEEP$ZEROS = ByteBuffer.allocateDirect(256 * 1024);
 
     @Shadow
     private void writeHeader() throws IOException {
@@ -118,7 +114,7 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
         int n = 0;
         OpenOption[] kept = new OpenOption[options.length];
         for (OpenOption o : options) {
-            if (o == StandardOpenOption.DSYNC) sleep$mode = ChunkIoWriter.mode(path.toAbsolutePath().getParent());
+            if (o == StandardOpenOption.DSYNC) sleep$mode = ChunkIoWriter.mode();
             else kept[n++] = o;
         }
         if (sleep$mode == ChunkIoWriter.WRITE_THROUGH) return FileChannel.open(path, options);   // vanilla's DSYNC kept
@@ -173,7 +169,6 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
         byte[][] rec = new byte[n][];
         Path[] external = new Path[n];
         int m = 0;
-        long end = 0;
         for (int i = 0; i < n; i++) {
             byte[] record = data[i];
             int sectors = sizeToSectors(record.length);
@@ -183,7 +178,6 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
                 continue;
             }
             start[m] = usedSectors.allocate(sectors);
-            end = Math.max(end, (long) (start[m] + sectors) * 4096L);
             rec[m] = record;
             index[m] = getOffsetIndex(pos[i]);
             packed[m] = packSectorOffset(start[m], sectors);
@@ -191,7 +185,6 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
             m++;
         }
         if (m == 0) return;
-        if (ChunkIoWriter.GROW_KB > 0) sleep$grow(end);
         if (ChunkIoWriter.COALESCE && m > 1) sleep$writeRuns(rec, start, m);
         else for (int i = 0; i < m; i++) file.write(ByteBuffer.wrap(rec[i]), (long) start[i] * 4096L);
         int now = getTimestamp();
@@ -220,13 +213,7 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
             return;
         }
         // write-through: every record above was acknowledged by the device (DSYNC) before the header is issued
-        if (ChunkIoWriter.HEADER_DELTA) {
-            if (sleep$forced()) sleep$force();
-            sleep$writeHeaderDelta();
-            if (sleep$forced()) sleep$force();
-        } else {
-            writeHeader();   // forced before (the sectors) and after (the header) in the force mode; DSYNC in write-through
-        }
+        writeHeader();   // forced before (the sectors) and after (the header) in the force mode; DSYNC in write-through
         for (int i = 0; i < m; i++) {
             Files.deleteIfExists(external[i]);   // vanilla's commit op: an older oversized copy goes
             if (old[i] != 0) usedSectors.free(getSectorNumber(old[i]), getNumSectors(old[i]));
@@ -244,8 +231,7 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
         sleep$force();
         sleep$releaseLater();
         if (!sleep$dirty.isEmpty()) {
-            if (ChunkIoWriter.HEADER_DELTA) sleep$writeHeaderDelta();
-            else sleep$writeHeaderFull();
+            sleep$writeHeaderFull();
             sleep$unforced = true;
         }
         // what the header just written stopped pointing at: free after the next force
@@ -281,25 +267,11 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
         }
     }
 
-    /** RegionFile.close (server stop, the region cache's eviction): fully durable, a grown file's unused tail cut */
+    /** RegionFile.close (server stop, the region cache's eviction): fully durable */
     @Inject(method = "close", at = @At("HEAD"))
     private void sleep$close(CallbackInfo ci) throws IOException {
         synchronized (this) {
             if (sleep$cadence() && sleep$pending()) sleep$round(true, System.nanoTime());
-            if (sleep$grown) {
-                long used = 8192;
-                for (int i = 0; i < 1024; i++) {
-                    int o = offsets.get(i);
-                    if (o != 0) used = Math.max(used, (long) (getSectorNumber(o) + getNumSectors(o)) * 4096L);
-                }
-                long keep = Math.max(used, sleep$size0);
-                long size = file.size();
-                if (keep < size) {
-                    if (sleep$forced() && sleep$unforced) sleep$force();   // (the header is durable before the tail goes)
-                    file.truncate(keep);
-                    ChunkIoWriter.trimmed.addAndGet(size - keep);
-                }
-            }
         }
     }
 
@@ -336,47 +308,12 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
     }
 
     @Unique
-    private void sleep$grow(long end) throws IOException {
-        if (sleep$size < 0) sleep$size = sleep$size0 = file.size();
-        if (end <= sleep$size) return;
-        sleep$size = Math.max(sleep$size, file.size());   // (vanilla's own writes - oversized stubs - may have grown it)
-        if (end <= sleep$size) return;
-        long step = ChunkIoWriter.GROW_KB * 1024L, to = (end + step - 1) / step * step, p = sleep$size;
-        while (p < to) {
-            ByteBuffer z = SLEEP$ZEROS.duplicate();
-            z.clear().limit((int) Math.min(z.capacity(), to - p));
-            p += file.write(z, p);
-        }
-        ChunkIoWriter.grows.incrementAndGet();
-        ChunkIoWriter.growBytes.addAndGet(to - sleep$size);
-        sleep$size = to;
-        sleep$grown = true;
-    }
-
-    @Unique
     private void sleep$writeHeaderFull() throws IOException {
         ByteBuffer h = header.duplicate();
         h.clear();
         while (h.hasRemaining()) file.write(h, h.position());
         ChunkIoWriter.headerWrites.incrementAndGet();
         ChunkIoWriter.headerBytes.addAndGet(8192);
-        sleep$dirty.clear();
-    }
-
-    /** the changed entries only: per contiguous run one write of the offsets and one of the timestamps */
-    @Unique
-    private void sleep$writeHeaderDelta() throws IOException {
-        for (int i = sleep$dirty.nextSetBit(0); i >= 0; ) {
-            int j = sleep$dirty.nextClearBit(i);
-            for (int base = 0; base <= 4096; base += 4096) {
-                ByteBuffer h = header.duplicate();
-                h.limit(base + j * 4).position(base + i * 4);
-                while (h.hasRemaining()) file.write(h, h.position());
-                ChunkIoWriter.headerWrites.incrementAndGet();
-                ChunkIoWriter.headerBytes.addAndGet((j - i) * 4L);
-            }
-            i = sleep$dirty.nextSetBit(j);
-        }
         sleep$dirty.clear();
     }
 

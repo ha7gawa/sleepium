@@ -44,6 +44,25 @@ public final class ChunkIo {
     /** a pending entry's tag once its bytes are made (the tree is let go); never written or read as a tag */
     public static final CompoundTag DROPPED = new CompoundTag();
 
+    /**
+     * A store whose region record is already made (StoredRing's release: the held bytes go to the IOWorker as they are,
+     * no decode and encode again). Stored through IOWorker.store like a tag, the pending entry holds it until the writer
+     * takes its bytes; loads and scans of the entry read the bytes. Never written or read as a tag.
+     */
+    public static final class Encoded extends CompoundTag {
+        public final byte[] record;
+
+        public Encoded(byte[] record) {
+            this.record = record;
+        }
+    }
+
+    /** the record of a pending entry's data, if it is one already made: DROPPED (the entry's bytes) or an Encoded store */
+    public static byte[] record(Entry e, CompoundTag data) {
+        if (data == DROPPED) return e.sleep$bytes();
+        return data instanceof Encoded enc ? enc.record : null;
+    }
+
     public static final AtomicLong encodedPool = new AtomicLong(), encodedInline = new AtomicLong(), stale = new AtomicLong(),
             batches = new AtomicLong(), written = new AtomicLong(), cleared = new AtomicLong(), maxBatch = new AtomicLong(),
             pendingReads = new AtomicLong();
