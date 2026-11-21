@@ -48,8 +48,11 @@ import org.objectweb.asm.MethodVisitor;
  *
  * <p>One hidden class per tree shape (node kinds, constants, sharing), a nestmate of NoiseChunk defined with the
  * NoiseChunk's own lookup (it reads the NoiseChunk's and the interpolators' fields directly); each NoiseChunk gets an
- * instance holding its own node objects. -Dlab.dfc.verify: every compiled cell / column is compared bit for bit with
- * vanilla's fillArray on the same NoiseChunk.
+ * instance holding its own node objects. Later NoiseChunks of the same RandomState take them through the plan's
+ * generated extractor (exact classes and sharing checked; any difference: the full walk). In a cell, a beardifier
+ * proved zero over the cell's box (WorldgenSkip's CellProof.ZeroOver) is the constant +0.0 its compute would return.
+ * -Dlab.dfc.verify: every compiled cell / column is compared bit for bit with vanilla's fillArray on the same
+ * NoiseChunk.
  */
 public final class Dfc {
     private Dfc() {}
@@ -99,15 +102,6 @@ public final class Dfc {
         long before = VALUES.getAndAdd(want.length), n = before + want.length;
         if ((before >>> 20) != (n >>> 20) || (bad != 0 && b - bad < 20))
             System.out.println("[sleep/opt] dfc verify: " + n + " values, " + b + " differ");
-    }
-
-    private static final AtomicLong STATES = new AtomicLong(), BAD_STATES = new AtomicLong();
-
-    /** DfcFillMixin verify: the fast filler's state against vanilla's MaterialRuleList for the same block */
-    public static void checkState(Object got, Object want) {
-        long b = got == want ? BAD_STATES.get() : BAD_STATES.incrementAndGet();
-        long n = STATES.incrementAndGet();
-        if ((n & 0xFFFFF) == 0 || (got != want && b < 20)) System.out.println("[sleep/opt] dfc fill verify: " + n + " blocks, " + b + " differ");
     }
 
     private static final AtomicLong BUILDS = new AtomicLong(), BUILD_NS = new AtomicLong();
