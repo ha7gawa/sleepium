@@ -195,6 +195,30 @@ public final class GpuAnim {
     /** -Dlab.gpuAnim.trustAge=N frames (8; 0: always look): see tickBegin */
     private static final int TRUST_AGE = Integer.getInteger("lab.gpuAnim.trustAge", 8);
     private static final long[] FENCE_FRAME = new long[8];
+    /**
+     * -Dlab.gpuAnim.checkReuse=true (test): a fence of its own after every atlas tick's ring uploads, looked at when the
+     * segment comes round - after the way chosen (trusted by age, its own fence waited for). Still busy there = the CPU
+     * is about to overwrite bytes the GPU has not read yet (counted, the first ones logged).
+     */
+    private static final boolean CHECK_REUSE = Boolean.getBoolean("lab.gpuAnim.checkReuse");
+    private static final long[] CHECK = new long[8];
+    public static long reuseChecked, reuseBusy;
+
+    /** the reuse check's totals (ClientCounters' end-of-window report; "" without -Dlab.gpuAnim.checkReuse) */
+    public static String checkReport() {
+        return CHECK_REUSE ? String.format(java.util.Locale.ROOT, "gpu anim reuse check: %d segments, %d still busy; trusted %d, ring waits %d",
+                reuseChecked, reuseBusy, trusted, ringWaits) : "";
+    }
+
+    private static void checkReuse(int s) {
+        reuseChecked++;
+        if (org.lwjgl.opengl.GL32C.glClientWaitSync(CHECK[s], org.lwjgl.opengl.GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 0) == org.lwjgl.opengl.GL32C.GL_TIMEOUT_EXPIRED
+                && reuseBusy++ < 10)
+            LOG.warn("[sleep/opt] gpu anim reuse check: segment {} still read by the GPU when reused ({} frames after its uploads, limit {})",
+                    s, UploadRing.frames - FENCE_FRAME[s], UploadRing.limitingNow());
+        org.lwjgl.opengl.GL32C.glDeleteSync(CHECK[s]);
+        CHECK[s] = 0;
+    }
     /** -Dlab.gpuAnim.noFlush=true: no glFlush after the ring's fence (the next frame's swap sends it; the wait 8 ticks later flushes anyway) */
     public static boolean NO_FLUSH = Boolean.getBoolean("lab.gpuAnim.noFlush");   // (not final: ClientAuto's flip)
 
@@ -324,6 +348,7 @@ public final class GpuAnim {
             FENCES[seg] = 0;
             beginWaitNs += System.nanoTime() - w0;
         }
+        if (CHECK[seg] != 0) checkReuse(seg);
     }
 
     /** an atlas's animation tick ends: a fence after the segment's uploads */
@@ -331,6 +356,10 @@ public final class GpuAnim {
         blitEnd();
         interpEnd();
         if (batchN > 0) batchFlush();
+        if (CHECK_REUSE && pbo != 0 && segUsed > 0) {   // (right after the uploads, before the segment's own fence and flush: own fence done -> this one done)
+            if (CHECK[seg] != 0) org.lwjgl.opengl.GL32C.glDeleteSync(CHECK[seg]);
+            CHECK[seg] = org.lwjgl.opengl.GL32C.glFenceSync(org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        }
         if (pbo != 0 && segUsed > 0) {
             long f0 = System.nanoTime();
             FENCES[seg] = org.lwjgl.opengl.GL32C.glFenceSync(org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
