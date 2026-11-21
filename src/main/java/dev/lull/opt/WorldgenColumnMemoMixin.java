@@ -1,5 +1,7 @@
 package dev.lull.opt;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
+import com.llamalad7.mixinextras.sugar.Local;
 import dev.lull.optsupport.ColumnMemo;
 import java.util.List;
 import net.minecraft.world.level.biome.Climate;
@@ -28,10 +30,16 @@ public abstract class WorldgenColumnMemoMixin {
         DensityFunction[] f = ColumnMemo.climate(router);
         cir.setReturnValue(new Climate.Sampler(f[0].mapAll(this::wrap), f[1].mapAll(this::wrap), f[2].mapAll(this::wrap), f[3].mapAll(this::wrap),
                 f[4].mapAll(this::wrap), f[5].mapAll(this::wrap), points));
+        dev.lull.optsupport.MapAllMemo.end();   // WorldgenMapMemo: the memo keeps nothing of this chunk
     }
 
-    @Inject(method = "wrapNew", at = @At("HEAD"), cancellable = true)
-    private void sleep$columnMemo(DensityFunction df, CallbackInfoReturnable<DensityFunction> cir) {
-        if (df instanceof ColumnMemo.Mark m) cir.setReturnValue(new ColumnMemo.Memo(m.wrapped));
+    /**
+     * a Mark (wrapNew returns it unchanged) becomes the chunk's Memo. (11-21: a
+     * return-value modifier instead of a cancellable HEAD inject, which made a CallbackInfoReturnable for every new key
+     * of every NoiseChunk - ~0.4 % of generation's allocation; the same result for every input.)
+     */
+    @ModifyReturnValue(method = "wrapNew", at = @At("RETURN"))
+    private DensityFunction sleep$columnMemo(DensityFunction out, @Local(argsOnly = true) DensityFunction df) {
+        return df instanceof ColumnMemo.Mark m ? new ColumnMemo.Memo(m.wrapped) : out;
     }
 }
