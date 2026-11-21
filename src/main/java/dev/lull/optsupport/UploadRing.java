@@ -83,6 +83,17 @@ public final class UploadRing {
     public static boolean limitingNow() {
         return FIF > 0 && limiting && fifEnabled;
     }
+
+    /**
+     * the queue's depth is settled: the automatic limit has decided (on, or off after its quiet windows), or there is no
+     * automatic watch. A measured choice timing whole frames waits for it - before the limit, a driver that queues deep
+     * (the N100's Intel) lets the CPU run 8+ frames ahead and then stalls ~250 ms: the frames between the stalls show the
+     * CPU's cost only, the GPU's is hidden in the stalls (which a trimmed mean drops). A short queue: settled after two
+     * quiet windows of the watch.
+     */
+    public static boolean queueSettled() {
+        return !AUTO || limiting || quietWindows >= 2 || !watching;
+    }
     private static boolean autoChecked;
     private static int autoFrames, autoDeep;
     public static String fifWhy = FIF_FIXED > 0 ? "fixed by the flag" : AUTO ? "watching the queue" : "off";
