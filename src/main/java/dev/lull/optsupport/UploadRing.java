@@ -66,6 +66,12 @@ public final class UploadRing {
     private static final int FIF = FIF_FIXED > 0 ? FIF_FIXED : AUTO ? 3 : 0;
     private static final int DEEP = Integer.getInteger("lab.gpu.framesInFlight.deep", 6), AUTO_WINDOW = 240;
     private static final long[] FRAME_FENCES = new long[16];
+    /**
+     * -Dlab.gpu.framesInFlight.every=N (test, 11-21): a fence every N frames only (the wait: on the newest fence at least K
+     * frames back - K to K + N - 1 queued). N100 standing: any K costs ~4.5 % fps against no limit (148-149 vs 155.5,
+     * K = 2..6 alike), and fences without waits cost as much (a flip run) - is it the fence per frame?
+     */
+    private static final int EVERY = Math.max(1, Math.min(8, Integer.getInteger("lab.gpu.framesInFlight.every", 1)));
     private static int frameNo;
     public static long fifWaits, fifWaitNs, frames, deepFrames;
     /** off: no waiting (the fences still made) - ClientAuto's in-window flip switches it */
@@ -99,6 +105,11 @@ public final class UploadRing {
     public static String fifWhy = FIF_FIXED > 0 ? "fixed by the flag" : AUTO ? "watching the queue" : "off";
 
     /** a look at a fence (no flush, no wait): glGetSynci(GL_SYNC_STATUS) cost the host's NVIDIA driver 45 % of its frames */
+    /**
+     * -Dlab.gpu.framesInFlight.queueLog=false: no queue column in measured windows - its looks at up to 15 fences a frame
+     * are a measurement's own cost (does it change what is measured? 11-21 N100 test)
+     */
+    private static final boolean QUEUE_LOG = !"false".equals(System.getProperty("lab.gpu.framesInFlight.queueLog"));
     /** per measured frame: the frames still queued at its start (the frame log's queue column; -1 none) */
     public static final byte[] DEPTH = new byte[1 << 16];
 
@@ -157,9 +168,9 @@ public final class UploadRing {
             // a fence for every frame, the oldest one we keep waited for: at most FIF frames queued ahead of the GPU
             int i = frameNo & 15;
             if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
-            FRAME_FENCES[i] = GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+            FRAME_FENCES[i] = EVERY == 1 || frameNo % EVERY == 0 ? GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0) : 0;
             if (!limiting) watchQueue();
-            if (dev.lull.ClientMeter.measuring()) {   // the queue: frames sent whose fence is not done (looks without the flush bit)
+            if (QUEUE_LOG && dev.lull.ClientMeter.measuring()) {   // the queue: frames sent whose fence is not done (looks without the flush bit)
                 int d = 0;
                 for (int b = 1; b < 16 && b <= frameNo; b++) {
                     long fb = FRAME_FENCES[(frameNo - b) & 15];
@@ -171,6 +182,7 @@ public final class UploadRing {
             }
             int k = fifDeep ? DEEP_K : FIF;
             long old = limiting && fifEnabled && frameNo >= k ? FRAME_FENCES[(frameNo - k) & 15] : 0;
+            for (int j = 1; old == 0 && j < EVERY && limiting && fifEnabled && frameNo >= k + j; j++) old = FRAME_FENCES[(frameNo - k - j) & 15];
             if (old != 0) {
                 int r = GL32C.glClientWaitSync(old, 0, 0);   // a look without the flush bit (it made the Intel driver submit every frame; the fence K frames back went with a swap long ago)
                 if (r == GL32C.GL_TIMEOUT_EXPIRED) {
