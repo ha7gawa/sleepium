@@ -2,6 +2,7 @@ package dev.lull.optsupport;
 
 import static org.objectweb.asm.Opcodes.*;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
@@ -65,7 +66,7 @@ public final class Dfc {
     private static final AtomicLong VALUES = new AtomicLong(), BAD = new AtomicLong();
     public static final AtomicLong BUILT = new AtomicLong(), REFUSED = new AtomicLong();
     private static final Map<String, Boolean> REASONS = new ConcurrentHashMap<>();
-    private static final Map<String, Constructor<?>> CLASSES = new ConcurrentHashMap<>();
+    private static final Map<String, Plan> CLASSES = new ConcurrentHashMap<>();
     private static final AtomicInteger IDS = new AtomicInteger();
 
     /** NoiseChunk (DfcNoiseChunkMixin): its full-privilege lookup and the corner hook */
@@ -109,8 +110,16 @@ public final class Dfc {
         if ((n & 0xFFFFF) == 0 || (got != want && b < 20)) System.out.println("[sleep/opt] dfc fill verify: " + n + " blocks, " + b + " differ");
     }
 
+    private static final AtomicLong BUILDS = new AtomicLong(), BUILD_NS = new AtomicLong();
+
+    /** time to build one NoiseChunk's compiled code (walk, key, class lookup, instance) */
+    public static void buildTime(long ns) {
+        long t = BUILD_NS.addAndGet(ns), n = BUILDS.incrementAndGet();
+        if ((n & 1023) == 0) System.out.println("[sleep/opt] dfc: " + n + " NoiseChunks built, " + (t / n / 1000) + " us each on average; " + report());
+    }
+
     public static String report() {
-        return "dfc: built " + BUILT.get() + ", refused " + REFUSED.get() + ", classes " + CLASSES.size()
+        return "dfc: built " + BUILT.get() + " (" + FAST.get() + " from plans), refused " + REFUSED.get() + ", classes " + CLASSES.size()
                 + (VERIFY ? ", verified " + VALUES.get() + " values, " + BAD.get() + " differ" : "");
     }
 
@@ -136,6 +145,37 @@ public final class Dfc {
 
         N(int kind) {
             this.kind = kind;
+        }
+    }
+
+    /** how the extractor reaches a node object from its parent: an accessor (or the object itself), its slot */
+    private static final class Step {
+        String acc;          // accessor method on the owner; null: the owner itself
+        boolean holder;      // then Holder.value()
+        int slot = -1;
+        boolean slotNew;
+        Ex child;
+    }
+
+    /** a node object on the extractor's path: its exact class, cache_once identity, steps to its parts */
+    private static final class Ex {
+        final Class<?> cls;
+        int onceDef = -1, onceRef = -1;
+        final List<Step> steps = new ArrayList<>();
+
+        Ex(Class<?> cls) {
+            this.cls = cls;
+        }
+
+        void sig(StringBuilder sb) {
+            sb.append('{').append(cls.getName());
+            if (onceDef >= 0) sb.append("!d").append(onceDef);
+            if (onceRef >= 0) sb.append("!r").append(onceRef);
+            for (Step st : steps) {
+                sb.append(' ').append(st.acc).append(st.holder ? "^" : "").append(st.slot >= 0 ? (st.slotNew ? "+" : "=") + st.slot : "");
+                if (st.child != null) st.child.sig(sb);
+            }
+            sb.append('}');
         }
     }
 
@@ -167,6 +207,52 @@ public final class Dfc {
         final List<Integer> beards = new ArrayList<>();
         final Walk w = this;
         String why;
+        Ex cur;
+        boolean extractable = true;
+
+        /** the node object itself as a slot */
+        int selfSlot(Object o, String type) {
+            int before = slots.size();
+            int k = slot(o, type);
+            Step st = new Step();
+            st.slot = k;
+            st.slotNew = slots.size() > before;
+            cur.steps.add(st);
+            return k;
+        }
+
+        /** a part of the node object (its accessor acc, field of the same name) as a slot */
+        int viaSlot(Object o, String acc, String type) {
+            Object part = get(o, acc);
+            int before = slots.size();
+            int k = slot(part, type);
+            Step st = new Step();
+            st.acc = acc;
+            st.slot = k;
+            st.slotNew = slots.size() > before;
+            cur.steps.add(st);
+            return k;
+        }
+
+        /** a child node: read by field, reached by the extractor through the accessor */
+        N kid(Object o, String field, String acc) {
+            Object c = get(o, field);
+            Step st = new Step();
+            st.acc = acc;
+            return into(c, st);
+        }
+
+        N into(Object c, Step st) {
+            cur.steps.add(st);
+            Ex e = new Ex(c.getClass());
+            if (leafType(c.getClass()).equals(DF) && c.getClass() != DensityFunction.class) extractable = false;
+            st.child = e;
+            Ex save = cur;
+            cur = e;
+            N r = walk(c);
+            cur = save;
+            return r;
+        }
 
         Walk(boolean cell) {
             this.cell = cell;
@@ -191,7 +277,7 @@ public final class Dfc {
 
         N leaf(Object o) {
             N n = new N(LEAF);
-            n.slot = slot(o, leafType(o.getClass()));
+            n.slot = selfSlot(o, leafType(o.getClass()));
             n.size = 1;
             return n;
         }
@@ -219,27 +305,27 @@ public final class Dfc {
                 }
                 case "DensityFunctions$Noise" -> {
                     n = new N(NOISE);
-                    n.slot = slot(get(o, "noise"), NH);
+                    n.slot = viaSlot(o, "noise", NH);
                     n.p = new double[] {d(o, "xzScale"), d(o, "yScale")};
                 }
                 case "DensityFunctions$ShiftedNoise" -> {
                     n = new N(SHIFTED);
-                    n.slot = slot(get(o, "noise"), NH);
+                    n.slot = viaSlot(o, "noise", NH);
                     n.p = new double[] {d(o, "xzScale"), d(o, "yScale")};
-                    n.kids = new N[] {walk(get(o, "shiftX")), walk(get(o, "shiftY")), walk(get(o, "shiftZ"))};
+                    n.kids = new N[] {kid(o, "shiftX", "shiftX"), kid(o, "shiftY", "shiftY"), kid(o, "shiftZ", "shiftZ")};
                 }
                 case "DensityFunctions$Ap2" -> {
                     n = new N(AP2);
                     n.op = ((Enum<?>) get(o, "type")).ordinal();   // ADD, MUL, MIN, MAX
                     DensityFunction a2 = (DensityFunction) get(o, "argument2");
                     n.p = new double[] {n.op == 2 ? a2.minValue() : n.op == 3 ? a2.maxValue() : 0.0};
-                    n.kids = new N[] {walk(get(o, "argument1")), walk(a2)};
+                    n.kids = new N[] {kid(o, "argument1", "argument1"), kid(o, "argument2", "argument2")};
                 }
                 case "DensityFunctions$MulOrAdd" -> {
                     n = new N(MULADD);
                     n.op = ((Enum<?>) get(o, "specificType")).ordinal();   // MUL, ADD
                     n.p = new double[] {d(o, "argument")};
-                    n.kids = new N[] {walk(get(o, "input"))};
+                    n.kids = new N[] {kid(o, "input", "input")};
                 }
                 case "DensityFunctions$Mapped" -> {
                     n = new N(MAPPED);
@@ -254,43 +340,50 @@ public final class Dfc {
                         default -> -1;
                     };
                     if (n.op < 0) return fail("mapped type " + t);
-                    n.kids = new N[] {walk(get(o, "input"))};
+                    n.kids = new N[] {kid(o, "input", "input")};
                 }
                 case "DensityFunctions$Clamp" -> {
                     n = new N(CLAMP);
                     n.p = new double[] {d(o, "minValue"), d(o, "maxValue")};
-                    n.kids = new N[] {walk(get(o, "input"))};
+                    n.kids = new N[] {kid(o, "input", "input")};
                 }
                 case "DensityFunctions$RangeChoice" -> {
                     n = new N(RANGE);
                     n.p = new double[] {d(o, "minInclusive"), d(o, "maxExclusive")};
-                    n.kids = new N[] {walk(get(o, "input")), walk(get(o, "whenInRange")), walk(get(o, "whenOutOfRange"))};
+                    n.kids = new N[] {kid(o, "input", "input"), kid(o, "whenInRange", "whenInRange"), kid(o, "whenOutOfRange", "whenOutOfRange")};
                 }
                 case "DensityFunctions$BlendDensity", "DensityFunctions$WeirdScaledSampler" -> {
                     n = new N(TRANSFORM);
-                    n.slot = slot(o, "net/minecraft/world/level/levelgen/" + s);
-                    n.kids = new N[] {walk(get(o, "input"))};
+                    n.slot = selfSlot(o, "net/minecraft/world/level/levelgen/" + s);
+                    n.kids = new N[] {kid(o, "input", "input")};
                 }
                 case "DensityFunctions$HolderHolder" -> {
-                    return walk(((Holder<?>) get(o, "function")).value());
+                    Step st = new Step();
+                    st.acc = "function";
+                    st.holder = true;
+                    return into(((Holder<?>) get(o, "function")).value(), st);
                 }
                 case "DensityFunctions$Marker" -> {
-                    return walk(get(o, "wrapped"));
+                    return kid(o, "wrapped", "wrapped");
                 }
                 case "NoiseChunk$NoiseInterpolator" -> {
                     if (!cell) return fail("an interpolator inside a corner tree");
                     n = new N(INTERP);
-                    n.slot = slot(o, NI);
+                    n.slot = selfSlot(o, NI);
                 }
                 case "NoiseChunk$CacheOnce" -> {
                     if (cell) return fail("cache_once in a cell tree");
                     N had = onceOf.get(o);
-                    if (had != null) return had;
+                    if (had != null) {
+                        cur.onceRef = had.once;   // the extractor checks it is the same object
+                        return had;
+                    }
                     n = new N(ONCE);
                     n.once = onces.size();
                     onceOf.put(o, n);
                     onces.add(n);
-                    n.kids = new N[] {walk(get(o, "function"))};
+                    cur.onceDef = n.once;
+                    n.kids = new N[] {kid(o, "function", "wrapped")};
                     if (why != null) return null;
                     n.size = 1;
                     return n;
@@ -414,20 +507,80 @@ public final class Dfc {
 
     // ---------------------------------------------------------------- entry points
 
+    /** a compiled class for one shape and its extractor: what a NoiseChunk of the same RandomState reuses */
+    private record Plan(Constructor<?> ctor, MethodHandle extract) {}
+
+    /** plans by RandomState (weak) and NoiseChunk kind; -Dlab.dfc.plans=false: walk every NoiseChunk */
+    private static final Map<Object, Map<String, Plan>> PLANS = new java.util.WeakHashMap<>();
+    private static final boolean USE_PLANS = !"false".equals(System.getProperty("lab.dfc.plans"));
+    public static final AtomicLong FAST = new AtomicLong(), SLOW = new AtomicLong();
+
+    private static Plan plan(Object state, String kind) {
+        if (!USE_PLANS || state == null) return null;
+        synchronized (PLANS) {
+            Map<String, Plan> m = PLANS.get(state);
+            return m == null ? null : m.get(kind);
+        }
+    }
+
+    private static void keepPlan(Object state, String kind, Plan p) {
+        if (!USE_PLANS || state == null || p.extract == null) return;
+        synchronized (PLANS) {
+            PLANS.computeIfAbsent(state, k -> new java.util.HashMap<>()).put(kind, p);
+        }
+    }
+
+    /**
+     * The fast path for a NoiseChunk of a RandomState already compiled: the plan's extractor (generated with the class)
+     * follows the recorded accessor paths, checks every node's exact class and the cache_once / object sharing, and
+     * returns the node objects - or null when anything differs (then the full walk).
+     */
+    private static Code fromPlan(Plan p, Object[] roots) throws Throwable {
+        if (p == null) return null;
+        Object[] slots = (Object[]) p.extract.invokeExact(roots);
+        if (slots == null) return null;
+        FAST.incrementAndGet();
+        return (Code) p.ctor.newInstance((Object) slots);
+    }
+
+    private static Plan define(MethodHandles.Lookup lookup, Walk w, List<N> roots, List<Ex> exs, boolean cell, int cellWidth, int cellHeight,
+                               int cellNoiseMinY, int cellCountY, String key) {
+        MethodHandles.Lookup h = defineClass(lookup, w, roots, exs, cell, cellWidth, cellHeight, cellNoiseMinY, cellCountY, key);
+        try {
+            Constructor<?> k = h.lookupClass().getDeclaredConstructor(Object[].class);
+            k.setAccessible(true);
+            MethodHandle x = w.extractable
+                    ? h.findStatic(h.lookupClass(), "x", java.lang.invoke.MethodType.methodType(Object[].class, Object[].class)) : null;
+            return new Plan(k, x);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     /** compiled cell fill for this NoiseChunk's cell cache function, or null (vanilla) */
-    public static Code cell(MethodHandles.Lookup lookup, Object cellFiller, int cellWidth, int cellHeight) {
+    public static Code cell(MethodHandles.Lookup lookup, Object state, Object cellFiller, int cellWidth, int cellHeight, Object beardifier) {
         if (!CELLS) return null;
         try {
+            String kind = "C" + cellWidth + "x" + cellHeight + (beardifier == null ? "" : beardifier.getClass().getName());
+            Object[] rootObjs = {cellFiller};
+            Code fast = fromPlan(plan(state, kind), rootObjs);
+            if (fast != null) return fast;
+            SLOW.incrementAndGet();
             Walk w = new Walk(true);
+            Ex e = new Ex(cellFiller.getClass());
+            w.cur = e;
             N r = w.walk(cellFiller);
             if (r == null) {
                 refused("cell: " + w.why);
                 return null;
             }
-            String key = key(w, List.of(r), "C" + cellWidth + "x" + cellHeight);
-            Constructor<?> k = CLASSES.computeIfAbsent(key, x -> define(lookup, w, List.of(r), true, cellWidth, cellHeight, 0, 0, key));
+            StringBuilder sig = new StringBuilder();
+            e.sig(sig);
+            String key = key(w, List.of(r), "C" + cellWidth + "x" + cellHeight) + sig;
+            Plan p = CLASSES.computeIfAbsent(key, x -> define(lookup, w, List.of(r), List.of(e), true, cellWidth, cellHeight, 0, 0, key));
+            keepPlan(state, kind, p);
             BUILT.incrementAndGet();
-            return (Code) k.newInstance((Object) w.slots.toArray());
+            return (Code) p.ctor.newInstance((Object) w.slots.toArray());
         } catch (Throwable e) {
             refused("cell: " + e);
             return null;
@@ -435,11 +588,19 @@ public final class Dfc {
     }
 
     /** compiled corner columns for these interpolators (in order), or null (vanilla) */
-    public static Code corners(MethodHandles.Lookup lookup, List<?> interpolators, int cellHeight, int cellNoiseMinY, int cellCountY) {
+    public static Code corners(MethodHandles.Lookup lookup, Object state, List<?> interpolators, int cellHeight, int cellNoiseMinY, int cellCountY,
+                               Object beardifier) {
         if (!CORNERS) return null;
         try {
+            String kind = "K" + cellHeight + "_" + cellNoiseMinY + "_" + cellCountY + "_" + interpolators.size()
+                    + (beardifier == null ? "" : beardifier.getClass().getName());
+            Object[] rootObjs = interpolators.toArray();
+            Code fast = fromPlan(plan(state, kind), rootObjs);
+            if (fast != null) return fast;
+            SLOW.incrementAndGet();
             Walk w = new Walk(false);
             List<N> roots = new ArrayList<>();
+            List<Ex> exs = new ArrayList<>();
             int[] islots = new int[interpolators.size()];
             for (int i = 0; i < interpolators.size(); i++) {
                 Object it = interpolators.get(i);
@@ -447,8 +608,11 @@ public final class Dfc {
                     refused("corners: interpolator kind " + it.getClass().getName());
                     return null;
                 }
-                islots[i] = w.slot(it, NI);
-                N r = w.walk(get(it, "noiseFiller"));
+                Ex e = new Ex(it.getClass());
+                exs.add(e);
+                w.cur = e;
+                islots[i] = w.selfSlot(it, NI);
+                N r = w.kid(it, "noiseFiller", "wrapped");
                 if (r == null) {
                     refused("corners: " + w.why);
                     return null;
@@ -457,13 +621,16 @@ public final class Dfc {
             }
             StringBuilder head = new StringBuilder("K" + cellHeight + "_" + cellNoiseMinY + "_" + cellCountY + ":");
             for (int s : islots) head.append(s).append(',');
-            String key = key(w, roots, head.toString());
-            Constructor<?> k = CLASSES.computeIfAbsent(key, x -> {
+            StringBuilder sig = new StringBuilder();
+            for (Ex e : exs) e.sig(sig);
+            String key = key(w, roots, head.toString()) + sig;
+            Plan p = CLASSES.computeIfAbsent(key, x -> {
                 w.islots = islots;
-                return define(lookup, w, roots, false, 0, cellHeight, cellNoiseMinY, cellCountY, key);
+                return define(lookup, w, roots, exs, false, 0, cellHeight, cellNoiseMinY, cellCountY, key);
             });
+            keepPlan(state, kind, p);
             BUILT.incrementAndGet();
-            return (Code) k.newInstance((Object) w.slots.toArray());
+            return (Code) p.ctor.newInstance((Object) w.slots.toArray());
         } catch (Throwable e) {
             refused("corners: " + e);
             return null;
@@ -472,21 +639,19 @@ public final class Dfc {
 
     // ---------------------------------------------------------------- code generation
 
-    private static Constructor<?> define(MethodHandles.Lookup lookup, Walk w, List<N> roots, boolean cell, int cellWidth, int cellHeight,
-                                         int cellNoiseMinY, int cellCountY, String key) {
+    private static MethodHandles.Lookup defineClass(MethodHandles.Lookup lookup, Walk w, List<N> roots, List<Ex> exs, boolean cell, int cellWidth,
+                                              int cellHeight, int cellNoiseMinY, int cellCountY, String key) {
         try {
             String name = "net/minecraft/world/level/levelgen/Dfc$" + (cell ? "Cell" : "Corners") + IDS.incrementAndGet();
             Gen g = new Gen(name, w);
-            byte[] bytes = g.build(roots, cell, cellWidth, cellHeight, cellNoiseMinY, cellCountY);
+            byte[] bytes = g.build(roots, cell, cellWidth, cellHeight, cellNoiseMinY, cellCountY, exs);
             MethodHandles.Lookup h = lookup.defineHiddenClass(bytes, true, MethodHandles.Lookup.ClassOption.NESTMATE);
             if (DUMP) System.out.println("[sleep/opt] dfc: new class " + name + " (" + bytes.length + " bytes, " + g.methods + " methods, "
                     + w.slots.size() + " objects): " + key);
             else System.out.println("[sleep/opt] dfc: new class " + name + " (" + bytes.length + " bytes, " + g.methods + " methods, "
-                    + w.slots.size() + " objects)");
-            Constructor<?> k = h.lookupClass().getDeclaredConstructor(Object[].class);
-            k.setAccessible(true);
-            return k;
-        } catch (ReflectiveOperationException e) {
+                    + w.slots.size() + " objects" + (w.extractable ? ", extractor" : "") + ")");
+            return h;
+        } catch (IllegalAccessException e) {
             throw new IllegalStateException(e);
         }
     }
@@ -508,7 +673,7 @@ public final class Dfc {
             this.w = w;
         }
 
-        byte[] build(List<N> roots, boolean cell, int cellWidth, int cellHeight, int cellNoiseMinY, int cellCountY) {
+        byte[] build(List<N> roots, boolean cell, int cellWidth, int cellHeight, int cellNoiseMinY, int cellCountY, List<Ex> exs) {
             cw.visit(V21, ACC_PUBLIC | ACC_FINAL | ACC_SUPER, name, null, CODE, null);
             for (int i = 0; i < w.slots.size(); i++) cw.visitField(ACC_PRIVATE | ACC_FINAL, "f" + i, "L" + w.slotTypes.get(i) + ";", null, null).visitEnd();
             for (N o : w.onces) {
@@ -542,6 +707,7 @@ public final class Dfc {
                 N n = pending.remove(pending.size() - 1);
                 evalMethod(n);
             }
+            if (w.extractable) extractor(exs);
             cw.visitEnd();
             return cw.toByteArray();
         }
@@ -549,6 +715,93 @@ public final class Dfc {
         void slotRef(MethodVisitor mv, int s) {
             mv.visitVarInsn(ALOAD, 0);
             mv.visitFieldInsn(GETFIELD, name, "f" + s, "L" + w.slotTypes.get(s) + ";");
+        }
+
+        int xNext;
+        Label xFail;
+        MethodVisitor xm;
+
+        /** static Object[] x(Object[] roots): the node objects along the recorded paths, or null on any difference */
+        void extractor(List<Ex> exs) {
+            xm = cw.visitMethod(ACC_PUBLIC | ACC_STATIC, "x", "([Ljava/lang/Object;)[Ljava/lang/Object;", null, null);
+            xm.visitCode();
+            xFail = new Label();
+            push(xm, w.slots.size());
+            xm.visitTypeInsn(ANEWARRAY, "java/lang/Object");
+            xm.visitVarInsn(ASTORE, 1);
+            xNext = 2 + w.onces.size();
+            xm.visitVarInsn(ALOAD, 0);
+            xm.visitInsn(ARRAYLENGTH);
+            push(xm, exs.size());
+            xm.visitJumpInsn(IF_ICMPNE, xFail);
+            for (int i = 0; i < exs.size(); i++) {
+                int l = xNext++;
+                xm.visitVarInsn(ALOAD, 0);
+                push(xm, i);
+                xm.visitInsn(AALOAD);
+                xm.visitVarInsn(ASTORE, l);
+                ex(exs.get(i), l);
+            }
+            xm.visitVarInsn(ALOAD, 1);
+            xm.visitInsn(ARETURN);
+            xm.visitLabel(xFail);
+            xm.visitInsn(ACONST_NULL);
+            xm.visitInsn(ARETURN);
+            xm.visitMaxs(0, 0);
+            xm.visitEnd();
+        }
+
+        void ex(Ex e, int obj) {
+            MethodVisitor mv = xm;
+            String owner = e.cls.getName().replace('.', '/');
+            mv.visitVarInsn(ALOAD, obj);
+            mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Object", "getClass", "()Ljava/lang/Class;", false);
+            mv.visitLdcInsn(org.objectweb.asm.Type.getObjectType(owner));
+            mv.visitJumpInsn(IF_ACMPNE, xFail);
+            if (e.onceRef >= 0) {
+                mv.visitVarInsn(ALOAD, obj);
+                mv.visitVarInsn(ALOAD, 2 + e.onceRef);
+                mv.visitJumpInsn(IF_ACMPNE, xFail);
+            }
+            if (e.onceDef >= 0) {
+                mv.visitVarInsn(ALOAD, obj);
+                mv.visitVarInsn(ASTORE, 2 + e.onceDef);
+            }
+            for (Step st : e.steps) {
+                int c = obj;
+                if (st.acc != null) {
+                    Method m;
+                    try {
+                        m = e.cls.getMethod(st.acc);
+                    } catch (NoSuchMethodException x) {
+                        throw new IllegalStateException(x);
+                    }
+                    c = xNext++;
+                    mv.visitVarInsn(ALOAD, obj);
+                    mv.visitTypeInsn(CHECKCAST, owner);
+                    mv.visitMethodInsn(INVOKEVIRTUAL, owner, st.acc, org.objectweb.asm.Type.getMethodDescriptor(m), false);
+                    if (st.holder) mv.visitMethodInsn(INVOKEINTERFACE, "net/minecraft/core/Holder", "value", "()Ljava/lang/Object;", true);
+                    mv.visitVarInsn(ASTORE, c);
+                    Label nonNull = new Label();
+                    mv.visitVarInsn(ALOAD, c);
+                    mv.visitJumpInsn(IFNONNULL, nonNull);
+                    mv.visitJumpInsn(GOTO, xFail);
+                    mv.visitLabel(nonNull);
+                }
+                if (st.slot >= 0) {
+                    mv.visitVarInsn(ALOAD, 1);
+                    push(mv, st.slot);
+                    if (st.slotNew) {
+                        mv.visitVarInsn(ALOAD, c);
+                        mv.visitInsn(AASTORE);
+                    } else {
+                        mv.visitInsn(AALOAD);
+                        mv.visitVarInsn(ALOAD, c);
+                        mv.visitJumpInsn(IF_ACMPNE, xFail);
+                    }
+                }
+                if (st.child != null) ex(st.child, c);
+            }
         }
 
         int outline(N n) {

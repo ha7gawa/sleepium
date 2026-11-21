@@ -31,7 +31,21 @@ public abstract class DfcNoiseChunkMixin implements Dfc.Host {
     @Shadow @Final int cellWidth;
     @Shadow @Final int cellHeight;
 
+    @Shadow @Final private net.minecraft.world.level.levelgen.DensityFunctions.BeardifierOrMarker beardifier;
+
     @Unique private boolean sleep$dfcBuilt;
+    /** the RandomState: compiled plans are reused by NoiseChunks of the same one */
+    @Unique private Object sleep$dfcState;
+
+    @org.spongepowered.asm.mixin.injection.Inject(method = "<init>", at = @At("RETURN"))
+    private void sleep$dfcKeep(int cellCountXZ, net.minecraft.world.level.levelgen.RandomState random, int firstNoiseX, int firstNoiseZ,
+                               net.minecraft.world.level.levelgen.NoiseSettings noiseSettings,
+                               net.minecraft.world.level.levelgen.DensityFunctions.BeardifierOrMarker beardifier,
+                               net.minecraft.world.level.levelgen.NoiseGeneratorSettings noiseGeneratorSettings,
+                               net.minecraft.world.level.levelgen.Aquifer.FluidPicker fluidPicker, Blender blendifier,
+                               org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        sleep$dfcState = random;
+    }
     @Unique private Dfc.Code sleep$dfcCell;
     @Unique private Dfc.Code sleep$dfcCorner;
     @Unique private Object sleep$dfcCellRoot;
@@ -45,13 +59,15 @@ public abstract class DfcNoiseChunkMixin implements Dfc.Host {
     private void sleep$dfcBuild() {
         sleep$dfcBuilt = true;
         if (blender != Blender.empty() || cellCountXZ < 2) return;
+        long t0 = System.nanoTime();
         MethodHandles.Lookup l = MethodHandles.lookup();
-        sleep$dfcCorner = Dfc.corners(l, interpolators, cellHeight, cellNoiseMinY, cellCountY);
+        sleep$dfcCorner = Dfc.corners(l, sleep$dfcState, interpolators, cellHeight, cellNoiseMinY, cellCountY, beardifier);
         if (!cellCaches.isEmpty()) {
             Object f = Reflect.get(cellCaches.get(0), "noiseFiller");
             sleep$dfcCellRoot = f;
-            sleep$dfcCell = Dfc.cell(l, f, cellWidth, cellHeight);
+            sleep$dfcCell = Dfc.cell(l, sleep$dfcState, f, cellWidth, cellHeight, beardifier);
         }
+        Dfc.buildTime(System.nanoTime() - t0);
     }
 
     @Override
