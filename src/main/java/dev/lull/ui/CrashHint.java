@@ -79,6 +79,13 @@ public final class CrashHint extends Screen {
         Set<String> out = new LinkedHashSet<>();
         for (String c : classes) {
             String base = c.replaceAll("Mixin$", "");
+            // the sleep probes (dev.lull.mixin.SleepProbe*) are applied while either sleep is on (SleepMixinPlugin):
+            // naming only SleepMixin left them in place with EntitySleep on (issue #12: "disable this one" kept crashing)
+            if (base.startsWith("SleepProbe")) {
+                out.add("lab.opt.SleepMixin");
+                out.add("lab.opt.EntitySleep");
+                continue;
+            }
             for (SleepOptions.Option o : SleepOptions.all()) {
                 String last = o.key().substring(o.key().lastIndexOf('.') + 1), lastBase = last.replaceAll("Mixin$", "");
                 if (lastBase.length() < 4) continue;
