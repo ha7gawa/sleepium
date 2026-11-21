@@ -31,6 +31,10 @@ public abstract class LightProbeSectionMixin {
     @Inject(method = "setStoredLevel", at = @At("HEAD"))
     private void sleep$write(long pos, int level, CallbackInfo ci) {
         if (dev.lull.LightHistory.ON && (Object) this instanceof BlockLightSectionStorage) dev.lull.LightHistory.rec(dev.lull.LightHistory.WRITE, pos, level, getStoredLevel(pos), 0);
+        if (dev.lull.LightTrace.ON && (Object) this instanceof BlockLightSectionStorage && !dev.lull.LightHistory.paused) {
+            net.minecraft.core.BlockPos p = net.minecraft.core.BlockPos.of(pos);
+            if (dev.lull.LightTrace.in(p)) dev.lull.LightTrace.log("light " + p.toShortString() + " " + getStoredLevel(pos) + " -> " + level);
+        }
     }
 
     @Inject(method = "removeSection", at = @At("HEAD"))

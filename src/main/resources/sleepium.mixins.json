@@ -64,6 +64,8 @@
     "LightProbeSectionMixin",
     "LightProbeCheckNodeMixin",
     "LightProbeChunkMixin",
+    "LightProbeProtoSetMixin",
+    "LightProbeLevelSetMixin",
     "LightProbeLevelEngineAccessor",
     "LightProbeEngineAccessor",
     "LightProbeStorageInvoker",

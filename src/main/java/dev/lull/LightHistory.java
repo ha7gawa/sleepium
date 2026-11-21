@@ -84,6 +84,36 @@ public final class LightHistory {
      */
     static String explain(ServerLevel level, LevelLightEngine real, LevelLightEngine mine, BlockPos start) {
         StringBuilder b = new StringBuilder("\n  history (" + count + " events recorded, " + nullChunks + " unavailable-chunk reads) from " + start.toShortString() + ":\n");
+        // the differing region (level below the relight) around the start; its entry points: a neighbour whose level is
+        // more than one above a transparent region cell next to it (light should have crossed there and did not - a
+        // local break of the level's own fixed point)
+        var bl = real.getLayerListener(LightLayer.BLOCK);
+        var ml = mine.getLayerListener(LightLayer.BLOCK);
+        java.util.ArrayDeque<BlockPos> q = new java.util.ArrayDeque<>();
+        java.util.HashSet<BlockPos> seen = new java.util.HashSet<>();
+        q.add(start);
+        seen.add(start);
+        int entries = 0;
+        while (!q.isEmpty() && seen.size() < 20000 && entries < 4) {
+            BlockPos c = q.poll();
+            int rc = bl.getLightValue(c);
+            for (Direction d : Direction.values()) {
+                BlockPos n = c.relative(d);
+                int rn = bl.getLightValue(n), mn = ml.getLightValue(n);
+                if (rn < mn) {
+                    if (seen.add(n)) q.add(n);
+                } else if (rn - 1 > rc && level.getBlockState(c).getLightBlock(level, c) <= 1) {
+                    entries++;
+                    b.append(String.format(Locale.ROOT, "  light did not cross %s (level %d, state %s) -> %s (level %d, relight %d, state %s)%n",
+                            n.toShortString(), rn, level.getBlockState(n), c.toShortString(), rc, ml.getLightValue(c), level.getBlockState(c)));
+                    b.append("  history of ").append(n.toShortString()).append(":\n").append(history(n, 30));
+                    b.append("  history of ").append(c.toShortString()).append(":\n").append(history(c, 30));
+                    break;
+                }
+            }
+        }
+        b.append("  region scanned: ").append(seen.size()).append(" cells, ").append(entries).append(" entry points\n");
+        if (entries > 0) return b.toString();
         BlockPos cur = start;
         for (int steps = 0; steps < 16; steps++) {
             int rNew = mine.getLayerListener(LightLayer.BLOCK).getLightValue(cur);
@@ -96,7 +126,8 @@ public final class LightHistory {
                 }
             }
             if (next == null) {
-                b.append("  no brighter neighbour at ").append(cur.toShortString()).append(" (a source?)\n");
+                b.append("  no brighter neighbour at ").append(cur.toShortString()).append(" (a source?), state ").append(level.getBlockState(cur))
+                        .append(", level ").append(real.getLayerListener(LightLayer.BLOCK).getLightValue(cur)).append(", history:\n").append(history(cur, 30));
                 break;
             }
             int realNext = real.getLayerListener(LightLayer.BLOCK).getLightValue(next), newNext = mine.getLayerListener(LightLayer.BLOCK).getLightValue(next);

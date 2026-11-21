@@ -41,18 +41,49 @@ public final class LightCheck {
         String name();
     }
 
-    /** true when the level's light actor has had nothing to do for 10 server ticks (or 30 s passed) */
+    private static java.util.concurrent.CompletableFuture<?> marker;
+    private static boolean froze, forceFreeze;
+
+    static boolean wantsRecheck(String result) {
+        if (!Boolean.getBoolean("lab.light.fixcheck.recheck") || result.contains(": 0 chunks differ")) return false;
+        forceFreeze = true;
+        return true;
+    }
+
+    /**
+     * True when the level's light has caught up with a still world: the first call freezes the game's ticks
+     * (-Dlab.light.fixcheck.freeze, default on; 11-22: without it a lava flow or a falling block of the tick right
+     * before the relight was in the blocks the relight read but not yet in the light - fixcheck "differences" that were
+     * the check's own race), then waits for a marker task submitted after the freeze (every light task submitted
+     * before it has run: LightDirect's queues and the sorter included) and 10 idle ticks (30 s at most).
+     */
     static boolean ready(ServerLevel level) {
-        if (waitStart == 0) waitStart = System.nanoTime();
         var eng = level.getChunkSource().getLightEngine();
-        boolean idle = !eng.hasLightWork() && (!(eng instanceof LightProbe.Engine e) || e.sleep$pendingTasks() == 0);
+        if (waitStart == 0) {
+            waitStart = System.nanoTime();
+            if ((forceFreeze || !"false".equals(System.getProperty("lab.light.fixcheck.freeze"))) && !level.getServer().tickRateManager().isFrozen()) {
+                level.getServer().tickRateManager().setFrozen(true);
+                froze = true;
+            }
+            marker = eng instanceof net.minecraft.server.level.ThreadedLevelLightEngine t ? t.waitForPendingTasks(0, 0) : null;
+        }
+        boolean idle = (marker == null || marker.isDone()) && !eng.hasLightWork() && (!(eng instanceof LightProbe.Engine e) || e.sleep$pendingTasks() == 0);
         idleTicks = idle ? idleTicks + 1 : 0;
         if (idleTicks >= 10 || System.nanoTime() - waitStart > 30_000_000_000L) {
             idleTicks = 0;
             waitStart = 0;
+            marker = null;
             return true;
         }
         return false;
+    }
+
+    /** after the check: the ticks run again if ready() froze them */
+    static void thaw(ServerLevel level) {
+        if (froze) {
+            level.getServer().tickRateManager().setFrozen(false);
+            froze = false;
+        }
     }
 
     static String run(ServerLevel level, int x0, int z0, int side, java.nio.file.Path hashFile) {
@@ -61,6 +92,8 @@ public final class LightCheck {
             return run0(level, x0, z0, side, hashFile);
         } finally {
             LightHistory.paused = false;
+            thaw(level);
+            forceFreeze = false;
         }
     }
 

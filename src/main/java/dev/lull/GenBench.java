@@ -49,6 +49,7 @@ final class GenBench {
     private static double doneSecs = -1;
     private static int doneTicks;
     private static String probeLine = "";
+    private static String firstLight;
 
     static void onChunkLoad(net.neoforged.neoforge.event.level.ChunkEvent.Load e) {
         if (active && e.getLevel() == level) loadsThisTick++;
@@ -228,8 +229,15 @@ final class GenBench {
         String lightLine = probeLine;
         if (LightCheck.ON) {
             if (!LightCheck.ready(level)) return;   // until the light actor is idle (the fixed point reached)
-            lightLine += System.lineSeparator() + LightCheck.run(level, x0, z0, side,
-                    server.getServerDirectory().resolve(dev.lull.SleepOut.ROOT).resolve("genlight-" + label + ".txt"));
+            String r = LightCheck.run(level, x0, z0, side, server.getServerDirectory().resolve(dev.lull.SleepOut.ROOT).resolve("genlight-" + label + ".txt"));
+            // -Dlab.light.fixcheck.recheck (with freeze=false): a difference found in a running world is checked again
+            // with the ticks frozen and the light caught up - gone then = the check's race, still there = the engine's
+            if (firstLight == null && LightCheck.wantsRecheck(r)) {
+                firstLight = r;
+                return;
+            }
+            lightLine += System.lineSeparator() + (firstLight != null ? firstLight + System.lineSeparator() + "light recheck after freezing the ticks: " : "") + r;
+            firstLight = null;
         }
         secs = doneSecs;
         active = false;
