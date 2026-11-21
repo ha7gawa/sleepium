@@ -201,6 +201,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.scout");
         if (simple.startsWith("SaveDirect"))   // palettes without the codec machinery (optsupport/SavePalettes)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SaveDirect");
+        if (simple.startsWith("SaveTicks"))   // tick lists of deferred saves made on the pool (optsupport/SaveWrite, with SaveWriteMixin)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SaveTicks");
         if (simple.startsWith("SaveStreams"))   // chunk records encoded through per-thread streams (optsupport/SaveStreams)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SaveStreams");
         if (simple.equals("AsyncChunkSaveEncodeMixin") || simple.equals("AsyncChunkSaveStorageMixin"))

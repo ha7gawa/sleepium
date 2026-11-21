@@ -190,6 +190,16 @@ public final class AsyncChunkSave {
         }
     }
 
+    /** this thread writes a chunk whose save is deferred: a job of another kind (SaveWrite's tick lists) may join it */
+    public static boolean collecting() {
+        return COLLECTING.get() != null;
+    }
+
+    /** the job filled on the pool before the tag goes to the IOWorker, in the order jobs were added */
+    public static void defer(Tag placeholder, Object job) {
+        COLLECTING.get().add(new Object[] {placeholder, job, null, null});
+    }
+
     /** ChunkSerializer.write's palette encodes (every Codec.encodeStart there goes through here). */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static DataResult encode(Codec codec, DynamicOps ops, Object value) {
@@ -247,6 +257,10 @@ public final class AsyncChunkSave {
 
     private static void fill0(List<Object[]> jobs) {
         for (Object[] j : jobs) {
+            if (j[1] instanceof SaveWrite.TickJob t) {   // a tick list (SaveWrite, -Dlab.opt.SaveTicks)
+                t.fill((net.minecraft.nbt.ListTag) j[0]);
+                continue;
+            }
             CompoundTag placeholder = (CompoundTag) j[0];
             if (VERIFY && j[1] instanceof SavePalettes.Snapshot snap) SavePalettes.selfTest((Codec<?>) j[2], snap);
             @SuppressWarnings({"unchecked", "rawtypes"})

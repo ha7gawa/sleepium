@@ -7,16 +7,17 @@ import java.util.function.Function;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.world.ticks.SerializableTickContainer;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.chunk.PalettedContainerRO;
 import net.minecraft.world.level.chunk.storage.ChunkSerializer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
-/** SaveWrite (see dev.lull.optsupport.SaveWrite): ChunkSerializer.write's biome codec, tick ids and post-processing lists. */
+/** SaveWrite (see dev.lull.optsupport.SaveWrite): ChunkSerializer.write's biome codec, tick ids and post-processing lists; with -Dlab.opt.SaveTicks the tick lists made on the pool. */
 @Mixin(ChunkSerializer.class)
 public abstract class SaveWriteMixin {
     @Shadow
@@ -43,15 +44,17 @@ public abstract class SaveWriteMixin {
         return SaveWrite.vanillaNow() ? ChunkSerializer.packOffsets(lists) : SaveWrite.packOffsets(lists);
     }
 
-    @ModifyArg(method = "saveTicks", at = @At(value = "INVOKE", ordinal = 0,
-            target = "Lnet/minecraft/world/ticks/SerializableTickContainer;save(JLjava/util/function/Function;)Lnet/minecraft/nbt/Tag;"), index = 1)
-    private static Function<?, String> sleep$blockIds(Function<?, String> original) {
-        return SaveWrite.vanillaNow() ? original : SaveWrite.BLOCK_ID;
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Redirect(method = "saveTicks", at = @At(value = "INVOKE", ordinal = 0,
+            target = "Lnet/minecraft/world/ticks/SerializableTickContainer;save(JLjava/util/function/Function;)Lnet/minecraft/nbt/Tag;"))
+    private static Tag sleep$blockTicks(SerializableTickContainer container, long gameTime, Function idGetter) {
+        return SaveWrite.ticks(container, gameTime, SaveWrite.vanillaNow() ? idGetter : SaveWrite.BLOCK_ID);
     }
 
-    @ModifyArg(method = "saveTicks", at = @At(value = "INVOKE", ordinal = 1,
-            target = "Lnet/minecraft/world/ticks/SerializableTickContainer;save(JLjava/util/function/Function;)Lnet/minecraft/nbt/Tag;"), index = 1)
-    private static Function<?, String> sleep$fluidIds(Function<?, String> original) {
-        return SaveWrite.vanillaNow() ? original : SaveWrite.FLUID_ID;
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Redirect(method = "saveTicks", at = @At(value = "INVOKE", ordinal = 1,
+            target = "Lnet/minecraft/world/ticks/SerializableTickContainer;save(JLjava/util/function/Function;)Lnet/minecraft/nbt/Tag;"))
+    private static Tag sleep$fluidTicks(SerializableTickContainer container, long gameTime, Function idGetter) {
+        return SaveWrite.ticks(container, gameTime, SaveWrite.vanillaNow() ? idGetter : SaveWrite.FLUID_ID);
     }
 }

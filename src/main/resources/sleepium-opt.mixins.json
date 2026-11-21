@@ -135,6 +135,8 @@
     "SaveDirectAccessor",
     "SaveDirectStrategyAccessor",
     "SaveWriteMixin",
+    "SaveTicksProtoAccessor",
+    "SaveTicksLevelAccessor",
     "SaveStreamsCompoundAccessor",
     "SaveStreamsListAccessor",
     "UnloadRecheckMixin",
