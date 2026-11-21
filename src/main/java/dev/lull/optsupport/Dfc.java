@@ -59,6 +59,8 @@ public final class Dfc {
     public static final boolean CELLS = !"false".equals(System.getProperty("lab.dfc.cells"));
     public static final boolean CORNERS = !"false".equals(System.getProperty("lab.dfc.corners"));
     private static final int SPLIT = Integer.getInteger("lab.dfc.split", 40);
+    /** -Dlab.dfc.beard=false: the beardifier called at every block of a cell even when it is zero over the cell */
+    public static final boolean BEARD_CELLS = !"false".equals(System.getProperty("lab.dfc.beard"));
 
     private static final AtomicLong VALUES = new AtomicLong(), BAD = new AtomicLong();
     public static final AtomicLong BUILT = new AtomicLong(), REFUSED = new AtomicLong();
@@ -98,6 +100,15 @@ public final class Dfc {
             System.out.println("[sleep/opt] dfc verify: " + n + " values, " + b + " differ");
     }
 
+    private static final AtomicLong STATES = new AtomicLong(), BAD_STATES = new AtomicLong();
+
+    /** DfcFillMixin verify: the fast filler's state against vanilla's MaterialRuleList for the same block */
+    public static void checkState(Object got, Object want) {
+        long b = got == want ? BAD_STATES.get() : BAD_STATES.incrementAndGet();
+        long n = STATES.incrementAndGet();
+        if ((n & 0xFFFFF) == 0 || (got != want && b < 20)) System.out.println("[sleep/opt] dfc fill verify: " + n + " blocks, " + b + " differ");
+    }
+
     public static String report() {
         return "dfc: built " + BUILT.get() + ", refused " + REFUSED.get() + ", classes " + CLASSES.size()
                 + (VERIFY ? ", verified " + VALUES.get() + " values, " + BAD.get() + " differ" : "");
@@ -111,7 +122,7 @@ public final class Dfc {
     // ---------------------------------------------------------------- IR
 
     private static final int CONST = 0, YGRAD = 1, NOISE = 2, SHIFTED = 3, AP2 = 4, MULADD = 5, MAPPED = 6, CLAMP = 7, RANGE = 8,
-            TRANSFORM = 9, INTERP = 10, ONCE = 11, LEAF = 12;
+            TRANSFORM = 9, INTERP = 10, ONCE = 11, LEAF = 12, BEARD = 13;
 
     private static final class N {
         final int kind;
@@ -153,6 +164,8 @@ public final class Dfc {
         final IdentityHashMap<Object, N> onceOf = new IdentityHashMap<>();
         final List<N> onces = new ArrayList<>();
         int[] islots;
+        final List<Integer> beards = new ArrayList<>();
+        final Walk w = this;
         String why;
 
         Walk(boolean cell) {
@@ -290,8 +303,22 @@ public final class Dfc {
                     if (cell && hasOnce(get(o, "function"), new IdentityHashMap<>())) return fail("cache_once under a cache_2d in a cell tree");
                     return leaf(o);
                 }
+                case "Beardifier" -> {
+                    N l = leaf(o);
+                    if (cell && BEARD_CELLS && o instanceof CellProof.ZeroOver) {
+                        // per cell: when WorldgenSkip's beardifier proves every piece and junction out of reach of the
+                        // cell's box, its compute is exactly +0.0 at every block of the cell (a sum of exact zeros
+                        // starting at +0.0): the constant instead of the call
+                        N b = new N(BEARD);
+                        b.slot = l.slot;
+                        b.size = 1;
+                        if (!w.beards.contains(l.slot)) w.beards.add(l.slot);
+                        return b;
+                    }
+                    return l;
+                }
                 case "NoiseChunk$FlatCache", "NoiseChunk$BlendAlpha", "NoiseChunk$BlendOffset", "DensityFunctions$Spline", "DensityFunctions$Shift",
-                     "DensityFunctions$ShiftA", "DensityFunctions$ShiftB", "synth.BlendedNoise", "Beardifier",
+                     "DensityFunctions$ShiftA", "DensityFunctions$ShiftB", "synth.BlendedNoise",
                      "DensityFunctions$EndIslandDensityFunction", "dev.lull.optsupport.ColumnMemo$Memo" -> {
                     // vanilla's fillArray for these is fillAllDirectly: compute per point
                     return leaf(o);
@@ -489,6 +516,7 @@ public final class Dfc {
                 cw.visitField(ACC_PRIVATE, "s" + o.once, "I", null, null).visitEnd();
             }
             cw.visitField(ACC_PRIVATE, "stamp", "I", null, null).visitEnd();
+            for (int b : w.beards) cw.visitField(ACC_PRIVATE, "zb" + b, "Z", null, null).visitEnd();
             // constructor
             MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "<init>", "([Ljava/lang/Object;)V", null, null);
             mv.visitCode();
@@ -516,6 +544,11 @@ public final class Dfc {
             }
             cw.visitEnd();
             return cw.toByteArray();
+        }
+
+        void slotRef(MethodVisitor mv, int s) {
+            mv.visitVarInsn(ALOAD, 0);
+            mv.visitFieldInsn(GETFIELD, name, "f" + s, "L" + w.slotTypes.get(s) + ";");
         }
 
         int outline(N n) {
@@ -722,6 +755,19 @@ public final class Dfc {
                         }
                         mv.visitMethodInsn(INVOKESTATIC, MTH, "lerp3", "(DDDDDDDDDDD)D", false);
                     }
+                    case BEARD -> {
+                        Label call = new Label(), end = new Label();
+                        mv.visitVarInsn(ALOAD, 0);
+                        mv.visitFieldInsn(GETFIELD, name, "zb" + n.slot, "Z");
+                        mv.visitJumpInsn(IFEQ, call);
+                        mv.visitInsn(DCONST_0);
+                        mv.visitJumpInsn(GOTO, end);
+                        mv.visitLabel(call);
+                        slot(n.slot);
+                        mv.visitVarInsn(ALOAD, 1);
+                        mv.visitMethodInsn(INVOKEVIRTUAL, w.slotTypes.get(n.slot), "compute", "(L" + FC + ";)D", false);
+                        mv.visitLabel(end);
+                    }
                     case LEAF -> {
                         slot(n.slot);
                         mv.visitVarInsn(ALOAD, 1);
@@ -851,6 +897,25 @@ public final class Dfc {
             mv.visitVarInsn(ALOAD, 1);
             mv.visitFieldInsn(GETFIELD, NC, "cellStartBlockZ", "I");
             mv.visitVarInsn(ISTORE, 5);
+            for (int b : w.beards) {   // zb<slot> = beardifier.sleep$zeroOver(the cell's box)
+                mv.visitVarInsn(ALOAD, 0);
+                slotRef(mv, b);
+                mv.visitTypeInsn(CHECKCAST, "dev/lull/optsupport/CellProof$ZeroOver");
+                mv.visitVarInsn(ILOAD, 3);
+                mv.visitVarInsn(ILOAD, 4);
+                mv.visitVarInsn(ILOAD, 5);
+                mv.visitVarInsn(ILOAD, 3);
+                push(mv, cw_ - 1);
+                mv.visitInsn(IADD);
+                mv.visitVarInsn(ILOAD, 4);
+                push(mv, ch - 1);
+                mv.visitInsn(IADD);
+                mv.visitVarInsn(ILOAD, 5);
+                push(mv, cw_ - 1);
+                mv.visitInsn(IADD);
+                mv.visitMethodInsn(INVOKEINTERFACE, "dev/lull/optsupport/CellProof$ZeroOver", "sleep$zeroOver", "(IIIIII)Z", true);
+                mv.visitFieldInsn(PUTFIELD, name, "zb" + b, "Z");
+            }
             mv.visitInsn(ICONST_0);
             mv.visitVarInsn(ISTORE, 9);
             push(mv, ch - 1);
