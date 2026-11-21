@@ -91,6 +91,8 @@
     "ClimateSearchMixin",
     "WorldgenMapMemoMixin",
     "WorldgenMapMemoChunkMixin",
+    "NoiseSlicePoolMixin",
+    "NoiseSlicePoolChunkMixin",
     "NoiseCellWrapMixin",
     "NoiseWrapFnMixin",
     "SurfaceBiomeCellsMixin",
