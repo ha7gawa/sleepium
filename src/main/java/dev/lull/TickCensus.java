@@ -65,6 +65,14 @@ public final class TickCensus {
         watchParts(e);
         for (Entity p : e.getIndirectPassengers()) watchParts(p);
         cur = e;
+        tickDraws = 0;
+        long gt = e.level().getGameTime();
+        if (gt != lastGameTime) {   // a new server tick: the previous one's prediction tally
+            if (drawUnitsThisTick > 0) { serverTicks++; if (!missThisTick) serverTicksAllHit++; }
+            lastGameTime = gt;
+            missThisTick = false;
+            drawUnitsThisTick = 0;
+        }
         java.util.Arrays.fill(f, false);
         t0 = System.nanoTime();
     }
@@ -73,6 +81,17 @@ public final class TickCensus {
         if (cur != e) return;
         long ns = System.nanoTime() - t0;
         cur = null;
+        // the shared random's draw count: the same as this unit's last tick? (prediction by last tick)
+        Integer last = LAST_DRAWS.put(e.getId(), tickDraws);
+        if (tickDraws > 0 || (last != null && last > 0)) {
+            drawUnits++;
+            drawUnitsThisTick++;
+            boolean hit = last != null && last == tickDraws;
+            if (hit) drawHits++;
+            if (missThisTick) drawAfterMiss++;
+            if (!hit) missThisTick = true;
+            DRAW_COUNTS.merge(tickDraws, 1L, Long::sum);
+        }
         Row r = ROWS.computeIfAbsent(e.getType().toShortString(), k -> new Row());
         r.ticks++;
         r.ns += ns;
@@ -130,11 +149,17 @@ public final class TickCensus {
     }
 
     private static final Map<String, Long> DRAWERS = new HashMap<>();
+    private static final Map<Integer, Integer> LAST_DRAWS = new HashMap<>();
+    private static final Map<Integer, Long> DRAW_COUNTS = new java.util.TreeMap<>();
+    private static int tickDraws, drawUnitsThisTick;
+    private static long lastGameTime = Long.MIN_VALUE, drawUnits, drawHits, drawAfterMiss, serverTicks, serverTicksAllHit;
+    private static boolean missThisTick;
     private static final StackWalker SW = StackWalker.getInstance();
 
     static void drew() {
         if (cur != null && Thread.currentThread() == thread) {
             f[RAND] = true;
+            tickDraws++;
             if ((randDraws++ & 7) == 0) {
                 String who = SW.walk(st -> st.dropWhile(fr -> fr.getClassName().startsWith("dev.lull.TickCensus") || fr.getClassName().startsWith("net.minecraft.util."))
                         .limit(2).map(fr -> fr.getClassName().substring(fr.getClassName().lastIndexOf('.') + 1) + "." + fr.getMethodName() + ":" + fr.getLineNumber())
@@ -255,6 +280,8 @@ public final class TickCensus {
         dr.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
         sb.append("\n  level random drawn by (1 in 8 draws):");
         for (int i = 0; i < Math.min(15, dr.size()); i++) sb.append("\n    ").append(dr.get(i).getValue()).append("  ").append(dr.get(i).getKey());
+        sb.append(String.format(Locale.ROOT, "%n  shared-random prediction by last tick: %d drawing unit-ticks, count as last tick %.1f %%, after an earlier miss in the same tick %.1f %%; server ticks with every count right %d of %d; draws per unit-tick %s",
+                drawUnits, drawUnits == 0 ? 0 : 100.0 * drawHits / drawUnits, drawUnits == 0 ? 0 : 100.0 * drawAfterMiss / drawUnits, serverTicksAllHit, serverTicks, DRAW_COUNTS));
         System.out.println(sb);
     }
 
