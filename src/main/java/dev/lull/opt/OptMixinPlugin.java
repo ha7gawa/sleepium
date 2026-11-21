@@ -182,6 +182,11 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenShare");
         if (simple.equals("WorldgenAllocPlacementMixin") || simple.equals("WorldgenAllocJointMixin"))   // FEATURES: not yet verified
             on = Boolean.getBoolean("lab.opt.WorldgenFeatureAlloc");
+        if (simple.equals("PlacementFilterInvoker") || simple.equals("RepeatingPlacementInvoker") || simple.equals("HeightRangePlacementAccessor")
+                || simple.equals("RandomOffsetPlacementAccessor") || simple.equals("HeightmapPlacementAccessor") || simple.equals("EnvironmentScanPlacementAccessor"))
+            on = Boolean.getBoolean("lab.opt.WorldgenFeatureAlloc");   // PlacementWalk's views of the modifiers
+        if (simple.equals("ShapeFullMemoShapeMixin"))   // the slot of ShapeFullMemoMixin's answer
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ShapeFullMemoMixin");
         if (simple.equals("WorldgenReactorMixin") || simple.startsWith("Reactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenReactor");
         if (simple.startsWith("MainReactor") || simple.equals("EventLoopQueueAccessor") || simple.equals("ChunkCacheExecutorAccessor"))
