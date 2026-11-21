@@ -53,6 +53,13 @@ public abstract class WorldgenAllocSequenceMixin implements dev.lull.optsupport.
             if (start == dev.lull.optsupport.SurfacePlan.NULL) return null;
             if (start == dev.lull.optsupport.SurfacePlan.STATE) return p.state();
         }
+        if (dev.lull.optsupport.SurfaceWriter.DIRECT && l instanceof RandomAccess) {
+            for (int i = start, n = l.size(); i < n; i++) {
+                BlockState s = ((net.minecraft.world.level.levelgen.SurfaceRules.SurfaceRule) l.get(i)).tryApply(x, y, z);
+                if (s != null) return s;
+            }
+            return null;
+        }
         if (l instanceof RandomAccess) {
             for (int i = start, n = l.size(); i < n; i++) {
                 BlockState s = ((SurfaceRuleInvoker) l.get(i)).sleep$tryApply(x, y, z);

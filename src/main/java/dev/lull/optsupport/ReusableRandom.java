@@ -34,6 +34,12 @@ public final class ReusableRandom {
         void sleep$setHi(long v);
     }
 
+    /**
+     * -Dlab.opt.RandomSlots (11-21, lab): on our pool's threads the instances live in the thread's own slots
+     * (ThreadSlots) - a field read instead of ThreadLocal's hash per call (ore veins ask per vein block: ThreadLocalMap
+     * .getEntry was 2.8 % of doFill on .103)
+     */
+    private static final boolean THREAD_SLOTS = Boolean.getBoolean("lab.opt.RandomSlots");
     private static final ThreadLocal<XoroshiroRandomSource[]> SLOTS = ThreadLocal.withInitial(() -> new XoroshiroRandomSource[3]);
 
     private ReusableRandom() {}
@@ -41,7 +47,14 @@ public final class ReusableRandom {
     public static RandomSource at(PositionalRandomFactory f, int x, int y, int z, int slot) {
         if (!(f instanceof XoroshiroRandomSource.XoroshiroPositionalRandomFactory) || !(f instanceof Factory fa)) return f.at(x, y, z);
         long lo = Mth.getSeed(x, y, z) ^ fa.sleep$seedLo(), hi = fa.sleep$seedHi();
-        XoroshiroRandomSource[] a = SLOTS.get();
+        XoroshiroRandomSource[] a;
+        Object[] ts;
+        if (THREAD_SLOTS && (ts = ThreadSlots.mine()) != null) {
+            a = (XoroshiroRandomSource[]) ts[ThreadSlots.RANDOMS];
+            if (a == null) ts[ThreadSlots.RANDOMS] = a = new XoroshiroRandomSource[3];
+        } else {
+            a = SLOTS.get();
+        }
         XoroshiroRandomSource r = a[slot];
         if (r == null) return a[slot] = new XoroshiroRandomSource(lo, hi);
         if ((lo | hi) == 0L) {   // as Xoroshiro128PlusPlus(long, long)

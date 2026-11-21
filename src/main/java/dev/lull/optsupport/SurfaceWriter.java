@@ -6,10 +6,12 @@ import java.util.EnumSet;
 import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.BitStorage;
+import net.minecraft.util.SimpleBitStorage;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.BlockColumn;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.GlobalPalette;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.Palette;
 import net.minecraft.world.level.chunk.PalettedContainer;
@@ -57,12 +59,49 @@ import net.minecraft.world.level.material.Fluids;
  */
 public final class SurfaceWriter {
     public static final boolean VERIFY = Boolean.getBoolean("lab.surface.verify");
+    /**
+     * with SurfaceFast on, WorldgenAllocSequenceMixin calls its rules' tryApply directly (SurfaceRule is public by our
+     * access transformer) instead of through SurfaceRuleInvoker's injected interface method: one interface dispatch per
+     * rule instead of two
+     */
+    public static final boolean DIRECT = Boolean.getBoolean("lab.opt.SurfaceFastMixin");
     /** negative control for the verify: drop the planned write at y = min + 5 */
     private static final boolean BREAK = Boolean.getBoolean("lab.surface.break");
     private static final ThreadLocal<SurfaceWriter> TL = ThreadLocal.withInitial(SurfaceWriter::new);
     private static final BlockState AIR = Blocks.AIR.defaultBlockState(), VOID_AIR = Blocks.VOID_AIR.defaultBlockState();
     private static final FluidState EMPTY = Fluids.EMPTY.defaultFluidState();
     private static final AtomicLong V_CHUNKS = new AtomicLong(), V_BAD = new AtomicLong(), V_SKIP = new AtomicLong();
+
+    /** -Dlab.surface.stats: how deep below the local surface the blocks the rule tree runs for are */
+    private static final boolean STATS = Boolean.getBoolean("lab.surface.stats");
+    private static final AtomicLong S_CALLS = new AtomicLong();
+    private static final java.util.concurrent.atomic.LongAdder S_NULL = new java.util.concurrent.atomic.LongAdder();
+    private static final java.util.concurrent.atomic.LongAdder[] S_ABOVE = new java.util.concurrent.atomic.LongAdder[8], S_BOTH = new java.util.concurrent.atomic.LongAdder[8];
+    private static final java.util.concurrent.atomic.LongAdder S_WATER = new java.util.concurrent.atomic.LongAdder();
+    static {
+        for (int i = 0; i < 8; i++) {
+            S_ABOVE[i] = new java.util.concurrent.atomic.LongAdder();
+            S_BOTH[i] = new java.util.concurrent.atomic.LongAdder();
+        }
+    }
+
+    private static void stat(int above, int below, int water) {
+        long n = S_CALLS.incrementAndGet();
+        if (water != Integer.MIN_VALUE) S_WATER.increment();
+        int a = above <= 4 ? 0 : above <= 8 ? 1 : above <= 16 ? 2 : above <= 32 ? 3 : above <= 40 ? 4 : above <= 64 ? 5 : above <= 128 ? 6 : 7;
+        S_ABOVE[a].increment();
+        int m = Math.min(above, below);
+        int b = m <= 4 ? 0 : m <= 8 ? 1 : m <= 16 ? 2 : m <= 32 ? 3 : m <= 40 ? 4 : m <= 64 ? 5 : m <= 128 ? 6 : 7;
+        S_BOTH[b].increment();
+        if ((n & 0xFFFFF) == 0) {
+            StringBuilder sb = new StringBuilder("[sleep/opt] SurfaceFast stats: tree calls " + n + ", null " + S_NULL.sum() + ", with water above "
+                    + S_WATER.sum() + "; stone depth above <=4/8/16/32/40/64/128/more:");
+            for (int i = 0; i < 8; i++) sb.append(' ').append(S_ABOVE[i].sum());
+            sb.append("; min(above, below):");
+            for (int i = 0; i < 8; i++) sb.append(' ').append(S_BOTH[i].sum());
+            System.out.println(sb);
+        }
+    }
 
     public static SurfaceWriter get() {
         return TL.get();
@@ -75,15 +114,28 @@ public final class SurfaceWriter {
     private int minY, maxY;
     private BlockState def;
     private SurfacePlan plan;
-    private BlockState[] col = new BlockState[512];
-    /** per snapshot entry: 0 air (isAir), 1 a block with a fluid, 2 stone in SurfaceSystem.isStone's sense */
+    /** SurfaceTree (lab.opt.SurfaceTree): the chunk's tree with its stone depth tests decided per block, or null */
+    private SurfaceTree tree;
+    /**
+     * per snapshot entry (index y - minY + 1): bits 0-1 the class - 0 air (isAir), 1 a block with a fluid, 2 stone in
+     * SurfaceSystem.isStone's sense; bit 2 (DEF): the state is the default block
+     */
     private byte[] cls = new byte[512];
+    private static final int DEF = 4;
+    // per section: the Data and palette size its id table was made for, the table (flags by palette id)
+    @SuppressWarnings("unchecked")
+    private PalettedContainer.Data<BlockState>[] sData = new PalettedContainer.Data[32];
+    private int[] sSize = new int[32];
+    private byte[][] sFlags = new byte[32][];
     /** per heightmap: the current column's first available y, as Heightmap.getFirstAvailable says */
     private int[] cur = new int[8];
     // write: the last palette id asked for, valid while the container's Data is the same object
     private PalettedContainer.Data<BlockState> wData;
     private BlockState wState;
     private int wId;
+    private long[] wRaw;
+    private int wNonEmpty, wTicking, wFluid;
+    private boolean wMark;
     private final BlockPos.MutableBlockPos mark = new BlockPos.MutableBlockPos();
 
     private SurfaceWriter() {}
@@ -119,7 +171,7 @@ public final class SurfaceWriter {
     }
 
     /** whether this chunk takes our loop; sets up the chunk's state */
-    public boolean begin(ChunkAccess c, SurfaceRules.SurfaceRule rule, BlockState defaultBlock) {
+    public boolean begin(ChunkAccess c, SurfaceRules.SurfaceRule rule, BlockState defaultBlock, SurfaceRules.Context ctx) {
         if (c.getClass() != ProtoChunk.class) return false;
         ProtoChunk pc = (ProtoChunk) c;
         ChunkStatus st = pc.getPersistedStatus();
@@ -139,12 +191,17 @@ public final class SurfaceWriter {
         sections = pc.getSections();
         minY = pc.getMinBuildHeight();
         maxY = pc.getMaxBuildHeight();
-        if (maxY - minY + 2 > col.length) {
-            col = new BlockState[maxY - minY + 2];
-            cls = new byte[maxY - minY + 2];
+        if (maxY - minY + 2 > cls.length) cls = new byte[maxY - minY + 2];
+        int ns = sections.length;
+        if (ns > sData.length) {
+            sData = Arrays.copyOf(sData, ns);
+            sSize = Arrays.copyOf(sSize, ns);
+            sFlags = Arrays.copyOf(sFlags, ns);
         }
+        Arrays.fill(sData, 0, ns, null);
         def = defaultBlock;
         plan = rule instanceof SurfacePlan.Holder h ? h.sleep$planOrNull() : null;
+        tree = SurfaceTree.ON ? SurfaceTree.of(rule, ctx) : null;
         return true;
     }
 
@@ -153,9 +210,11 @@ public final class SurfaceWriter {
         sections = null;
         Arrays.fill(hms, null);
         plan = null;
-        Arrays.fill(col, null);
+        tree = null;
+        Arrays.fill(sData, null);
         wData = null;
         wState = null;
+        wRaw = null;
     }
 
     /**
@@ -163,47 +222,61 @@ public final class SurfaceWriter {
      * reads), after ctx.updateXZ.
      */
     public void column(int k, int l, int top, int x, int z, SurfaceRules.Context ctx, SurfaceRules.SurfaceRule rule) {
-        BlockState[] col = this.col;
         byte[] cls = this.cls;
         int minY = this.minY, base = 1 - minY;
-        col[0] = VOID_AIR;
         cls[0] = 0;
         int hi = Math.min(top, maxY - 1);
-        for (int y = top; y > hi; y--) {
-            col[y + base] = VOID_AIR;
-            cls[y + base] = 0;
-        }
+        for (int y = top; y > hi; y--) cls[y + base] = 0;
         int xz = (l << 4) | k;
-        BlockState lastS = null;
-        byte lastC = 0;
         for (int s = 0, sTop = (hi - minY) >> 4; s <= sTop; s++) {
             LevelChunkSection sec = sections[s];
             int y0 = minY + (s << 4), y1 = Math.min(y0 + 15, hi);
             if (sec.hasOnlyAir()) {
-                Arrays.fill(col, y0 + base, y1 + base + 1, AIR);
                 Arrays.fill(cls, y0 + base, y1 + base + 1, (byte) 0);
-            } else {
-                PalettedContainer.Data<BlockState> d = sec.getStates().data;
-                Palette<BlockState> p = d.palette();
-                BitStorage b = d.storage();
+                continue;
+            }
+            PalettedContainer.Data<BlockState> d = sec.getStates().data;
+            Palette<BlockState> p = d.palette();
+            BitStorage b = d.storage();
+            if (p instanceof GlobalPalette) {
+                for (int y = y0; y <= y1; y++) cls[y + base] = flags(p.valueFor(b.get(((y & 15) << 8) | xz)));
+                continue;
+            }
+            int size = p.getSize();
+            byte[] f = sFlags[s];
+            if (d != sData[s] || size != sSize[s]) {
+                if (f == null || f.length < size) sFlags[s] = f = new byte[Math.max(size, 16)];
+                for (int id = 0; id < size; id++) f[id] = flags(p.valueFor(id));
+                sData[s] = d;
+                sSize[s] = size;
+            }
+            int bits = b.getBits();
+            if (bits == 0) {
+                Arrays.fill(cls, y0 + base, y1 + base + 1, f[0]);
+            } else if (bits == 4) {
+                long[] raw = b.getRaw();
                 for (int y = y0; y <= y1; y++) {
-                    BlockState st = p.valueFor(b.get(((y & 15) << 8) | xz));
-                    col[y + base] = st;
-                    if (st != lastS) {
-                        lastS = st;
-                        lastC = st.isAir() ? 0 : st.getFluidState().isEmpty() ? (byte) 2 : (byte) 1;
-                    }
-                    cls[y + base] = lastC;
+                    int idx = ((y & 15) << 8) | xz;
+                    cls[y + base] = f[(int) (raw[idx >>> 4] >>> ((idx & 15) << 2)) & 15];
                 }
+            } else if (bits == 8) {
+                long[] raw = b.getRaw();
+                for (int y = y0; y <= y1; y++) {
+                    int idx = ((y & 15) << 8) | xz;
+                    cls[y + base] = f[(int) (raw[idx >>> 3] >>> ((idx & 7) << 3)) & 255];
+                }
+            } else {
+                for (int y = y0; y <= y1; y++) cls[y + base] = f[b.get(((y & 15) << 8) | xz)];
             }
         }
         for (int h = 0; h < nh; h++) cur[h] = hms[h].getFirstAvailable(k, l);
 
-        BlockState def = this.def;
         SurfacePlan plan = this.plan;
+        SurfaceTree tree = this.tree;
+        boolean treeColumn = false;
         int i2 = 0, j2 = Integer.MIN_VALUE, k2 = Integer.MAX_VALUE;
         for (int y = top; y >= minY; y--) {
-            int c = cls[y + base];
+            int c = cls[y + base] & 3;
             if (c == 0) {
                 i2 = 0;
                 j2 = Integer.MIN_VALUE;
@@ -216,16 +289,18 @@ public final class SurfaceWriter {
             if (k2 >= y) {
                 k2 = DimensionType.WAY_BELOW_MIN_Y;
                 for (int j3 = y - 1; j3 >= minY - 1; j3--) {
-                    if (cls[j3 + base] != 2) {
+                    if ((cls[j3 + base] & 3) != 2) {
                         k2 = j3 + 1;
                         break;
                     }
                 }
             }
             i2++;
-            if (col[y + base] != def) continue;
+            if ((cls[y + base] & DEF) == 0) continue;
+            int start = 0;
             if (plan != null) {
                 int e = plan.eval(y);
+                start = e;
                 if (e == SurfacePlan.NULL) continue;
                 if (e == SurfacePlan.STATE) {
                     if (BREAK && y == minY + 5) continue;
@@ -233,54 +308,80 @@ public final class SurfaceWriter {
                     continue;
                 }
             }
+            if (STATS) stat(i2, y - k2 + 1, j2);
             ctx.updateY(i2, y - k2 + 1, j2, x, y, z);
-            BlockState r = rule.tryApply(x, y, z);
+            BlockState r;
+            if (tree != null) {
+                if (!treeColumn) {
+                    tree.column();
+                    treeColumn = true;
+                }
+                r = tree.apply(start, i2, y - k2 + 1, x, y, z);
+            } else {
+                r = rule.tryApply(x, y, z);
+            }
+            if (STATS && r == null) S_NULL.increment();
             if (r != null) write(k, y, l, x, z, r);
         }
     }
 
+    private byte flags(BlockState st) {
+        int c = st.isAir() ? 0 : st.getFluidState().isEmpty() ? 2 : 1;
+        return (byte) (st == def ? c | DEF : c);
+    }
+
     /**
      * BlockColumn.setBlock -> ProtoChunk.setBlockState(pos, state, false) for this chunk (see the class doc). The section
-     * write is LevelChunkSection.setBlockState(.., false) -> PalettedContainer.getAndSetUnchecked inlined: the palette id
-     * (the last one asked for while the container's Data is the same object - ids never change within a Data; idFor
-     * may resize, so the Data is read again after it, as vanilla's getAndSet reads this.data again), the storage's
-     * getAndSet, the old state from the palette, the counts in vanilla's order. A heightmap's update returns at its
-     * first test when y <= first available - 2: that test made here on the column's heights (read at the column's
-     * start, read again after every update this loop makes - nothing else writes the column meanwhile).
+     * write is LevelChunkSection.setBlockState(.., false) -> PalettedContainer.getAndSetUnchecked inlined. The old state
+     * is the default block: the loop writes only where the snapshot (taken at the column's start) has it, and nothing
+     * else writes the column between the snapshot and the write (each y once; a resize copies the value). So: the
+     * palette id (the last one asked for while the container's Data is the same object - ids never change within a
+     * Data; idFor may resize, so the Data is read again after it, as vanilla's getAndSet reads this.data again), the
+     * storage set (4 bits straight into the raw long), the counts changed by (state's - default block's) non-empty /
+     * ticking / fluid terms, made once per state. A heightmap's update returns at its first test when y <= first
+     * available - 2: that test made here on the column's heights (read at the column's start, read again after every
+     * update this loop makes - nothing else writes the column meanwhile).
      */
     private void write(int k, int y, int l, int x, int z, BlockState state) {
         LevelChunkSection s = sections[(y - minY) >> 4];
         if (!(s.hasOnlyAir() && state.is(Blocks.AIR))) {
             PalettedContainer<BlockState> pc = s.getStates();
             PalettedContainer.Data<BlockState> d = pc.data;
-            int id;
-            if (d == wData && state == wState) {
-                id = wId;
-            } else {
-                id = d.palette().idFor(state);
+            if (d != wData || state != wState) {
+                int id = d.palette().idFor(state);
                 d = pc.data;
                 wData = d;
-                wState = state;
                 wId = id;
+                BitStorage b = d.storage();
+                wRaw = b.getBits() == 4 && b instanceof SimpleBitStorage ? b.getRaw() : null;
+                if (state != wState) {
+                    wState = state;
+                    BlockState o = def;
+                    wNonEmpty = (state.isEmpty() ? 0 : 1) - (o.isEmpty() ? 0 : 1);
+                    wTicking = (!state.isEmpty() && state.isRandomlyTicking() ? 1 : 0) - (!o.isEmpty() && o.isRandomlyTicking() ? 1 : 0);
+                    wFluid = (state.getFluidState().isEmpty() ? 0 : 1) - (o.getFluidState().isEmpty() ? 0 : 1);
+                    wMark = !state.getFluidState().isEmpty();
+                }
             }
-            BlockState old = d.palette().valueFor(d.storage().getAndSet(((y & 15) << 8) | (l << 4) | k, id));
+            int idx = ((y & 15) << 8) | (l << 4) | k;
+            long[] raw = wRaw;
+            if (raw != null) {
+                int c = idx >>> 4, sh = (idx & 15) << 2;
+                raw[c] = (raw[c] & ~(15L << sh)) | ((long) wId << sh);
+            } else {
+                d.storage().set(idx, wId);
+            }
             if (s instanceof BlockCollisionMemo.Counted mc) mc.sleep$touch();
-            FluidState of = old.getFluidState(), nf = state.getFluidState();
-            if (!old.isEmpty()) {
-                s.nonEmptyBlockCount--;
-                if (old.isRandomlyTicking()) s.tickingBlockCount--;
-            }
-            if (!of.isEmpty()) s.tickingFluidCount--;
-            if (!state.isEmpty()) {
-                s.nonEmptyBlockCount++;
-                if (state.isRandomlyTicking()) s.tickingBlockCount++;
-            }
-            if (!nf.isEmpty()) s.tickingFluidCount++;
+            if (wNonEmpty != 0) s.nonEmptyBlockCount += (short) wNonEmpty;
+            if (wTicking != 0) s.tickingBlockCount += (short) wTicking;
+            if (wFluid != 0) s.tickingFluidCount += (short) wFluid;
             for (int h = 0; h < nh; h++) {
                 if (y <= cur[h] - 2) continue;
                 hms[h].update(k, y, l, state);
                 cur[h] = hms[h].getFirstAvailable(k, l);
             }
+            if (wMark) chunk.markPosForPostprocessing(mark.set(x, y, z));
+            return;
         }
         if (!state.getFluidState().isEmpty()) chunk.markPosForPostprocessing(mark.set(x, y, z));
     }

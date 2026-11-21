@@ -65,7 +65,7 @@ public abstract class SurfaceFastMixin {
         SurfaceRules.Context ctx = new SurfaceRules.Context((SurfaceSystem) (Object) this, randomState, chunk, noiseChunk, biomeManager::getBiome, biomes, context);
         SurfaceRules.SurfaceRule rule = ruleSource.apply(ctx);
         SurfaceWriter w = SurfaceWriter.get();
-        boolean fast = w.begin(chunk, rule, this.defaultBlock);
+        boolean fast = w.begin(chunk, rule, this.defaultBlock, ctx);
         if (!fast) SurfaceWriter.skipped();
         try {
             if (fast && SurfaceWriter.VERIFY) {
@@ -75,7 +75,7 @@ public abstract class SurfaceFastMixin {
                 SurfaceWriter.restore(chunk, before);
                 SurfaceRules.Context ctx2 = new SurfaceRules.Context((SurfaceSystem) (Object) this, randomState, chunk, noiseChunk, biomeManager::getBiome, biomes, context);
                 SurfaceRules.SurfaceRule rule2 = ruleSource.apply(ctx2);
-                w.begin(chunk, rule2, this.defaultBlock);
+                w.begin(chunk, rule2, this.defaultBlock, ctx2);
                 this.sleep$loop(true, w, biomeManager, useLegacyRandomSource, chunk, i, j, pos, blockcolumn, ctx2, rule2);
                 SurfaceWriter.compare(chunk, ref);
             } else {
