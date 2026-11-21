@@ -73,6 +73,7 @@
     "WorldgenShareCoordinateMixin",
     "WorldgenColumnMemoMixin",
     "WorldgenShareSlicesMixin",
+    "ClimateSearchMixin",
     "PersistentPoolsMixin",
     "LabPoolsMixin",
     "TickMemoMixin",
