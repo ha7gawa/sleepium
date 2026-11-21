@@ -32,11 +32,12 @@ import net.minecraft.world.level.chunk.storage.RegionFileVersion;
  * ring needs their space, and at every synchronize (flushWorker, save-all flush) and close: the world on disk after a
  * stop is the same as vanilla's. A crash loses only held early proto chunks - regenerated as they were.
  *
- * <p>One byte[] ring (lab.storedring.mb, 8; a 10-minute Chunky soak at 170 chunks/s peaked at 3.4 MB and 8499 records,
- * notes/87) and fixed slot arrays (lab.storedring.slots, 16384) per chunk IOWorker, all allocated at its first held
- * store; the index maps a position to its newest slot. Every operation under the ring's lock (a release queues the
- * store in the IOWorker's mailbox before the position leaves the index: a load either sees the ring or comes after
- * the store in the mailbox).
+ * <p>One byte[] ring (lab.storedring.mb, 16) and fixed slot arrays (lab.storedring.slots, 32768) per chunk IOWorker, all
+ * allocated at its first held store. The ring spans every held store of the last holdMs, replaced ones included (the tail
+ * only passes them): a 10-minute Chunky soak at 170 chunks/s held ~240 stores/s, live at most 8499 records / 3.4 MB
+ * (notes/87); with 8 MB / 16384 slots the oldest live records were already released for space after 90 s. The index maps
+ * a position to its newest slot. Every operation under the ring's lock (a release queues the store in the IOWorker's
+ * mailbox before the position leaves the index: a load either sees the ring or comes after the store in the mailbox).
  *
  * <p>{@code -Dlab.storedring.verify=true} (or lab.chunkio.verify): every store's tag is hashed; at close every position
  * is read back through vanilla's RegionFileStorage.read and compared, and every load served from the ring is compared
@@ -44,8 +45,8 @@ import net.minecraft.world.level.chunk.storage.RegionFileVersion;
  */
 public final class StoredRing {
     public static final boolean VERIFY = Boolean.getBoolean("lab.storedring.verify") || ChunkIo.VERIFY;
-    static final int CAP = Math.max(1, Integer.getInteger("lab.storedring.mb", 8)) << 20;
-    static final int SLOTS = Math.max(1024, Integer.getInteger("lab.storedring.slots", 16384));
+    static final int CAP = Math.max(1, Integer.getInteger("lab.storedring.mb", 16)) << 20;
+    static final int SLOTS = Math.max(1024, Integer.getInteger("lab.storedring.slots", 32768));
     static final long HOLD_NS = Long.getLong("lab.storedring.holdMs", 120_000L) * 1_000_000L;
     static final Set<String> HOLDABLE = Set.of("minecraft:empty", "minecraft:structure_starts", "minecraft:structure_references",
             "minecraft:biomes", "minecraft:noise", "minecraft:surface");
