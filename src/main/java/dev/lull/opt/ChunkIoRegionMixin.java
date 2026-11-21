@@ -61,6 +61,8 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
     @Unique private int sleep$delLaterN;
     /** records or a header written since the last force */
     @Unique private boolean sleep$unforced;
+    /** sectors in sleep$freeNow and sleep$freeLater */
+    @Unique private int sleep$held;
     @Unique private long sleep$lastRound;
     /** growth: the file's size as we made it (-1 unknown), its size at open */
     @Unique private long sleep$size = -1, sleep$size0 = -1;
@@ -200,7 +202,10 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
                 // an entry no header has carried yet (changed since the last header write) points at sectors no header
                 // on the device or in the cache knows: they go right away; else after that header is durable
                 if (sleep$dirty.get(index[i])) usedSectors.free(getSectorNumber(old[i]), getNumSectors(old[i]));
-                else sleep$freeNow = sleep$push(sleep$freeNow, sleep$freeNowN++, old[i]);
+                else {
+                    sleep$freeNow = sleep$push(sleep$freeNow, sleep$freeNowN++, old[i]);
+                    sleep$held += getNumSectors(old[i]);
+                }
             }
             offsets.put(index[i], packed[i]);
             timestamps.put(index[i], now);
@@ -210,7 +215,8 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
             for (int i = 0; i < m; i++) sleep$delNow = sleep$push(sleep$delNow, sleep$delNowN++, external[i]);
             sleep$unforced = true;
             long t = System.nanoTime();
-            if (t - sleep$lastRound >= ChunkIoWriter.CADENCE_NS) sleep$round(false, t);
+            // a round when the cadence is over, or early when the held sectors would grow the file too much
+            if (t - sleep$lastRound >= ChunkIoWriter.CADENCE_NS || ChunkIoWriter.HOLD_CAP > 0 && sleep$held >= ChunkIoWriter.HOLD_CAP) sleep$round(false, t);
             return;
         }
         // write-through: every record above was acknowledged by the device (DSYNC) before the header is issued
@@ -376,7 +382,10 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
 
     @Unique
     private void sleep$releaseLater() throws IOException {
-        for (int i = 0; i < sleep$freeLaterN; i++) usedSectors.free(getSectorNumber(sleep$freeLater[i]), getNumSectors(sleep$freeLater[i]));
+        for (int i = 0; i < sleep$freeLaterN; i++) {
+            usedSectors.free(getSectorNumber(sleep$freeLater[i]), getNumSectors(sleep$freeLater[i]));
+            sleep$held -= getNumSectors(sleep$freeLater[i]);
+        }
         sleep$freeLaterN = 0;
         for (int i = 0; i < sleep$delLaterN; i++) {
             Files.deleteIfExists(sleep$delLater[i]);
@@ -387,7 +396,10 @@ public abstract class ChunkIoRegionMixin implements ChunkIo.Region {
 
     @Unique
     private void sleep$releaseNow() throws IOException {
-        for (int i = 0; i < sleep$freeNowN; i++) usedSectors.free(getSectorNumber(sleep$freeNow[i]), getNumSectors(sleep$freeNow[i]));
+        for (int i = 0; i < sleep$freeNowN; i++) {
+            usedSectors.free(getSectorNumber(sleep$freeNow[i]), getNumSectors(sleep$freeNow[i]));
+            sleep$held -= getNumSectors(sleep$freeNow[i]);
+        }
         sleep$freeNowN = 0;
         for (int i = 0; i < sleep$delNowN; i++) {
             Files.deleteIfExists(sleep$delNow[i]);

@@ -35,6 +35,8 @@ public final class ChunkIoWriter {
     public static final boolean HEADER_DELTA = Boolean.getBoolean("lab.chunkio.headerDelta");
     public static final int GROW_KB = Integer.getInteger("lab.chunkio.grow", 0);
 
+    /** cadence: a round early once this many sectors wait to be freed in a file (bounds the file growth they cause; 0 = off) */
+    public static final int HOLD_CAP = Integer.getInteger("lab.chunkio.holdCap", 0);
     public static final boolean COALESCE = Boolean.getBoolean("lab.chunkio.coalesce");
     /** false: 1.3.3's forces; true: write-through batches; auto: a probe per volume picks the cheaper of the two */
     public static final String WRITE_THROUGH_FLAG = System.getProperty("lab.chunkio.writeThrough", "false");
@@ -89,6 +91,11 @@ public final class ChunkIoWriter {
                     if (r > 0) {
                         wt[r - 1] = a;
                         fo[r - 1] = b;
+                    }
+                    if (r > 0 && (b > 20 * a || a > 20 * b) && Math.max(a, b) > 20_000_000L) {   // clear and slow (a USB disk): no more waits
+                        java.util.Arrays.fill(wt, a);
+                        java.util.Arrays.fill(fo, b);
+                        break;
                     }
                 }
             }
@@ -155,7 +162,7 @@ public final class ChunkIoWriter {
 
     public static String report() {
         long f = forces.get();
-        return String.format("writer: cadence %d ms, write-through " + WRITE_THROUGH_FLAG + (COALESCE ? ", coalesced" : "") + ", header %s, grow %d KB: forces %d (%.2f ms avg, max %.1f), rounds %d, header writes %d (%.0f B avg), grows %d (%.1f MB), trimmed %.1f MB",
+        return String.format("writer: cadence %d ms" + (HOLD_CAP > 0 ? " (hold cap " + HOLD_CAP + ")" : "") + ", write-through " + WRITE_THROUGH_FLAG + (COALESCE ? ", coalesced" : "") + ", header %s, grow %d KB: forces %d (%.2f ms avg, max %.1f), rounds %d, header writes %d (%.0f B avg), grows %d (%.1f MB), trimmed %.1f MB",
                 CADENCE_MS, HEADER_DELTA ? "delta" : "full", GROW_KB, f, f == 0 ? 0 : forceNs.get() / 1e6 / f, forceMaxNs.get() / 1e6, rounds.get(),
                 headerWrites.get(), headerWrites.get() == 0 ? 0 : headerBytes.get() / (double) headerWrites.get(), grows.get(), growBytes.get() / 1048576.0,
                 trimmed.get() / 1048576.0);
