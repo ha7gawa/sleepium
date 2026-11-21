@@ -12,6 +12,11 @@
 -Dlab.opt.ChunkCacheClearMixin=true
 -Dlab.opt.ChunkCacheMixin=true
 -Dlab.opt.ChunkMultiDrawMixin=true
+# frames in flight (1.3.2): where the driver queues frames far ahead of the GPU (the N100's Intel: the frame 6
+# back not done at 66 of 240 starts), at most 3 frames ahead - the multi-draw path (few GL calls a frame) let that queue
+# grow to ~50 frames and the driver then blocked ~250 ms every ~50 frames (1.3.1: N100 p99 258 ms, now 17.5); measured
+# once per machine and remembered, off where the queue stays short (Radeons, NVIDIA)
+-Dlab.gpu.framesInFlight.auto=true
 -Dlab.opt.ChunkSectionMixin=true
 -Dlab.opt.ChunkShaderPatchMixin=true
 -Dlab.opt.ChunkTickMemoChunkMixin=true
