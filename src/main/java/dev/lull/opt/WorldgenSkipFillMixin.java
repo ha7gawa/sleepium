@@ -1,6 +1,7 @@
 package dev.lull.opt;
 
 import dev.lull.optsupport.CellProof;
+import dev.lull.optsupport.FillWriter;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -71,6 +72,10 @@ public abstract class WorldgenSkipFillMixin {
         boolean solidAquifer = airBox != null || (aquifer.getClass().isAnonymousClass() && aquifer.getClass().getNestHost() == Aquifer.class);
         CellProof.Solid solidHook = aquifer instanceof CellProof.Solid sh ? sh : null;
         CellProof.Cell cell = proof != null ? new CellProof.Cell() : null;
+        // FillWrite (lab): the writes below into the sections' packed storage (see FillWriter)
+        FillWriter fw = FillWriter.ON ? FillWriter.get() : null;
+        if (fw != null) fw.begin(chunk, chunk.getSectionsCount(), heightmap, Heightmap.Types.OCEAN_FLOOR_WG, heightmap1, Heightmap.Types.WORLD_SURFACE_WG);
+        try {
 
         for (int k1 = 0; k1 < i1; k1++) {
             noisechunk.advanceCellX(k1);
@@ -111,9 +116,14 @@ public abstract class WorldgenSkipFillMixin {
                                         int l4 = k4 & 15;
                                         BlockState blockstate = this.debugPreliminarySurfaceLevel(noisechunk, l3, l2, k4, def);
                                         if (blockstate != AIR && !SharedConstants.debugVoidTerrain(chunk.getPos())) {
-                                            levelchunksection.setBlockState(i4, i3, l4, blockstate, false);
-                                            heightmap.update(i4, l2, l4, blockstate);
-                                            heightmap1.update(i4, l2, l4, blockstate);
+                                            if (fw != null) {
+                                                fw.set(i2, levelchunksection, i4, i3, l4, blockstate);
+                                                fw.heights(i4, l2, l4, blockstate);
+                                            } else {
+                                                levelchunksection.setBlockState(i4, i3, l4, blockstate, false);
+                                                heightmap.update(i4, l2, l4, blockstate);
+                                                heightmap1.update(i4, l2, l4, blockstate);
+                                            }
                                             if (aquifer.shouldScheduleFluidUpdate() && !blockstate.getFluidState().isEmpty()) {
                                                 blockpos$mutableblockpos.set(l3, l2, k4);
                                                 chunk.markPosForPostprocessing(blockpos$mutableblockpos);
@@ -157,9 +167,14 @@ public abstract class WorldgenSkipFillMixin {
 
                                 blockstate = this.debugPreliminarySurfaceLevel(noisechunk, l3, l2, k4, blockstate);
                                 if (blockstate != AIR && !SharedConstants.debugVoidTerrain(chunk.getPos())) {
-                                    levelchunksection.setBlockState(i4, i3, l4, blockstate, false);
-                                    heightmap.update(i4, l2, l4, blockstate);
-                                    heightmap1.update(i4, l2, l4, blockstate);
+                                    if (fw != null) {
+                                        fw.set(i2, levelchunksection, i4, i3, l4, blockstate);
+                                        fw.heights(i4, l2, l4, blockstate);
+                                    } else {
+                                        levelchunksection.setBlockState(i4, i3, l4, blockstate, false);
+                                        heightmap.update(i4, l2, l4, blockstate);
+                                        heightmap1.update(i4, l2, l4, blockstate);
+                                    }
                                     if (aquifer.shouldScheduleFluidUpdate() && !blockstate.getFluidState().isEmpty()) {
                                         blockpos$mutableblockpos.set(l3, l2, k4);
                                         chunk.markPosForPostprocessing(blockpos$mutableblockpos);
@@ -174,6 +189,9 @@ public abstract class WorldgenSkipFillMixin {
             noisechunk.swapSlices();
         }
 
+        } finally {
+            if (fw != null) fw.end();
+        }
         noisechunk.stopInterpolation();
         return chunk;
     }

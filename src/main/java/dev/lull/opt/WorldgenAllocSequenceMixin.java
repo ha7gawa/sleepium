@@ -33,6 +33,11 @@ public abstract class WorldgenAllocSequenceMixin implements dev.lull.optsupport.
         return rules.size();
     }
 
+    @Override
+    public dev.lull.optsupport.SurfacePlan sleep$planOrNull() {
+        return sleep$plan;
+    }
+
     /**
      * @author probe
      * @reason indexed loop, no iterator per call
