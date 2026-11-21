@@ -14,8 +14,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * LazyChunkBuffers: a section's buffer made while the view area is built gets no GL names in its constructor; its first
- * bind (vanilla binds before every upload and every draw) makes them. Deleting name 0 at close is a no-op, and
- * isInvalid() (-1) stays false.
+ * bind (vanilla binds before every upload and every draw) makes them. isInvalid() (-1) stays false. A buffer closed
+ * before its first bind still has name 0: glDeleteBuffers(0) is a no-op, but on Linux vanilla's _glDeleteBuffers first
+ * binds the name to GL_ARRAY_BUFFER and orphans it with glBufferData - with 0 bound that is GL_INVALID_OPERATION "no
+ * buffer bound" (Mesa on the Pi: ~217 000 errors at each view-area rebuild / world exit, every one through the GL debug
+ * callback and the log). Name 0 is skipped here; on Linux the GL_ARRAY_BUFFER binding is left at 0 as vanilla's
+ * sequence leaves it.
  */
 @Mixin(VertexBuffer.class)
 public abstract class LazyChunkBufferMixin {
@@ -41,6 +45,12 @@ public abstract class LazyChunkBufferMixin {
             return 0;
         }
         return original.call();
+    }
+
+    @WrapOperation(method = "close", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;glDeleteBuffers(I)V"))
+    private void sleep$deleteNamed(int buffer, Operation<Void> original) {
+        if (buffer == 0) LazyChunkBuffers.skipUnnamedDelete();
+        else original.call(buffer);
     }
 
     @Inject(method = "bind", at = @At("HEAD"))

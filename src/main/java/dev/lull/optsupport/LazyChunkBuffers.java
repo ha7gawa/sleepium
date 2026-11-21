@@ -23,11 +23,27 @@ public final class LazyChunkBuffers {
     /** buffers made lazily / given their names later */
     public static long made, named;
 
+    /** buffer names 0 not deleted at close (a section's buffer closed before its first bind) */
+    public static long closedUnnamed;
+
+    private static final boolean ON_LINUX = net.minecraft.Util.getPlatform() == net.minecraft.Util.OS.LINUX;
+
     public static boolean lazyHere() {
         return building == Thread.currentThread();
     }
 
+    /**
+     * In place of RenderSystem.glDeleteBuffers(0) at VertexBuffer.close: deleting name 0 does nothing; on Linux vanilla's
+     * delete binds the name to GL_ARRAY_BUFFER, orphans it (GL_INVALID_OPERATION with name 0) and binds 0 - the binding
+     * that sequence leaves (0) is kept, the failing glBufferData is not made.
+     */
+    public static void skipUnnamedDelete() {
+        closedUnnamed++;
+        if (ON_LINUX) org.lwjgl.opengl.GL15C.glBindBuffer(org.lwjgl.opengl.GL15C.GL_ARRAY_BUFFER, 0);
+    }
+
     public static String report() {
-        return "lazy chunk buffers: " + made + " made without GL names, " + named + " named at their first bind";
+        return "lazy chunk buffers: " + made + " made without GL names, " + named + " named at their first bind, " + closedUnnamed
+                + " names 0 not deleted at close";
     }
 }
