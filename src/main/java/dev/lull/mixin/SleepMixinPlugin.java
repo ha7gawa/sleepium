@@ -34,6 +34,7 @@ public final class SleepMixinPlugin implements IMixinConfigPlugin {
         if (simple.startsWith("GenProfile")) return Boolean.getBoolean("sleep.genProfile");
         if (simple.startsWith("LightProbe")) return Boolean.getBoolean("lab.light.probe") || Boolean.getBoolean("lab.light.fixcheck");   // measurement only (notes/84)
         if (simple.startsWith("IoScout")) return Boolean.getBoolean("sleep.ioScout");
+        if (simple.startsWith("TickCensus")) return Boolean.getBoolean("sleep.tickCensus");
         if (simple.startsWith("GlTrace")) return Boolean.getBoolean("sleep.glTrace");
         if (simple.startsWith("MobQuiet")) return Boolean.getBoolean("sleep.mobQuiet");
         if (simple.startsWith("BrainTime")) return Boolean.getBoolean("sleep.brainTime");

@@ -89,6 +89,16 @@ public final class WB {
         return k < 0 ? null : U.getObject(o, offset(k));
     }
 
+    /** measurement (dev.lull.TickCensus): a part watched by its owner unit; parts of a sleeping mob keep their watcher */
+    public static String censusLabel(int id) {
+        return WBIds.label(id);
+    }
+
+    public static void censusWatch(Object o, Object owner) {
+        Object w = watcherOf(o);
+        if (w == null || w instanceof dev.lull.TickCensus.Owner) watch(o, owner);
+    }
+
     private static final Object SAMPLED = new Object();
 
     private static void sample(Object o) {
@@ -154,6 +164,7 @@ public final class WB {
     static void hit(Object o, int id, Object w) {
         if (w instanceof EntitySleep.PartWatch pw) pw.write(id);
         else if (w instanceof EntitySleep.SharedWatch sw) EntitySleep.onWrite(sw, id);
+        else if (w instanceof dev.lull.TickCensus.Owner ow) dev.lull.TickCensus.write(ow, id);
         else sampleHit(o, id);
     }
 
