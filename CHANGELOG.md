@@ -4,6 +4,32 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.3.3 - 2026-11-21
+
+Much faster world generation - still exactly vanilla's terrain - and where each mod's time goes.
+
+- **New chunks generate up to 4.6x faster than vanilla.** Pregenerating 5 929 chunks with Chunky (1.21.1, Ryzen 7
+  5800X): vanilla 77 chunks/s, 1.3.2 228, 1.3.3 359. A 4-core Xeon server: 47.6 -> 87.8 chunks/s over 1.3.2. A
+  teleport into new terrain (render distance 12): vanilla about 10 s until every chunk around you is generated, 1.3.3
+  about 2 s.
+- **Generation scheduled by its real dependencies (1.21.1).** Vanilla 1.21 generates a status for a whole layer of
+  chunks and waits for all of it before the next status; 1.3.3 starts each chunk's next step as soon as its own
+  neighbours are ready, so every generation thread stays busy. On 1.20.1 the steps no longer queue through one worldgen
+  mailbox and the main thread (+23 %).
+- **Less work per chunk:** terrain blocks written straight into the chunk's storage, surface rules planned per column,
+  the density-function trees compiled to straight code, ore placement and biome checks in features without repeated
+  lookups. Worker CPU per chunk: about -35 % on 1.21.1, -31 % on 1.20.1 (-48 % in the Nether).
+- **Exactly vanilla's terrain:** each change keeps vanilla's arithmetic in vanilla's order. Per-chunk terrain hashes are
+  identical to vanilla in the Overworld, the Nether and the End, also with Terralith, Tectonic and Biomes O' Plenty;
+  each change compares itself with vanilla's code inside the game (tens of millions of checks, no difference).
+- **Mods page: where each mod's time goes** (a player's suggestion). After "Measure 15 s" a mod's page opens with its
+  cost by kind - its blocks, its mobs (server and client), drawing its mobs, drawing its blocks (new), its event
+  handlers - each with its share and the costliest types inside. The HUD's list shows the top 5 mods and what each
+  mostly spends on.
+- **Intel graphics:** terrain drawn without a slow per-vertex read on Intel UHD, and the frame-pacing fence placed right
+  before the swap. Intel N100 against 1.3.2: standing +11.7 % (1.21.1) / +10.4 % (1.20.1), moving +7.2 % / +5.5 %,
+  slowest 1 % of frames 10.5 -> 6.4 ms / 16.5 -> 9.2 ms.
+
 ## 1.3.2 - 2026-11-21
 
 Smoother frames on Intel graphics, and fixes.

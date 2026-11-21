@@ -1,6 +1,7 @@
 {
   "homepage": "https://modrinth.com/mod/sleepium",
   "1.21.1": {
+    "1.3.3": "World generation up to 4.6x faster than vanilla (Chunky: 77 -> 359 chunks/s; 1.3.2: 228), exactly vanilla terrain; the Mods page shows where each mod's time goes; Intel UHD +5-12 % fps.",
     "1.3.2": "No quarter-second freezes on Intel integrated graphics (an N100's slowest frames: 257 -> 16 ms); fixes: the 1.3.1 machine cost check deciding too early, the render self-check now covers GeckoLib mobs and GPU-drawn items.",
     "1.3.1": "Fixes: worlds with many modded machines no longer run slower than without Sleepium (562 kinds of machines: 150 -> 16.4 ms a tick); a rare deadlock with C2ME + ModernFix + Chunky (#10); Entity Model Features heads and skulls; items in item frames; vanilla hoppers sleep fully again; quieter log (#8).",
     "1.3.0": "Much smoother flight at far view distances (32 chunks in flight: 162 -> 806-857 fps); Android above render distance 7; experimental Decoupled frames (off by default); fix: freezes in big packs from the mob analysis holding Mixin's lock; fix: repeated Mixin warnings (#8).",
@@ -29,12 +30,13 @@
     "1.0.0": "The first public release."
   },
   "promos": {
-    "1.21.1-latest": "1.3.2",
-    "1.21.1-recommended": "1.3.2",
-    "1.20.1-latest": "1.3.2",
-    "1.20.1-recommended": "1.3.2"
+    "1.21.1-latest": "1.3.3",
+    "1.21.1-recommended": "1.3.3",
+    "1.20.1-latest": "1.3.3",
+    "1.20.1-recommended": "1.3.3"
   },
   "1.20.1": {
+    "1.3.3": "World generation up to 4.6x faster than vanilla (Chunky: 77 -> 359 chunks/s; 1.3.2: 228), exactly vanilla terrain; the Mods page shows where each mod's time goes; Intel UHD +5-12 % fps.",
     "1.3.2": "The same as 1.21.1 (Intel freezes gone, the cost check, the render self-check); no \"invalid dist\" errors on servers with the experimental mob sleep switches.",
     "1.3.1": "The same fixes as 1.21.1 (562 kinds of modded machines: 135 -> 19.5 ms a tick, 19.8 without Sleepium).",
     "1.3.0": "The same as 1.21.1: smoother flight at far view distances, Android above render distance 7 (MojoLauncher), experimental Decoupled frames, fix: freezes with Punchy / Better Combat in big packs, fix: repeated Mixin warnings (#8).",

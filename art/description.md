@@ -38,6 +38,44 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.3.3: world generation up to 4.6x faster, still exactly vanilla's terrain
+
+**Pregenerating with Chunky** (5 929 chunks around spawn, NeoForge 1.21.1 server, Ryzen 7 5800X):
+
+| | chunks per second |
+|---|---:|
+| without Sleepium | 77 |
+| Sleepium 1.3.2 | 228 |
+| **Sleepium 1.3.3** | **359** |
+
+**Teleporting into new terrain** (singleplayer, render distance 12), until every chunk around you is generated:
+without Sleepium about 10 s, 1.3.2 about 3.5 s, **1.3.3 about 2 s**.
+
+**A 4-core Xeon server** (E3-1270 v2, generation benchmark): 1.3.2 47.6 -> **1.3.3 87.8 chunks/s** (+84 %). Forge 1.20.1
+on the Ryzen: without Sleepium 45-49, 1.3.2 126-130, 1.3.3 166-188 chunks/s.
+
+What changed:
+
+- **Generation scheduled by its real dependencies (1.21.1).** Vanilla 1.21 generates one status for a whole layer of
+  chunks and waits for all of it before the next; 1.3.3 starts each chunk's next step as soon as its own neighbours are
+  ready, so all generation threads stay busy. On 1.20.1 the steps no longer queue through one worldgen mailbox and the
+  main thread.
+- **Less work per chunk:** terrain blocks written straight into the chunk's storage, surface rules planned per column,
+  the density-function trees compiled to straight code, ores and biome checks in features without repeated lookups.
+- **Exactly vanilla's terrain.** Every change keeps vanilla's arithmetic in vanilla's order. Per-chunk terrain hashes
+  are identical to vanilla in the Overworld, the Nether and the End, and with Terralith, Tectonic and Biomes O' Plenty;
+  each change also compares itself with vanilla's own code inside the game (tens of millions of checks, no
+  difference). Tested on dedicated servers and in singleplayer, and in a 229-mod and a 474-mod pack.
+- **Mods page: where each mod's time goes** (a player's suggestion). Options > Sleepium > Mods > Measure 15 s, then a
+  mod: its cost by kind - its blocks, its mobs (server and client), drawing its mobs, drawing its blocks, its event
+  handlers - each with its share and the costliest types inside. The HUD's list shows the top 5.
+- **Intel graphics:** Intel N100 against 1.3.2 - standing **+11.7 %** (1.21.1) / **+10.4 %** (1.20.1), moving +7.2 % /
+  +5.5 %, the slowest 1 % of frames 10.5 -> 6.4 ms / 16.5 -> 9.2 ms. AMD and NVIDIA are unchanged.
+
+**Tested** on a Ryzen 7 5800X + RTX 4070 SUPER, two 2012 Xeon PCs with a Radeon RX 570 and a Radeon HD 7870, an Intel
+N100 mini PC and a Raspberry Pi 4. Both versions pass the 23-scene exactness suite (the same world as without Sleepium,
+bit for bit) and draw the same frames as 1.3.2.
+
 ## New in 1.3.2: smooth frames on Intel graphics, tested on five kinds of machines
 
 - **No more quarter-second freezes on Intel integrated graphics.** Some Intel drivers queued dozens of frames ahead
