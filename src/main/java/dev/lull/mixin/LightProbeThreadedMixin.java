@@ -30,6 +30,7 @@ public abstract class LightProbeThreadedMixin implements LightProbe.Engine {
 
     @Inject(method = "runUpdate", at = @At("HEAD"))
     private void sleep$head(CallbackInfo ci) {
+        dev.lull.LightHistory.batch++;
         sleep$q = lightTasks.size();
         sleep$n = Math.min(sleep$q, 1000);
         sleep$t0 = System.nanoTime();
@@ -78,6 +79,7 @@ public abstract class LightProbeThreadedMixin implements LightProbe.Engine {
     private void sleep$check(BlockPos pos, CallbackInfo ci) {
         LightProbe.call(2);
         if (dev.lull.LightTrace.in(pos)) dev.lull.LightTrace.log("checkBlock submitted " + pos.toShortString());
+        if (dev.lull.LightHistory.ON) dev.lull.LightHistory.rec(dev.lull.LightHistory.SUBMIT, pos.asLong(), 0, 0, 0);
     }
 
     @Inject(method = "updateSectionStatus", at = @At("HEAD"))

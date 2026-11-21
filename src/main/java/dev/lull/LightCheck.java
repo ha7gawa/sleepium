@@ -56,6 +56,15 @@ public final class LightCheck {
     }
 
     static String run(ServerLevel level, int x0, int z0, int side, java.nio.file.Path hashFile) {
+        LightHistory.paused = true;   // (the private relight below writes block light too)
+        try {
+            return run0(level, x0, z0, side, hashFile);
+        } finally {
+            LightHistory.paused = false;
+        }
+    }
+
+    static String run0(ServerLevel level, int x0, int z0, int side, java.nio.file.Path hashFile) {
         long t0 = System.nanoTime();
         LevelChunk[] chunks = new LevelChunk[side * side];
         for (int dx = 0; dx < side; dx++)
@@ -171,11 +180,47 @@ public final class LightCheck {
             SleepMod.LOGGER.error("Cannot write {}", hashFile, e);
         }
         if (firstBlockDiff != null) samples.append(" | emitters within 15 of ").append(firstBlockDiff.toShortString()).append(':').append(emitters(level, real, mine, firstBlockDiff));
+        if (firstBlockDiff != null && LightHistory.ON) samples.append(LightHistory.explain(level, real, mine, firstBlockDiff));
+        samples.append(publishCheck(real, x0, z0, side));
         long t2 = System.nanoTime();
         return String.format(Locale.ROOT, "light fixcheck (%s vs the level's light, %d inner chunks): %d chunks differ; block: %d sections, %d differ (%d nibbles: level higher %d, lower %d; data presence %d);"
                         + " sky: %d sections, %d differ (%d nibbles: level higher %d, lower %d; data presence %d); relight %.0f ms, compare %.0f ms%s",
                 name, chunksCompared, chunksDiff, sec[0], secDiff[0], nib[0], higher[0], lower[0], presence[0], sec[1], secDiff[1], nib[1], higher[1], lower[1], presence[1],
                 (t1 - t0) / 1e6, (t2 - t1) / 1e6, samples.length() > 0 ? "; first:" + samples : "");
+    }
+
+    /**
+     * The level's block light as the light actor holds it (the updating map) against what it published (the visible map,
+     * read by everyone else and by this check): sections whose values differ, and the first differing cells. Tells a lost
+     * propagation (both lower) from a lost publication (only the visible copy lower).
+     */
+    static String publishCheck(LevelLightEngine real, int x0, int z0, int side) {
+        try {
+            Object eng = ((dev.lull.mixin.LightProbeLevelEngineAccessor) real).sleep$block();
+            if (eng == null) return "";
+            var st = ((dev.lull.mixin.LightProbeEngineAccessor) eng).sleep$storage();
+            var upd = ((dev.lull.mixin.LightProbeStorageInvoker) st).sleep$updating();
+            int minS = real.getMinLightSection(), maxS = real.getMaxLightSection(), secs = 0, cells = 0;
+            StringBuilder b = new StringBuilder();
+            for (int dx = 2; dx < side - 2; dx++)
+                for (int dz = 2; dz < side - 2; dz++)
+                    for (int sy = minS; sy < maxS; sy++) {
+                        long key = SectionPos.asLong(x0 + dx, sy, z0 + dz);
+                        DataLayer v = real.getLayerListener(LightLayer.BLOCK).getDataLayerData(SectionPos.of(key)), u = upd.getLayer(key);
+                        if (v == u || v != null && u != null && Arrays.equals(v.getData(), u.getData())) continue;
+                        secs++;
+                        for (int i = 0; i < 4096; i++) {
+                            int a = v == null ? 0 : v.get(i & 15, i >> 8, (i >> 4) & 15), c = u == null ? 0 : u.get(i & 15, i >> 8, (i >> 4) & 15);
+                            if (a != c) {
+                                cells++;
+                                if (b.length() < 400) b.append(String.format(Locale.ROOT, " %d,%d,%d visible %d updating %d;", (x0 + dx) * 16 + (i & 15), sy * 16 + (i >> 8), (z0 + dz) * 16 + ((i >> 4) & 15), a, c));
+                            }
+                        }
+                    }
+            return " | published vs actor's block light: " + secs + " sections, " + cells + " cells differ" + (b.length() > 0 ? ":" + b : "");
+        } catch (Throwable t) {
+            return " | published check failed: " + t;
+        }
     }
 
     /** the light sources around a differing cell: state, emission, the level's and the relight's block light there (what was not propagated) */

@@ -25,6 +25,11 @@ public abstract class LightProbeCheckNodeMixin {
         long sec = SectionPos.blockToSection(packedPos);
         boolean storing = st.sleep$storing(sec), on = st.sleep$lightOn(sec);
         BlockPos p = BlockPos.of(packedPos);
+        if (dev.lull.LightHistory.ON) {
+            LightChunk hc = self.sleep$chunks().getChunkForLighting(SectionPos.blockToSectionCoord(p.getX()), SectionPos.blockToSectionCoord(p.getZ()));
+            dev.lull.LightHistory.rec(dev.lull.LightHistory.CHECK, packedPos, hc == null ? 255 : hc.getBlockState(p).getLightEmission(), storing ? st.sleep$level(packedPos) : 255,
+                    (on ? 1 : 0) | (storing ? 2 : 0));
+        }
         if (dev.lull.LightTrace.in(p)) {
             LightChunk tc = self.sleep$chunks().getChunkForLighting(SectionPos.blockToSectionCoord(p.getX()), SectionPos.blockToSectionCoord(p.getZ()));
             dev.lull.LightTrace.log("checkNode " + p.toShortString() + " state " + (tc == null ? "no chunk" : tc.getBlockState(p)) + " stored " + storing + " lightOn " + on

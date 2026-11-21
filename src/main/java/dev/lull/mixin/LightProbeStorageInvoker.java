@@ -15,4 +15,7 @@ public interface LightProbeStorageInvoker {
 
     @Invoker("getStoredLevel")
     int sleep$level(long packedPos);
+
+    @org.spongepowered.asm.mixin.gen.Accessor("updatingSectionData")
+    net.minecraft.world.level.lighting.DataLayerStorageMap<?> sleep$updating();
 }

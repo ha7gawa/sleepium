@@ -317,3 +317,23 @@ hypothesis; (2) then fix it inside LightDirect (or prove ownThread structurally 
 until >= 60 clean N100 warm-ups per variant; (3) the host's 16-thread genbench and the exactness suite's light scenes
 (crops, zoo, redstone, furnaces / smelters, fluids); (4) only then defaults.txt:
 `-Dlab.opt.LightDirect=true` and `-Dlab.light.ownThread=true` (lab.light.prio stays default on).
+
+## 11-22: SIMD octave noise (NoiseBatch, lab-simd-1.21.1 ce69442e) on the N100 - the AVX2 check
+The N100 (Gracemont, AVX2, 4c/4t) is the only AVX2 box besides the host; .103's Ivy Bridge has AVX only (notes/82:
+corners -18 % there). Production NeoForge server C:\mcbench\neo121, genbench 32 x 32, interleaved, the 1.3.3 night
+defaults on in both, -Dlab.dfc.batch=true vs off:
+| run | chunks/s r1 / r2 (mean) | noise.corners us / call (r2) | corners ms per FULL chunk (r2) | doFill ms per FULL chunk (r2) |
+|---|---|---|---|---|
+| sb1 batch | 67.5 / 80.3 (73.9) | 482.7 | 3.28 | 14.78 |
+| so1 off | 53.6 / 56.1 (54.9) | 800.8 | 6.47 | 18.62 |
+| sb2 batch | 63.3 / 78.8 (71.0) | 507.9 | 3.69 | 16.65 |
+| so2 off | 58.4 / 71.4 (64.9) | 770.3 | 6.23 | 19.50 |
+| sb3 batch | 63.7 / 76.1 (69.9) | 639.5 | 4.59 | 16.28 |
+| so3 off | 54.3 / 55.8 (55.0) | 837.5 | 6.77 | 20.04 |
+Batch on: 71.6 chunks/s vs 58.3 off (+23 %; r2 78.4 vs 61.1, +28 %); corners -33 % a call, -45 % per FULL chunk (more
+of them answered from blocks already filled); doFill per FULL chunk -16 %. Much more than on .103 (AVX, -18 % corners,
+chunks/s within noise): the kernel's 4-double vectors run at full width on the N100's AVX2 units, and the N100 is
+noise-bound at 4 threads. Exact: carvers hashes of all 7 runs equal (r1 3d3701ca..., r2 0880a251..., the same as every
+light run of notes/84); sv1 (batch + -Dlab.dfc.verify=true, every compiled value compared with vanilla's fillArray)
+104 857 636 values, 0 differ. -> NoiseBatch can be a 1.3.5 default from the AVX2 side (host 16-thread number and the
+1.20.1 port still to do; JIT: C2's superword is on by default in every JDK 17 / 21 build players use).

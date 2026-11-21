@@ -18,6 +18,7 @@ public abstract class LightProbeBlockMixin {
     private void sleep$head(ChunkPos pos, CallbackInfo ci) {
         sleep$src = System.nanoTime();
         if (dev.lull.LightTrace.inChunk(pos.x, pos.z)) dev.lull.LightTrace.log("propagateLightSources run " + pos);
+        if (dev.lull.LightHistory.ON) dev.lull.LightHistory.rec(dev.lull.LightHistory.SRC_SCAN, net.minecraft.core.SectionPos.asLong(pos.x, 0, pos.z), 0, 0, 0);
     }
 
     @Inject(method = "propagateLightSources", at = @At("RETURN"))
