@@ -127,7 +127,60 @@ public final class PaletteCopy {
         }
     }
 
+    // ---- PaletteGetAll ----
+
+    /** [0..63] distinct ids in first-occurrence order, [64] their count, [65] busy */
+    private static final ThreadLocal<int[]> IDS = ThreadLocal.withInitial(() -> new int[66]);
+    private static final AtomicLong ALL_CHECKS = new AtomicLong(), ALL_BAD = new AtomicLong();
+
+    /**
+     * The distinct entries of a storage in first-occurrence order (what vanilla's IntArraySet collects), in the thread's
+     * scratch (give it back by zeroing [65]); null when not taken: other storage classes, more than 6 bits, scratch busy.
+     * SimpleBitStorage packs valuesPerLong entries per word from the low bits (getAll's own walk); ZeroBitStorage's
+     * entries are all 0.
+     */
+    public static int[] distinctIds(BitStorage storage) {
+        Class<?> c = storage.getClass();
+        int bits = storage.getBits();
+        if (c != SimpleBitStorage.class && c != ZeroBitStorage.class || bits > 6) return null;
+        int[] ids = IDS.get();
+        if (ids[65] != 0) return null;
+        ids[65] = 1;
+        int n = 0, size = storage.getSize();
+        if (c == ZeroBitStorage.class) {
+            if (size > 0) ids[n++] = 0;
+        } else {
+            long[] raw = storage.getRaw();
+            long mask = (1L << bits) - 1L, seen = 0L;
+            int vpl = 64 / bits, i = 0;
+            outer:
+            for (long w : raw) {
+                for (int k = 0; k < vpl; k++) {
+                    int id = (int) (w & mask);
+                    w >>>= bits;
+                    if ((seen & (1L << id)) == 0L) {
+                        seen |= 1L << id;
+                        ids[n++] = id;
+                    }
+                    if (++i >= size) break outer;
+                }
+            }
+        }
+        ids[64] = n;
+        if (VERIFY) {
+            it.unimi.dsi.fastutil.ints.IntArraySet set = new it.unimi.dsi.fastutil.ints.IntArraySet();
+            storage.getAll(set::add);
+            int[] want = set.toIntArray();
+            boolean ok = Arrays.equals(want, 0, want.length, ids, 0, n);
+            long ch = ALL_CHECKS.incrementAndGet();
+            if (!ok && ALL_BAD.incrementAndGet() <= 20)
+                System.out.println("[sleep/featcpu] GETALL MISMATCH " + Arrays.toString(want) + " vs " + Arrays.toString(Arrays.copyOf(ids, n)));
+            if ((ch & ((1 << 20) - 1)) == 0) System.out.println("[sleep/featcpu] " + summary());
+        }
+        return ids;
+    }
+
     public static String summary() {
-        return "palette copies " + FAST.get() + " fast, " + CHECKS.get() + " checked, " + BAD.get() + " mismatches";
+        return "getAll " + ALL_CHECKS.get() + " checked, " + ALL_BAD.get() + " mismatches; palette copies " + FAST.get() + " fast, " + CHECKS.get() + " checked, " + BAD.get() + " mismatches";
     }
 }

@@ -10,7 +10,14 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ProtoChunk;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration;
+import net.minecraft.world.level.levelgen.structure.templatesystem.AlwaysTrueTest;
+import net.minecraft.world.level.levelgen.structure.templatesystem.BlockMatchTest;
+import net.minecraft.world.level.levelgen.structure.templatesystem.BlockStateMatchTest;
+import net.minecraft.world.level.levelgen.structure.templatesystem.TagMatchTest;
 
 /**
  * OreScan (-Dlab.opt.WorldgenOreScanMixin): the two scans of OreFeature with less work per step, the same answers.
@@ -184,6 +191,59 @@ public final class OreScan {
         loaded[s] = true;
     }
 
+    // ---- doPlace's target tests ----
+
+    /**
+     * OreFeature.canPlaceOre starts with {@code targetState.target.test(state, random)}. For TagMatchTest (state.is(tag)),
+     * BlockMatchTest (state.is(block)), BlockStateMatchTest (state == blockState) and AlwaysTrueTest the answer depends
+     * on the state only (no random draw, the tags bound to the state's holder do not change during a call); a blob of
+     * ore cells is mostly one state (stone / deepslate), and a tag test is a hash set probe with the TagKey record's
+     * hashCode / equals. Per call and target the last state and answer are kept; other tests are asked every time.
+     */
+    private final BlockState[] memoState = new BlockState[8];
+    private final boolean[] memoPass = new boolean[8], pure = new boolean[8];
+    private static final AtomicLong TEST_CHECKS = new AtomicLong(), TEST_BAD = new AtomicLong();
+
+    public static OreScan local() {
+        return TL.get();
+    }
+
+    public void startTests(java.util.List<OreConfiguration.TargetBlockState> targets, int nt) {
+        for (int t = 0; t < nt && t < 8; t++) {
+            Class<?> c = targets.get(t).target.getClass();
+            pure[t] = c == TagMatchTest.class || c == BlockMatchTest.class || c == BlockStateMatchTest.class || c == AlwaysTrueTest.class;
+            memoState[t] = null;
+        }
+    }
+
+    public boolean test(int t, OreConfiguration.TargetBlockState target, BlockState state, RandomSource random) {
+        if (t >= 8 || !pure[t]) return target.target.test(state, random);
+        boolean pass;
+        if (memoState[t] == state) {
+            pass = memoPass[t];
+            if (VERIFY) {
+                long c = TEST_CHECKS.incrementAndGet();
+                if (pass != target.target.test(state, random) && TEST_BAD.incrementAndGet() <= 20)
+                    System.out.println("[sleep/featcpu] ORE TEST MISMATCH " + target.target + " " + state);
+                if ((c & ((1 << 22) - 1)) == 0) System.out.println("[sleep/featcpu] " + summary());
+            }
+        } else {
+            pass = target.target.test(state, random);
+            memoState[t] = state;
+            memoPass[t] = pass;
+        }
+        return pass;
+    }
+
+    /** OreFeature.shouldSkipAirCheck (protected there), statement for statement */
+    public static boolean shouldSkipAirCheck(RandomSource random, float chance) {
+        if (chance <= 0.0F) {
+            return true;
+        } else {
+            return chance >= 1.0F ? false : random.nextFloat() >= chance;
+        }
+    }
+
     // ---- verify of doPlace's scan ----
 
     /** a scan state for one doPlace call (verify only) */
@@ -259,7 +319,7 @@ public final class OreScan {
     }
 
     public static String summary() {
-        return "ore columns " + COL_CHECKS.get() + " checked, " + COL_BAD.get() + " mismatches; ore scans " + SCAN_CHECKS.get() + " checked ("
+        return "ore tests " + TEST_CHECKS.get() + " remembered checked, " + TEST_BAD.get() + " mismatches; ore columns " + COL_CHECKS.get() + " checked, " + COL_BAD.get() + " mismatches; ore scans " + SCAN_CHECKS.get() + " checked ("
                 + SCAN_CELLS.get() + " cells), " + SCAN_BAD.get() + " mismatches";
     }
 }

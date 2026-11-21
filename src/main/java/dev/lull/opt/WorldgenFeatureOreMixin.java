@@ -12,6 +12,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.OreFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration;
 import org.spongepowered.asm.mixin.Mixin;
@@ -80,6 +81,8 @@ public abstract class WorldgenFeatureOreMixin {
             boolean indexed = targets instanceof RandomAccess;
             int nt = targets.size();
             if (OreScan.ON) {
+                OreScan os = OreScan.local();
+                os.startTests(targets, nt);
                 OreScan v = null;
                 if (OreScan.VERIFY) {
                     v = OreScan.verifyStart();
@@ -123,7 +126,11 @@ public abstract class WorldgenFeatureOreMixin {
                                                     BlockState blockstate = levelchunksection.getBlockState(i3, j3, k3);
                                                     for (int t = 0; t < nt; t++) {
                                                         OreConfiguration.TargetBlockState target = targets.get(t);
-                                                        if (OreFeature.canPlaceOre(blockstate, scratch, random, config, target, blockpos$mutableblockpos)) {
+                                                        // OreFeature.canPlaceOre's body: the target test (memo per call for the
+                                                        // tests that read the state only, OreScan), then the air check
+                                                        if (os.test(t, target, blockstate, random)
+                                                                && (OreScan.shouldSkipAirCheck(random, config.discardChanceOnAirExposure)
+                                                                || !Feature.isAdjacentToAir(scratch, blockpos$mutableblockpos))) {
                                                             levelchunksection.setBlockState(i3, j3, k3, target.state, false);
                                                             i++;
                                                             break;
