@@ -66,20 +66,32 @@ public final class UploadRing {
     private static final int FIF = FIF_FIXED > 0 ? FIF_FIXED : AUTO ? 3 : 0;
     private static final int DEEP = Integer.getInteger("lab.gpu.framesInFlight.deep", 6), AUTO_WINDOW = 240;
     private static final long[] FRAME_FENCES = new long[16];
-    /** per FRAME_FENCES slot: the frame count (frames) when the fence was made - it covers that frame's commands */
-    private static final long[] FENCE_AT = new long[16];
+    /** per FRAME_FENCES slot: the fence's number in the order made (fencesMade then) */
+    private static final long[] FENCE_SEQ = new long[16];
+    /**
+     * frame fences made so far (with framesInFlight.every: counted when one is due, made or not) - a caller notes it
+     * after its commands; any fence numbered higher was made after them on this thread and covers them (fenceAfter)
+     */
+    public static long fencesMade;
 
     /**
-     * the fence made at the start of the frame after the one counted {@code at} (every command of frame {@code at},
-     * its atlas ticks included, before it), or 0 if not made (yet) or gone. With a fence every N frames
-     * (framesInFlight.every): the first fence made at or after it (a later fence covers the same commands)
+     * the first frame fence made after fencesMade was {@code seq} (every command sent before that moment before it), or
+     * 0 if none made yet (the same frame) or gone. With a fence every N frames (framesInFlight.every): the first one made
+     * (a later fence covers the same commands)
      */
-    public static long fenceAfter(long at) {
-        long f = 0, fa = Long.MAX_VALUE;
+    public static long fenceAfter(long seq) {
+        // By the order the fences were made, not by frame counts (11-21): with atSwap a frame's fence is made before its
+        // swap, and the frame count of uploads is not enough: with "that frame's fence or later" -Dlab.gpuAnim.checkReuse
+        // caught 8 segments still read when reused, 0 frames after their uploads, all at a world's join / quit (most
+        // likely a runTick nested in another - updateScreenAndTick - making its fence mid-frame, before the outer
+        // frame's later uploads with the same frame count). The frame
+        // count rule "a later frame's fence only" was safe but sent a segment reused in the next frame to glFinish
+        // (N100 motion, skipFence: 281 finishes against 117 with the fence at the frame's start).
+        long f = 0, fs = Long.MAX_VALUE;
         for (int i = 0; i < 16; i++)
-            if (FRAME_FENCES[i] != 0 && (AT_SWAP ? FENCE_AT[i] > at : FENCE_AT[i] >= at) && FENCE_AT[i] < fa) {   // (at the swap: commands after it not covered - the next frame's)
+            if (FRAME_FENCES[i] != 0 && FENCE_SEQ[i] > seq && FENCE_SEQ[i] < fs) {
                 f = FRAME_FENCES[i];
-                fa = FENCE_AT[i];
+                fs = FENCE_SEQ[i];
             }
         return f;
     }
@@ -200,7 +212,7 @@ public final class UploadRing {
     private static void makeFrameFence() {
         int i = frameNo & 15;
         if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
-        FENCE_AT[i] = frames;
+        FENCE_SEQ[i] = ++fencesMade;
         FRAME_FENCES[i] = EVERY == 1 || frameNo % EVERY == 0 ? GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0) : 0;
     }
 
