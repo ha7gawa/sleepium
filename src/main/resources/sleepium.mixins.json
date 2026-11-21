@@ -61,6 +61,7 @@
     "LightProbeEngineMixin",
     "LightProbeSkyMixin",
     "LightProbeBlockMixin",
+    "LightProbeSectionMixin",
     "EventSourcesMixin",
     "TickSourcesMixin",
     "NeighborSourcesMixin",

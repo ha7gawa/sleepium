@@ -304,8 +304,28 @@ public final class MixinYield {
         return w.isEmpty() ? "" : " - by " + w;
     }
 
+    /**
+     * The light scheduler as one feature (LightDirect*: tasks past the sorter, the light thread; LightPar*): it gives way
+     * as a whole when another mod changes any method of ThreadedLevelLightEngine - a light engine of its own (ScalableLux /
+     * Starlight's subclass, Moonrise's overwrites) or its own light scheduling (C2ME's threading-lighting). Not only on a
+     * method-level clash: our light thread and FIFO order assume vanilla's actor, and theirs may not run it at all. No
+     * culprits named for the rules: a "never give way" rule must not take mixins out of another mod's light engine.
+     */
+    private static Verdict lightScheduling(String mixinClassName) {
+        String simple = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
+        if (!simple.startsWith("LightDirect") && !simple.startsWith("LightPar")) return null;
+        java.util.Set<String> foreign = MixinTouch.culpritsOnClass("net/minecraft/server/level/ThreadedLevelLightEngine");
+        if (foreign.isEmpty()) return null;
+        java.util.Set<String> who = new java.util.TreeSet<>();
+        for (String c : foreign) who.add(c.substring(0, c.indexOf('\t')) + " (" + simple(c.substring(c.indexOf('\t') + 1)) + ")");
+        return new Verdict("[sleep/opt] " + simple + " not applied: another mod changes the light engine's scheduling (ThreadedLevelLightEngine) - by "
+                + String.join(", ", who) + "; light keeps its path", java.util.Set.of());
+    }
+
     /** why this mixin of ours conflicts with a foreign one (its "not applied" line), or null */
     private static Verdict yields0(String targetClassName, String mixinClassName) {
+        Verdict light = lightScheduling(mixinClassName);
+        if (light != null) return light;
         ClassNode cn;
         try {
             cn = org.spongepowered.asm.service.MixinService.getService().getBytecodeProvider().getClassNode(mixinClassName);

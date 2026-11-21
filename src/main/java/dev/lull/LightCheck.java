@@ -107,6 +107,7 @@ public final class LightCheck {
         long[] sec = new long[2], secDiff = new long[2], nib = new long[2], presence = new long[2], higher = new long[2], lower = new long[2];
         int chunksCompared = 0, chunksDiff = 0;
         StringBuilder samples = new StringBuilder();
+        BlockPos firstBlockDiff = null;
         StringBuilder hashes = new StringBuilder();
         for (int dx = 0; dx < side; dx++)
             for (int dz = 0; dz < side; dz++) {
@@ -144,6 +145,7 @@ public final class LightCheck {
                                 if (va != vb) {
                                     d++;
                                     if (va > vb) higher[l]++; else lower[l]++;
+                                    if (l == 0 && firstBlockDiff == null) firstBlockDiff = new BlockPos(cx * 16 + (i & 15), sy * 16 + (i >> 8), cz * 16 + ((i >> 4) & 15));
                                     if (samples.length() < 1500)
                                         samples.append(String.format(Locale.ROOT, " %s %d,%d,%d real %d new %d;", l == 0 ? "block" : "sky",
                                                 cx * 16 + (i & 15), sy * 16 + (i >> 8), cz * 16 + ((i >> 4) & 15), va, vb));
@@ -168,11 +170,32 @@ public final class LightCheck {
         } catch (java.io.IOException e) {
             SleepMod.LOGGER.error("Cannot write {}", hashFile, e);
         }
+        if (firstBlockDiff != null) samples.append(" | emitters within 15 of ").append(firstBlockDiff.toShortString()).append(':').append(emitters(level, real, mine, firstBlockDiff));
         long t2 = System.nanoTime();
         return String.format(Locale.ROOT, "light fixcheck (%s vs the level's light, %d inner chunks): %d chunks differ; block: %d sections, %d differ (%d nibbles: level higher %d, lower %d; data presence %d);"
                         + " sky: %d sections, %d differ (%d nibbles: level higher %d, lower %d; data presence %d); relight %.0f ms, compare %.0f ms%s",
                 name, chunksCompared, chunksDiff, sec[0], secDiff[0], nib[0], higher[0], lower[0], presence[0], sec[1], secDiff[1], nib[1], higher[1], lower[1], presence[1],
                 (t1 - t0) / 1e6, (t2 - t1) / 1e6, samples.length() > 0 ? "; first:" + samples : "");
+    }
+
+    /** the light sources around a differing cell: state, emission, the level's and the relight's block light there (what was not propagated) */
+    static String emitters(ServerLevel level, LevelLightEngine real, LevelLightEngine mine, BlockPos at) {
+        StringBuilder b = new StringBuilder();
+        int n = 0;
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+        for (int dx = -15; dx <= 15; dx++)
+            for (int dy = -15; dy <= 15; dy++)
+                for (int dz = -15; dz <= 15; dz++) {
+                    if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > 15) continue;
+                    p.set(at.getX() + dx, at.getY() + dy, at.getZ() + dz);
+                    var st = level.getBlockState(p);
+                    int em = st.getLightEmission();
+                    if (em == 0) continue;
+                    if (n++ < 16)
+                        b.append(String.format(Locale.ROOT, " %s %s em %d real %d new %d;", p.toShortString(), st, em,
+                                real.getLayerListener(LightLayer.BLOCK).getLightValue(p), mine.getLayerListener(LightLayer.BLOCK).getLightValue(p)));
+                }
+        return b.append(" (").append(n).append(" sources)").toString();
     }
 
     /** vanilla's engine from scratch: the order of initializeLight (pre, post) then lightChunk of every chunk, one propagation */

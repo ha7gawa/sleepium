@@ -68,6 +68,17 @@ public final class LightProbe {
         LAT_MAX.accumulateAndGet(kind, nanos, Math::max);
     }
 
+    /** block-light sections created, and of them next to a section holding block light (LightProbeSectionMixin) */
+    static final LongAdder BORN = new LongAdder(), BORN_LIT = new LongAdder();
+
+    public static void sectionBorn() {
+        BORN.increment();
+    }
+
+    public static void sectionBornNextToLight() {
+        BORN_LIT.increment();
+    }
+
     public static void call(int kind) {
         switch (kind) {
             case 0 -> INIT_CALLS.increment();
@@ -82,6 +93,7 @@ public final class LightProbe {
         BATCHES.reset(); TASKS.reset(); PRE.reset(); BFS.reset(); POST.reset();
         MAX_QUEUE.set(0); QUEUE_SUM.set(0);
         for (int i = 0; i < ENG.length(); i++) ENG.set(i, 0);
+        BORN.reset(); BORN_LIT.reset();
         INIT_CALLS.reset(); LIGHT_CALLS.reset(); CHECK_BLOCK.reset(); WAIT_CALLS.reset(); SECTION_STATUS.reset();
         for (int i = 0; i < LAT.length(); i++) LAT.set(i, 0);
         for (int i = 0; i < 3; i++) { LAT_SUM.set(i, 0); LAT_MAX.set(i, 0); }
@@ -128,6 +140,7 @@ public final class LightProbe {
         }
         b.append(String.format(Locale.ROOT, "  calls: initializeLight %d, lightChunk %d, checkBlock %d, updateSectionStatus %d, waitForPendingTasks %d%n",
                 INIT_CALLS.sum(), LIGHT_CALLS.sum(), CHECK_BLOCK.sum(), SECTION_STATUS.sum(), WAIT_CALLS.sum()));
+        b.append(String.format(Locale.ROOT, "  block-light sections created %d, next to a lit section %d (start dark: light from before stays out)%n", BORN.sum(), BORN_LIT.sum()));
         b.append("  latency (call -> future done): ").append(lat(L_INIT, "initializeLight")).append("; ").append(lat(L_LIGHT, "lightChunk"))
                 .append("; ").append(lat(L_WAIT, "waitForPendingTasks"));
         return b.toString();
