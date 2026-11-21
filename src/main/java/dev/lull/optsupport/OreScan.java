@@ -57,7 +57,8 @@ public final class OreScan {
 
     static {
         if (VERIFY) Runtime.getRuntime().addShutdownHook(new Thread(() -> System.out.println("[sleep/featcpu] final: " + summary() + "; "
-                + PaletteCopy.summary() + "; " + RegionBlockVerify.summary()), "featcpu-verify-summary"));
+                + PaletteCopy.summary() + "; " + RegionBlockVerify.summary() + "; "
+                + BiomeFiddleCache.summary()), "featcpu-verify-summary"));
     }
     private final ChunkAccess[] chunks = new ChunkAccess[16];
     private final BitStorage[] data = new BitStorage[16];
