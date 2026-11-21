@@ -54,7 +54,7 @@ public final class StoredRing {
     public static final AtomicLong held = new AtomicLong(), replaced = new AtomicLong(), dropped = new AtomicLong(), released = new AtomicLong(),
             releasedAge = new AtomicLong(), releasedSpace = new AtomicLong(), releasedSync = new AtomicLong(), loadHits = new AtomicLong(),
             scanHits = new AtomicLong(), heldBytes = new AtomicLong(), maxHeldBytes = new AtomicLong(), maxLive = new AtomicLong(), verifyBad = new AtomicLong(),
-            encodeFails = new AtomicLong(), releaseAllNs = new AtomicLong();
+            encodeFails = new AtomicLong(), releaseAllNs = new AtomicLong(), encodeNs = new AtomicLong(), encodeMainNs = new AtomicLong(), encodesMain = new AtomicLong();
 
     /** stores through the IOWorker (bypassing the ring) */
     private final BiFunction<ChunkPos, CompoundTag, CompletableFuture<Void>> through;
@@ -89,11 +89,19 @@ public final class StoredRing {
         }
         if (!holdable(tag)) return null;
         byte[] rec;
+        long t0 = System.nanoTime();
         try {
             rec = ChunkIo.encode(tag, RegionFileVersion.VERSION_DEFLATE);   // 1.20.1 always writes deflate
         } catch (IOException | RuntimeException e) {
             encodeFails.incrementAndGet();
             return null;
+        } finally {
+            long dt = System.nanoTime() - t0;
+            encodeNs.addAndGet(dt);
+            if (Thread.currentThread().getName().equals("Server thread")) {
+                encodeMainNs.addAndGet(dt);
+                encodesMain.incrementAndGet();
+            }
         }
         if (rec.length > CAP / 4) return null;
         synchronized (this) {
@@ -308,8 +316,8 @@ public final class StoredRing {
     }
 
     public static String report() {
-        return String.format("stored ring: held %d (replaced %d, dropped by a later status %d), released %d (age %d, space %d, sync/close %d; hand-overs at sync/close %.1f ms), loads from the ring %d, scans %d, max live %d, held now %.1f MB (peak %.1f MB), encode failures %d",
+        return String.format("stored ring: held %d (replaced %d, dropped by a later status %d), released %d (age %d, space %d, sync/close %d; hand-overs at sync/close %.1f ms), loads from the ring %d, scans %d, max live %d, held now %.1f MB (peak %.1f MB), encode failures %d; encodes %.0f ms, on the server thread %d (%.0f ms)",
                 held.get(), replaced.get(), dropped.get(), released.get(), releasedAge.get(), releasedSpace.get(), releasedSync.get(), releaseAllNs.get() / 1e6, loadHits.get(), scanHits.get(),
-                maxLive.get(), heldBytes.get() / 1048576.0, maxHeldBytes.get() / 1048576.0, encodeFails.get());
+                maxLive.get(), heldBytes.get() / 1048576.0, maxHeldBytes.get() / 1048576.0, encodeFails.get(), encodeNs.get() / 1e6, encodesMain.get(), encodeMainNs.get() / 1e6);
     }
 }
