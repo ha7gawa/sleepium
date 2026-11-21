@@ -272,6 +272,8 @@ public final class Hud {
     // ------------------------------------------------------------------ the mods that cost most now
 
     private static List<String> modLines = List.of();
+    /** the kind a mod's time mostly goes to (ModProfile kinds, same order) */
+    private static final String[] KIND_SHORT = {"blocks", "mobs", "mobs (client)", "drawing mobs", "events", "events (client)", "drawing blocks"};
     private static long modsAt;
 
     private static void mods() {
@@ -286,8 +288,9 @@ public final class Hud {
         if (r == null) return;
         List<String> out = new ArrayList<>();
         for (var m : r) {
-            if (out.size() == 4 || m.total() < 0.01) break;
-            out.add("  " + m.mod() + " " + m.brief());
+            if (out.size() == 5 || m.total() < 0.01) break;
+            int k = m.mainKind();
+            out.add("  " + m.mod() + " " + m.brief() + (k < 0 ? "" : " - " + KIND_SHORT[k]));
         }
         modLines = out.isEmpty() ? List.of("  under 0.01 ms each") : out;
         if (SELF) System.out.println("[sleep/hud] live list: " + modLines);
