@@ -60,6 +60,20 @@ public final class OreScratch implements Function<BlockPos, BlockState> {
 
     /** BulkSectionAccess.getSection */
     public LevelChunkSection getSection(BlockPos pos) {
+        if (OreScan.ON) {
+            // OreScan: the remembered section first. lastSection is only set by an in-range call; the same key is the
+            // same section y, so the same in-range index, and vanilla would return lastSection too
+            long j = SectionPos.asLong(pos);
+            LevelChunkSection last = this.lastSection;
+            if (last != null && this.lastSectionKey == j) {
+                if (OreScan.VERIFY) OreScan.checkSection(last, vanillaSection(pos));
+                return last;
+            }
+        }
+        return vanillaSection(pos);
+    }
+
+    private LevelChunkSection vanillaSection(BlockPos pos) {
         int i = this.level.getSectionIndex(pos.getY());
         if (i >= 0 && i < this.level.getSectionsCount()) {
             long j = SectionPos.asLong(pos);

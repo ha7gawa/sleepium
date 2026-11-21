@@ -319,8 +319,16 @@ public final class OreScan {
         if ((c & ((1 << 16) - 1)) == 0) System.out.println("[sleep/featcpu] " + summary());
     }
 
+    private static final AtomicLong SEC_CHECKS = new AtomicLong(), SEC_BAD = new AtomicLong();
+
+    /** verify: OreScratch's remembered section against BulkSectionAccess's lookup order */
+    public static void checkSection(Object ours, Object vanilla) {
+        SEC_CHECKS.incrementAndGet();
+        if (ours != vanilla && SEC_BAD.incrementAndGet() <= 20) System.out.println("[sleep/featcpu] ORE SECTION MISMATCH");
+    }
+
     public static String summary() {
-        return "ore tests " + TEST_CHECKS.get() + " remembered checked, " + TEST_BAD.get() + " mismatches; ore columns " + COL_CHECKS.get() + " checked, " + COL_BAD.get() + " mismatches; ore scans " + SCAN_CHECKS.get() + " checked ("
+        return "ore sections " + SEC_CHECKS.get() + " remembered checked, " + SEC_BAD.get() + " mismatches; ore tests " + TEST_CHECKS.get() + " remembered checked, " + TEST_BAD.get() + " mismatches; ore columns " + COL_CHECKS.get() + " checked, " + COL_BAD.get() + " mismatches; ore scans " + SCAN_CHECKS.get() + " checked ("
                 + SCAN_CELLS.get() + " cells), " + SCAN_BAD.get() + " mismatches";
     }
 }
