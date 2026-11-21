@@ -4,6 +4,19 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.3.4 - 2026-11-21
+
+Fixes.
+
+- **A crash with Bosses of Mass Destruction** (#12, 1.20.1, seen in FTB Quests next to Hostile Neural Networks): a
+  hook on entity movement asked a mob for its box while the mob was still being built, before the mod had set up its
+  custom hitbox. The hook no longer calls into an entity that is not in a world yet. The crash screen's "disable this
+  one" now switches off both parts that use that hook (block entity sleep and entity sleep); before, it switched off
+  only one and the game kept crashing.
+- **Linux: no ~12 s freeze** when the view area is rebuilt (render distance or dimension change, resource reload) and a
+  faster exit. A chunk buffer closed before its first use deleted buffer 0, and Linux drivers answered every such
+  delete with two GL errors (about 217 000 at render distance 12, ~30 MB of log). Since 1.3.2.
+
 ## 1.3.3 - 2026-11-21
 
 Much faster world generation - still exactly vanilla's terrain - and where each mod's time goes.
