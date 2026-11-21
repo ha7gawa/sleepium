@@ -46,6 +46,7 @@ import net.minecraft.world.level.chunk.status.ChunkStep;
  */
 public final class GenGraph {
     public static final boolean ENABLED = Boolean.getBoolean("lab.opt.GenGraph");
+    static final boolean LOCAL = Boolean.getBoolean("lab.gen.graphLocal");
     private static final Object LOCK = new Object();
     private static final List<ChunkStatus> STATUSES = ChunkStatus.getStatusList();
 
@@ -304,7 +305,15 @@ public final class GenGraph {
             rel.clear();
         }
         if (!run.isEmpty()) {
-            for (Node n : run) GenReactor.post(n.holder.getTicketLevel(), () -> runNode(n));
+            // -Dlab.gen.graphLocal: on a pool worker, ready nodes go to that worker's own deque (LIFO, stolen by idle
+            // workers) - the chunk whose step just finished continues on the core whose caches hold it; otherwise (and
+            // from other threads) the global queues by ticket level
+            if (LOCAL && Thread.currentThread() instanceof dev.lab.runtime.LabRuntime.LabThread) {
+                java.util.concurrent.Executor pool = net.minecraft.Util.backgroundExecutor();
+                for (Node n : run) pool.execute(() -> runNode(n));
+            } else {
+                for (Node n : run) GenReactor.post(n.holder.getTicketLevel(), () -> runNode(n));
+            }
             run.clear();
         }
     }
