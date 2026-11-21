@@ -54,6 +54,7 @@ public abstract class LightProbeThreadedMixin implements LightProbe.Engine {
     @Inject(method = "initializeLight", at = @At("RETURN"))
     private void sleep$init(ChunkAccess chunk, boolean lit, CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
         LightProbe.call(0);
+        if (dev.lull.LightTrace.inChunk(chunk.getPos().x, chunk.getPos().z)) dev.lull.LightTrace.log("initializeLight submitted " + chunk.getPos() + " lightEnabled " + lit);
         long t = System.nanoTime();
         cir.getReturnValue().whenComplete((c, e) -> LightProbe.latency(LightProbe.L_INIT, System.nanoTime() - t));
     }
@@ -61,6 +62,7 @@ public abstract class LightProbeThreadedMixin implements LightProbe.Engine {
     @Inject(method = "lightChunk", at = @At("RETURN"))
     private void sleep$light(ChunkAccess chunk, boolean lit, CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
         LightProbe.call(1);
+        if (dev.lull.LightTrace.inChunk(chunk.getPos().x, chunk.getPos().z)) dev.lull.LightTrace.log("lightChunk submitted " + chunk.getPos() + " lit " + lit);
         long t = System.nanoTime();
         cir.getReturnValue().whenComplete((c, e) -> LightProbe.latency(LightProbe.L_LIGHT, System.nanoTime() - t));
     }
@@ -75,10 +77,12 @@ public abstract class LightProbeThreadedMixin implements LightProbe.Engine {
     @Inject(method = "checkBlock", at = @At("HEAD"))
     private void sleep$check(BlockPos pos, CallbackInfo ci) {
         LightProbe.call(2);
+        if (dev.lull.LightTrace.in(pos)) dev.lull.LightTrace.log("checkBlock submitted " + pos.toShortString());
     }
 
     @Inject(method = "updateSectionStatus", at = @At("HEAD"))
     private void sleep$status(SectionPos pos, boolean empty, CallbackInfo ci) {
         LightProbe.call(4);
+        if (dev.lull.LightTrace.inSection(pos.asLong())) dev.lull.LightTrace.log("updateSectionStatus submitted " + pos + " empty " + empty);
     }
 }

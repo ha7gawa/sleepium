@@ -17,6 +17,7 @@ public abstract class LightProbeBlockMixin {
     @Inject(method = "propagateLightSources", at = @At("HEAD"))
     private void sleep$head(ChunkPos pos, CallbackInfo ci) {
         sleep$src = System.nanoTime();
+        if (dev.lull.LightTrace.inChunk(pos.x, pos.z)) dev.lull.LightTrace.log("propagateLightSources run " + pos);
     }
 
     @Inject(method = "propagateLightSources", at = @At("RETURN"))

@@ -26,6 +26,18 @@ public abstract class LightProbeSectionMixin {
     @Shadow @Final protected DataLayerStorageMap<?> updatingSectionData;
     @Shadow @Final protected LongSet toRemove;
 
+    @Inject(method = "updateSectionStatus", at = @At("HEAD"))
+    private void sleep$statusRun(long sectionPos, boolean isEmpty, CallbackInfo ci) {
+        if ((Object) this instanceof BlockLightSectionStorage && dev.lull.LightTrace.inSection(sectionPos))
+            dev.lull.LightTrace.log("updateSectionStatus run " + SectionPos.of(sectionPos) + " empty " + isEmpty);
+    }
+
+    @Inject(method = "setLightEnabled", at = @At("HEAD"))
+    private void sleep$enabledRun(long sectionPos, boolean on, CallbackInfo ci) {
+        if ((Object) this instanceof BlockLightSectionStorage && dev.lull.LightTrace.inChunk(SectionPos.x(sectionPos), SectionPos.z(sectionPos)))
+            dev.lull.LightTrace.log("setLightEnabled run " + SectionPos.x(sectionPos) + "," + SectionPos.z(sectionPos) + " " + on);
+    }
+
     @Inject(method = "initializeSection", at = @At("HEAD"))
     private void sleep$born(long sectionPos, CallbackInfo ci) {
         if (!((Object) this instanceof BlockLightSectionStorage) || toRemove.contains(sectionPos)) return;
