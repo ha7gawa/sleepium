@@ -44,6 +44,25 @@ public final class ChunkIo {
     /** a pending entry's tag once its bytes are made (the tree is let go); never written or read as a tag */
     public static final CompoundTag DROPPED = new CompoundTag();
 
+    /**
+     * A store whose region record is already made (StoredRing's release: the held bytes go to the IOWorker as they are,
+     * no decode and encode again). Stored through IOWorker.store like a tag, the pending entry holds it until the writer
+     * takes its bytes; loads and scans of the entry read the bytes. Never written or read as a tag.
+     */
+    public static final class Encoded extends CompoundTag {
+        public final byte[] record;
+
+        public Encoded(byte[] record) {
+            this.record = record;
+        }
+    }
+
+    /** the record of a pending entry's data, if it is one already made: DROPPED (the entry's bytes) or an Encoded store */
+    public static byte[] record(Entry e, CompoundTag data) {
+        if (data == DROPPED) return e.sleep$bytes();
+        return data instanceof Encoded enc ? enc.record : null;
+    }
+
     public static final AtomicLong encodedPool = new AtomicLong(), encodedInline = new AtomicLong(), stale = new AtomicLong(),
             batches = new AtomicLong(), written = new AtomicLong(), cleared = new AtomicLong(), maxBatch = new AtomicLong(),
             pendingReads = new AtomicLong();
@@ -67,11 +86,17 @@ public final class ChunkIo {
 
         /** writes n chunks (bytes as {@link #encode} makes them): sectors, one sync, the header, one sync, then the frees */
         void sleep$writeBatch(ChunkPos[] pos, byte[][] data, int n) throws IOException;
+
+        /** ChunkIoWriter's cadence: a round if one is due; true while something is still not durable */
+        boolean sleep$commitDue(long now) throws IOException;
     }
 
     /** RegionFileStorage, through ChunkIoStorageMixin. */
     public interface Storage {
         RegionFile sleep$region(ChunkPos pos) throws IOException;
+
+        /** the open region files (the storage's cache) */
+        Iterable<RegionFile> sleep$regions();
     }
 
     /** a region file's chunk record: 4 bytes length, 1 byte version, the compressed NBT — RegionFile.ChunkBuffer's bytes */
@@ -190,7 +215,7 @@ public final class ChunkIo {
 
     public static String report() {
         long b = batches.get();
-        return String.format("chunk io: written %d in %d batches (%.1f per batch, max %d), cleared %d; encoded on the pool %d, on the IOWorker %d, stale %d; reads of pending entries %d",
+        return ChunkIoWriter.report() + "; " + String.format("chunk io: written %d in %d batches (%.1f per batch, max %d), cleared %d; encoded on the pool %d, on the IOWorker %d, stale %d; reads of pending entries %d",
                 written.get(), b, b == 0 ? 0 : written.get() / (double) b, maxBatch.get(), cleared.get(), encodedPool.get(), encodedInline.get(), stale.get(), pendingReads.get());
     }
 

@@ -38,7 +38,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * region file. pendingWrites and its entries are touched on this IOWorker's mailbox thread only, as in vanilla.
  */
 @Mixin(IOWorker.class)
-public abstract class ChunkIoWorkerMixin {
+public abstract class ChunkIoWorkerMixin implements dev.lull.optsupport.ChunkIoWriter.Worker {
     @Shadow @Final private static Logger LOGGER;
     @Shadow @Final private AtomicBoolean shutdownRequested;
     @Shadow @Final private ProcessorMailbox<StrictQueue.IntRunnable> mailbox;
@@ -51,10 +51,36 @@ public abstract class ChunkIoWorkerMixin {
     @Unique private final Map<Long, Map<String, String>> sleep$verify = dev.lull.optsupport.MixinInit.mapIf(ChunkIo.VERIFY);   // (no jump in a mixin initialiser on 1.20.1)
     /** the worker's storage kind ("chunk", "entities", "poi"): its name on 1.20.1 (1.21: storage.info().type()) */
     @Unique private String sleep$type = "?";
+    /** ChunkIoWriter's cadence: region files of this storage are not fully durable; a commit task is in the mailbox */
+    @Unique private volatile boolean sleep$uncommitted;
+    @Unique private final AtomicBoolean sleep$commitQueued = new AtomicBoolean();
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void sleep$named(java.nio.file.Path folder, boolean sync, String workerName, CallbackInfo ci) {
         sleep$type = workerName;
+        dev.lull.optsupport.ChunkIoWriter.register(this);
+    }
+
+    @Override
+    public void sleep$commitDue() {
+        if (!sleep$uncommitted || shutdownRequested.get() || !sleep$commitQueued.compareAndSet(false, true)) return;
+        mailbox.tell(new StrictQueue.IntRunnable(1, this::sleep$commitTask));   // BACKGROUND: after loads and stores
+    }
+
+    /** mailbox thread: a round for every open region file whose cadence is over */
+    @Unique
+    private void sleep$commitTask() {
+        sleep$commitQueued.set(false);
+        boolean pending = false;
+        long now = System.nanoTime();
+        for (RegionFile r : ((ChunkIo.Storage) (Object) this.storage).sleep$regions()) {
+            try {
+                pending |= ((ChunkIo.Region) r).sleep$commitDue(now);
+            } catch (IOException e) {
+                LOGGER.error("ChunkIo: committing region file failed", e);
+            }
+        }
+        sleep$uncommitted = pending;
     }
 
     @Shadow
@@ -70,7 +96,7 @@ public abstract class ChunkIoWorkerMixin {
     /** counted before vanilla queues the store: its task may run, and post the writer, before store() returns */
     @Inject(method = "store", at = @At("HEAD"))
     private void sleep$count(ChunkPos pos, CompoundTag tag, CallbackInfoReturnable<CompletableFuture<Void>> cir) {
-        if (tag != null) sleep$inFlight.incrementAndGet();
+        if (tag != null && !(tag instanceof ChunkIo.Encoded)) sleep$inFlight.incrementAndGet();
     }
 
     /** after vanilla queued the store (FOREGROUND, FIFO): the encode's result is queued behind it, never before */
@@ -79,6 +105,16 @@ public abstract class ChunkIoWorkerMixin {
         ChunkIo.watch(this.sleep$type + " store " + pos + (tag == null ? " (clear)" : ""), cir.getReturnValue());
         if (tag == null) {
             if (sleep$verify != null) sleep$verify.remove(pos.toLong());
+            return;
+        }
+        if (tag instanceof ChunkIo.Encoded enc) {   // already made (StoredRing): the writer takes its bytes as they are
+            if (sleep$verify != null) {
+                try {
+                    sleep$verify.put(pos.toLong(), ChunkIo.canonical(ChunkIo.decode(enc.record)));
+                } catch (IOException e) {
+                    LOGGER.error("ChunkIo verify: a made record of {} does not decode", pos, e);
+                }
+            }
             return;
         }
         if (sleep$verify != null) sleep$verify.put(pos.toLong(), ChunkIo.canonical(tag));
@@ -129,7 +165,8 @@ public abstract class ChunkIoWorkerMixin {
                 if (o instanceof ChunkIo.Entry e) {
                     ChunkIo.pendingReads.incrementAndGet();
                     CompoundTag data = e.sleep$data();
-                    if (data == ChunkIo.DROPPED) return Either.left(Optional.of(ChunkIo.decode(e.sleep$bytes())));
+                    byte[] rec = ChunkIo.record(e, data);
+                    if (rec != null) return Either.left(Optional.of(ChunkIo.decode(rec)));
                     // 1.20.1's vanilla hands out the pending tag itself (1.21: PendingStore.copyData). Kept a copy: the
                     // pool may be encoding this very tree, and the loader writes into it (upgradeChunkTag's "__context"
                     // put / remove on a background thread). Same content; only that aliasing race of vanilla is gone.
@@ -154,7 +191,8 @@ public abstract class ChunkIoWorkerMixin {
                 Object o = this.pendingWrites.get(chunkPos);
                 if (o instanceof ChunkIo.Entry e) {
                     CompoundTag data = e.sleep$data();
-                    if (data == ChunkIo.DROPPED) ChunkIo.scan(e.sleep$bytes(), visitor);
+                    byte[] rec = ChunkIo.record(e, data);
+                    if (rec != null) ChunkIo.scan(rec, visitor);
                     else if (data != null) data.acceptAsRoot(visitor);
                 } else {
                     this.storage.scanChunk(chunkPos, visitor);
@@ -180,7 +218,7 @@ public abstract class ChunkIoWorkerMixin {
             Map.Entry<ChunkPos, Object> me = it.next();
             ChunkIo.Entry e = (ChunkIo.Entry) me.getValue();
             CompoundTag data = e.sleep$data();
-            if (data != null && data != ChunkIo.DROPPED) continue;   // its encode is on the pool
+            if (data != null && data != ChunkIo.DROPPED && !(data instanceof ChunkIo.Encoded)) continue;   // its encode is on the pool
             it.remove();
             pos.add(me.getKey());
             entries.add(e);
@@ -217,7 +255,7 @@ public abstract class ChunkIoWorkerMixin {
                 for (int i : group) {
                     ChunkIo.Entry e = entries.get(i);
                     CompoundTag tag = e.sleep$data();
-                    byte[] bytes = tag == ChunkIo.DROPPED ? e.sleep$bytes() : null;
+                    byte[] bytes = tag == null ? null : ChunkIo.record(e, tag);
                     if (tag == null) {   // a store of null: the chunk is cleared, as vanilla does
                         try {
                             region.clear(pos.get(i));
@@ -255,6 +293,7 @@ public abstract class ChunkIoWorkerMixin {
                 }
             }
         }
+        if (dev.lull.optsupport.ChunkIoWriter.CADENCE_MS > 0) sleep$uncommitted = true;
         if (dev.lull.IoScout.ON) dev.lull.IoScout.batch(this.sleep$type, n, System.nanoTime() - t0, this.pendingWrites.size());
     }
 

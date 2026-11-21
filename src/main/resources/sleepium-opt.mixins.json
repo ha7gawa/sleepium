@@ -173,6 +173,7 @@
     "ChunkIoPendingMixin",
     "ChunkIoRegionMixin",
     "ChunkIoStorageMixin",
+    "StoredRingMixin",
     "ScoutLevelMixin",
     "ScoutChunkMixin",
     "ScoutBlockEntityMixin",

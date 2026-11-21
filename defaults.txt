@@ -196,6 +196,12 @@
 -Dlab.opt.LightSnapshotMixin=true
 -Dlab.opt.AllocTrim=true
 -Dlab.opt.ChunkIo=true
+# region files written through to the drive (vanilla's DSYNC, contiguous records in one write) instead of two
+# FlushFileBuffers per batch: vanilla's durability and world size; world NVMe 42 -> 11 % busy while generating (notes/87)
+-Dlab.chunkio.writeThrough=true
+# early proto chunks (before carvers: regenerated identically from the seed) held as their region records in a small
+# ring instead of written and re-written at the generation edge: -42 % chunk records, Pi stick 19 -> 14 % busy (notes/85, 87)
+-Dlab.opt.StoredRingMixin=true
 -Dlab.opt.ParallelWorldgenMixin=true
 -Dlab.opt.RenderCacheBlockEntityMixin=true
 -Dlab.opt.RenderCacheClockMixin=true
