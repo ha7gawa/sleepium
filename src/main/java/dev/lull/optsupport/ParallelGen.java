@@ -42,6 +42,16 @@ public final class ParallelGen {
     private static final Object CLAIMS_LOCK = new Object();
     private static final LongOpenHashSet CLAIMED = new LongOpenHashSet();
     private static final ArrayList<FeatureJob> WAITING = new ArrayList<>();
+    /**
+     * Local window hand-out (default; -Dlab.gen.featureFifo=true restores the FIFO scan above): a waiting job is kept by
+     * its chunk; when a window is released only the jobs within 2 chunks of it can become startable, checked oldest
+     * first; a new job starts at once if its window is free. No reservations: with GenGraph whole areas become ready for
+     * FEATURES together, and the FIFO's reserved windows let only ~1.5 jobs run at once (a convoy). Starvation is
+     * bounded - each chunk has FEATURES once, and a release re-checks its neighbours oldest first.
+     */
+    private static final boolean FIFO = Boolean.getBoolean("lab.gen.featureFifo");
+    private static final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<FeatureJob> WAITING_AT = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+    private static long seq;
 
     private ParallelGen() {}
 
@@ -65,8 +75,19 @@ public final class ParallelGen {
         FeatureJob job = new FeatureJob(pos.x, pos.z, vanilla, t0);
         ArrayList<FeatureJob> start;
         synchronized (CLAIMS_LOCK) {
-            WAITING.add(job);
-            start = startable();
+            job.seq = seq++;
+            if (FIFO) {
+                WAITING.add(job);
+                start = startable();
+            } else {
+                start = new ArrayList<>(1);
+                if (windowFree(job, CLAIMED)) {
+                    claim(job);
+                    start.add(job);
+                } else {
+                    WAITING_AT.put(ChunkPos.asLong(job.x, job.z), job);
+                }
+            }
         }
         if (!start.contains(job)) {
             WAITED.increment();
@@ -95,7 +116,7 @@ public final class ParallelGen {
 
     public static int waiting() {
         synchronized (CLAIMS_LOCK) {
-            return WAITING.size();
+            return WAITING.size() + WAITING_AT.size();
         }
     }
 
@@ -114,6 +135,7 @@ public final class ParallelGen {
         final Supplier<CompletableFuture<ChunkAccess>> body;
         final CompletableFuture<ChunkAccess> result = new CompletableFuture<>();
         final long t0;
+        long seq;
         boolean waited;
 
         FeatureJob(int x, int z, Supplier<CompletableFuture<ChunkAccess>> body, long t0) {
@@ -142,7 +164,7 @@ public final class ParallelGen {
             synchronized (CLAIMS_LOCK) {
                 for (int dx = -1; dx <= 1; dx++)
                     for (int dz = -1; dz <= 1; dz++) CLAIMED.remove(ChunkPos.asLong(x + dx, z + dz));
-                start = startable();
+                start = FIFO ? startable() : startableNear(x, z);
             }
             startAll(start);
             // complete after releasing: dependants scheduled by the completion may want this window
@@ -172,6 +194,32 @@ public final class ParallelGen {
         return out;
     }
 
+    private static void claim(FeatureJob j) {
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = -1; dz <= 1; dz++) CLAIMED.add(ChunkPos.asLong(j.x + dx, j.z + dz));
+    }
+
+    /** Under CLAIMS_LOCK: the waiting jobs whose windows touch the window released at (x, z), oldest first. */
+    private static ArrayList<FeatureJob> startableNear(int x, int z) {
+        ArrayList<FeatureJob> cand = null;
+        for (int dx = -2; dx <= 2; dx++)
+            for (int dz = -2; dz <= 2; dz++) {
+                FeatureJob j = WAITING_AT.get(ChunkPos.asLong(x + dx, z + dz));
+                if (j != null) (cand = cand == null ? new ArrayList<>(4) : cand).add(j);
+            }
+        ArrayList<FeatureJob> out = new ArrayList<>(2);
+        if (cand == null) return out;
+        if (cand.size() > 1) cand.sort((a, b) -> Long.compare(a.seq, b.seq));
+        for (FeatureJob j : cand) {
+            if (windowFree(j, CLAIMED)) {
+                claim(j);
+                WAITING_AT.remove(ChunkPos.asLong(j.x, j.z));
+                out.add(j);
+            }
+        }
+        return out;
+    }
+
     private static boolean windowFree(FeatureJob j, LongOpenHashSet set) {
         for (int dx = -1; dx <= 1; dx++)
             for (int dz = -1; dz <= 1; dz++) if (set.contains(ChunkPos.asLong(j.x + dx, j.z + dz))) return false;
@@ -186,7 +234,7 @@ public final class ParallelGen {
     public static String report() {
         int w;
         synchronized (CLAIMS_LOCK) {
-            w = WAITING.size();
+            w = WAITING.size() + WAITING_AT.size();
         }
         return String.format(java.util.Locale.ROOT, "parallel worldgen: offloaded %d steps, %d feature jobs, %d waited for a window, %d still waiting",
                 OFFLOADED.sumThenReset(), FEATURE_JOBS.sumThenReset(), WAITED.sumThenReset(), w);

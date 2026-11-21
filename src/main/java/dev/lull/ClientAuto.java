@@ -613,6 +613,10 @@ public final class ClientAuto {
         boolean idle = d != null && mc.levelRenderer.hasRenderedAllSections() && d.getToUpload() == 0 && d.getToBatchCount() == 0
                 && (!ALL_CHUNKS || allChunksIn(mc));
         stableTicks = idle ? stableTicks + 1 : 0;
+        if (phase == Phase.TP_WAIT_DONE) {   // the teleport's client side: all chunks received; first idle mesher (before the 2 s of stability)
+            if (tpClientAllAt < 0 && allChunksIn(mc)) tpClientAllAt = since(tpStart);
+            if (tpIdleAt < 0 && idle) tpIdleAt = since(tpStart);
+        }
         return stableTicks >= 40;
     }
 
@@ -906,10 +910,27 @@ public final class ClientAuto {
                 if ((STOP_IN_TP < 0 || tpIndex < TP.length - 1) && (queueBusy(mc) || since(phaseStart) > 5)) enter2Done();
             }
             case TP_WAIT_DONE -> {
+                // the integrated server's side: when every chunk within the render distance of the target is FULL there
+                // (asked on the server thread every 10 ticks; the time is when the asking tick ran) - generation vs meshing
+                var srv = mc.getSingleplayerServer();
+                if (srv != null && tpServerFullAt < 0 && ticks % 10 == 0) {
+                    int[] tp = TP[tpIndex];
+                    int r = mc.options.getEffectiveRenderDistance();
+                    double t = since(tpStart);
+                    srv.execute(() -> {
+                        var cs = srv.overworld().getChunkSource();
+                        int n = 0;
+                        for (int dx = -r; dx <= r; dx++)
+                            for (int dz = -r; dz <= r; dz++) if (cs.getChunkNow((tp[0] >> 4) + dx, (tp[1] >> 4) + dz) != null) n++;
+                        if (n == (2 * r + 1) * (2 * r + 1) && tpServerFullAt < 0) tpServerFullAt = t;
+                    });
+                }
                 if (meshedStable(mc) || since(phaseStart) > 60) {
                     int[] p = TP[tpIndex];
                     log(String.format(Locale.ROOT, "teleport %d to (%d, %d): terrain generated + meshed in %.1f s (%s)%s", tpIndex + 1, p[0], p[1],
-                            since(tpStart) - 2.0, sectionStats(mc), since(phaseStart) > 60 ? " TIMEOUT" : ""));
+                            since(tpStart) - 2.0, sectionStats(mc), since(phaseStart) > 60 ? " TIMEOUT" : "")
+                            + String.format(Locale.ROOT, "; server: all chunks in the render distance FULL at %.1f s; client: all chunks received at %.1f s, meshing idle at %.1f s",
+                                    tpServerFullAt - 2.0, tpClientAllAt - 2.0, tpIdleAt - 2.0));
                     tpIndex++;
                     if (tpIndex < TP.length) enter(Phase.RECORD);
                     else enter(Phase.FINISH);
@@ -954,9 +975,14 @@ public final class ClientAuto {
     }
 
     private static long tpStart;
+    private static volatile double tpServerFullAt = -1;
+    private static double tpClientAllAt = -1, tpIdleAt = -1;
 
     private static void enter2Done() {
         tpStart = phaseStart;   // measured from the teleport command
+        tpServerFullAt = -1;
+        tpClientAllAt = -1;
+        tpIdleAt = -1;
         phase = Phase.TP_WAIT_DONE;
         stableTicks = 0;
     }
