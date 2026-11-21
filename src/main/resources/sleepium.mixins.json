@@ -47,6 +47,8 @@
     "IoScoutRegionMixin",
     "IoScoutStorageMixin",
     "IoScoutSaveMixin",
+    "IoScoutBitmapMixin",
+    "IoScoutChunkMapMixin",
     "NetCoalesceClientMixin",
     "NetStatsSendMixin",
     "NetStatsBytesMixin",
