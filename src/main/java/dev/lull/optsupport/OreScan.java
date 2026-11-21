@@ -1,6 +1,6 @@
 package dev.lull.optsupport;
 
-import dev.lull.opt.ChunkHeightmapsAccessor;
+import dev.lull.opt.HeightmapsChunkAccessor;
 import dev.lull.opt.HeightmapDataAccessor;
 import java.util.BitSet;
 import java.util.concurrent.atomic.AtomicLong;
@@ -58,7 +58,7 @@ public final class OreScan {
     static {
         if (VERIFY) Runtime.getRuntime().addShutdownHook(new Thread(() -> System.out.println("[sleep/featcpu] final: " + summary() + "; "
                 + PaletteCopy.summary() + "; " + RegionBlockVerify.summary() + "; "
-                + BiomeFiddleCache.summary()), "featcpu-verify-summary"));
+                + BiomeFiddleCache.summary() + "; " + BiomeFilterFast.summary()), "featcpu-verify-summary"));
     }
     private final ChunkAccess[] chunks = new ChunkAccess[16];
     private final BitStorage[] data = new BitStorage[16];
@@ -161,7 +161,7 @@ public final class OreScan {
         int m = UNKNOWN;
         ChunkAccess c = level.getChunk(cx, cz);
         if (c.getClass() == ProtoChunk.class && c.getPersistedStatus().isOrAfter(net.minecraft.world.level.chunk.status.ChunkStatus.CARVERS)) {
-            Heightmap hm = ((ChunkHeightmapsAccessor) c).sleep$heightmaps().get(Heightmap.Types.OCEAN_FLOOR_WG);
+            Heightmap hm = ((HeightmapsChunkAccessor) c).sleep$heightmaps().get(Heightmap.Types.OCEAN_FLOOR_WG);
             if (hm != null && hm.getClass() == Heightmap.class) {
                 HeightmapDataAccessor a = (HeightmapDataAccessor) hm;
                 BitStorage d = a.sleep$data();
@@ -182,7 +182,7 @@ public final class OreScan {
         chunks[s] = c;
         data[s] = null;
         if (c.getClass() == ProtoChunk.class) {
-            Heightmap hm = ((ChunkHeightmapsAccessor) c).sleep$heightmaps().get(Heightmap.Types.OCEAN_FLOOR_WG);
+            Heightmap hm = ((HeightmapsChunkAccessor) c).sleep$heightmaps().get(Heightmap.Types.OCEAN_FLOOR_WG);
             if (hm != null && hm.getClass() == Heightmap.class) {
                 HeightmapDataAccessor a = (HeightmapDataAccessor) hm;
                 data[s] = a.sleep$data();

@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 /** OreScan: a chunk's heightmaps as ChunkAccess.getHeight reads them (no priming). */
 @Mixin(ChunkAccess.class)
-public interface ChunkHeightmapsAccessor {
+public interface HeightmapsChunkAccessor {
     @Accessor("heightmaps")
     Map<Heightmap.Types, Heightmap> sleep$heightmaps();
 }
