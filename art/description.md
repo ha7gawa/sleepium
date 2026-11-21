@@ -38,19 +38,52 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
-## New in 1.3.2: smooth frames on Intel graphics
+## New in 1.3.2: smooth frames on Intel graphics, tested on five kinds of machines
 
 - **No more quarter-second freezes on Intel integrated graphics.** Some Intel drivers queued dozens of frames ahead
   of the graphics card and then held the game until it caught up - several times a second, even standing still.
   Sleepium now checks once per PC whether the driver does that and, where it does, keeps the game at most 3 frames
-  ahead. Intel N100, the slowest 1 % of frames: **257 → 16 ms**. AMD and NVIDIA cards are left as they were.
+  ahead (the choice is remembered). Intel N100, the slowest 1 % of frames: **257 → 16 ms**. AMD and NVIDIA cards are
+  left as they were.
 - **Fixed:** the machine cost check from 1.3.1 could decide too early with very many machines of one kind.
 - The self-check of Sleepium's extra render threads now covers GeckoLib mobs and GPU-drawn items too.
 
-Tested before release on five machines, both versions: an RTX 4070 SUPER desktop, an Intel N100 mini PC, two
-4-core Xeon PCs with a Radeon RX 570 and an HD 7870, and a Raspberry Pi 4 (Linux, ARM) as client and server. Every
-exactness scene gives the same world as without Sleepium, frames identical to 1.3.1 bit for bit, frame rates checked
-against 1.3.1 on each machine, and a world with 562 kinds of modded machines.
+### Tested on five kinds of machines
+
+This release was checked on a gaming PC, a low-power mini PC, two 2012 workstation PCs with Radeon cards and a
+Raspberry Pi 4 - Windows and Linux, x86 and ARM, NVIDIA, Intel, AMD and the Pi's own graphics. Numbers from this round
+of testing (1.3.1 and 1.3.2 measure the same on these scenes; no other mods installed):
+
+**Frames per second, client (higher is better)**
+
+| Machine | Scene | Without Sleepium | With Sleepium |
+|---|---|---|---|
+| Xeon E3-1270 v2 (4 cores, 2012) + Radeon RX 570 | flying over the world | 69 | **294** (x4.3) |
+| Xeon E3-1230 v2 (4 cores, 2012) + Radeon HD 7870 | flying over the world | 60 | **241** (x4.0) |
+| 16-thread desktop + RTX 4070 SUPER, 1.21.1 | teleporting into new terrain | 558 | **2 208-2 337** (x4) |
+
+On the old Xeons the slowest frames also went from 40-47 ms to 18-22 ms. On the Intel N100 (UHD Graphics) 1.3.2's fix
+takes the slowest frames from 257 ms (1.3.1) to 16 ms; in flight Sleepium's own terrain drawing gives it 140-144 fps
+where the game's way gives 105.
+
+**Server, milliseconds per tick (lower is better), Forge 1.20.1 dedicated server**
+
+| Scene | Raspberry Pi 4 without / with | Xeon PC without / with |
+|---|---|---|
+| many dropped items | 363 / **22** | 96-103 / **6.5-6.7** |
+| mobs | 39.1 / **21.2** | 19.4 / **11.3** |
+| villagers | 41.4 / **24.7** | 17.9-18.3 / **12.8-13.4** |
+| hoppers | 11.8 / **3.1** | 3.8-4.3 / **0.6-0.8** |
+| furnaces | 4.0 / 4.0 | 1.1 / **0.8** |
+| pistons | about the same | 5.2 / **4.4** |
+| redstone | about the same | 11.3 / 11.0 |
+
+**Modded machines:** a world with 562 kinds of machines from 13 mods (Create, Mekanism, Immersive Engineering,
+Industrial Foregoing, Thermal, ...) x 32 each runs at 17.4 ms a tick, 16.9 without Sleepium - no slowdown from
+Sleepium's checks (1.3.0 took 150 ms here).
+
+**Exactness:** 23 test scenes per version (mobs, villagers, redstone, pistons, hoppers, items, carts, fluids, crops and
+more) give the same world as without Sleepium, bit for bit; the picture is identical to 1.3.1 bit for bit.
 
 ## New in 1.3.1: fixes for mod packs
 
