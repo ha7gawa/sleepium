@@ -309,15 +309,18 @@ public final class SurfaceWriter {
                 }
             }
             if (STATS) stat(i2, y - k2 + 1, j2);
-            ctx.updateY(i2, y - k2 + 1, j2, x, y, z);
             BlockState r;
             if (tree != null) {
                 if (!treeColumn) {
                     tree.column();
                     treeColumn = true;
                 }
-                r = tree.apply(start, i2, y - k2 + 1, x, y, z);
+                SurfaceTree.Node[] p = tree.prepare(start, y, i2, y - k2 + 1, j2);
+                if (p == null) continue;   // the pruned tree evaluates nothing: null, and no updateY (see SurfaceTree)
+                ctx.updateY(i2, y - k2 + 1, j2, x, y, z);
+                r = SurfaceTree.eval(p, start, x, y, z);
             } else {
+                ctx.updateY(i2, y - k2 + 1, j2, x, y, z);
                 r = rule.tryApply(x, y, z);
             }
             if (STATS && r == null) S_NULL.increment();
