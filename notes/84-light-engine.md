@@ -177,3 +177,143 @@ Built as designed above (stage 2). Commit path and verify path:
    when light is the ceiling (pregeneration at >= 400 chunks/s) or in big relights.
 4. 1.20.1: the same engine (1.20's light engine is the same design: LightEngine / QueueEntry, ThreadedLevelLightEngine
    with the sorter) - port after 1.21.1 is settled (one version first).
+
+## 11-21 evening: LightDirect toward a 1.3.4 default (agent, lab-light-1.21.1)
+Boxes: Xeon .103 (E3-1230 v2, 4c/8t) and the N100 (4c/4t; a NeoForge 21.1.251 server copied from .103's
+C:\mcbench\neo121 to the N100's C:\mcbench\neo121 - it had none). Same jar per series, variants interleaved, genbench
+32 x 32 (r1, r2 after a 16 x 16 warm-up), -Dlab.light.probe + -Dlab.light.fixcheck in every genbench run.
+No 16-thread number: the host was not used (still missing).
+
+### Priority: LightLanes (vanilla's sorter order without its round trips)
+Found on the N100: plain FIFO LightDirect is NOT always exact. fixcheck differences in 3 of ~19 FIFO runs, all in the
+N100's warm-up area (cold JIT, the most backlog): ngd3 2 chunks / 269 nibbles, n9f1 1 chunk / 688, hf8 4 chunks / 880 -
+block light only, always the level LOWER than from-scratch, by exactly 1 over a whole light field. hf8's dump (new:
+LightCheck lists the light sources within 15 of the first difference): flowing lava (64089,-22,64124 level=4, emission
+15) whose own cell holds 14 - that source was never propagated (lit only by its neighbour). Base: 0 in 17+ runs (and the
+previous agent's runs). Mechanism not pinned down to the line; what FIFO changes is the order vanilla's sorter enforces
+by priority: updateSectionStatus / queueSectionData / retainData / updateChunkStatus are submitted at queue level 0 (they
+overtake everything queued, even the same chunk's earlier tasks), the rest by the chunk's ticket level.
+- New optsupport/LightLanes (LightDirect's default now; -Dlab.light.prio=false = the old FIFO): one lock-free queue per
+  queue level (ChunkTaskPriorityQueue.PRIORITY_LEVEL_COUNT), the level read from the sorter message's own supplier at
+  submission; each submitted task tells the light mailbox one drain, a drain runs the first task of the lowest
+  non-empty level. Same lambdas, still one at a time on the light actor, no sorter round trips. Not copied from the
+  sorter: its per-chunk grouping within a level and re-sorting when a chunk's level changes while queued.
+- **LightLanes does NOT fix it.** Warm-up hunts on the N100 (fresh server each run, the 16 x 16 warm-up area only, the
+  case where FIFO failed), all runs of the evening counted (genbench warm areas included):
+  | variant (N100) | runs with differences |
+  |---|---|
+  | base | **0 / 22** |
+  | LightDirect FIFO | 3 / 16 (ngd3, n9f1, hf8) |
+  | LightLanes | 5 / 52 (hp13, hp15, hp17, nvp3, ntp1: 1-10 chunks, 100-880 nibbles; the later np1-10 0 / 10) |
+  | FIFO + ownThread | 0 / 3 |
+  | LightLanes + ownThread | **0 / 15** (+ Nether and End genbench: 0) |
+  | Xeon .103, every variant | 0 / ~40 |
+  Without its own thread LightDirect differs in ~12 % of N100 warm-ups (8 / 68), base never (0 / 22): a real effect. With
+  ownThread 0 / 18 (P = 0.88^18 = 10 % if the rate were the same) - NOT proof, and the mechanism is unknown.
+- What the hits look like: always block light, always the level lower, by exactly 1 over a field, always near lava
+  (springs and lakes, y -20 .. -55); a flowing-lava cell holding 14 in some hits (never propagated as a source), in
+  others every source at 15 and the field one step short (a path one block longer - as if a cell was opaque when the
+  light passed and nothing re-checked it). Probes: (1) LightProbeSectionMixin - block-light sections created next to
+  an already-lit section (start dark, vanilla never pulls light in): 0 in every run; (2) LightProbeCheckNodeMixin -
+  checkNode of a light source with its section not stored or light off: only in chunks before LIGHT (normal: features
+  writing into a neighbour at INITIALIZE_LIGHT; that chunk's lightChunk scans its sources later), never after LIGHT;
+  (3) -Dlab.light.trace=box (every checkBlock submitted, checkNode run with the state it read, section status, light
+  enabled, sources propagated in a box, in order and per thread): at the hf8 / nvp3 spot (lava spring 64087,-22,64124,
+  seed 20260924, warm-up area) every lava checkNode ran with the section stored, light on, stored 14 -> emission 15
+  (correct); ntp1's hit was elsewhere (a lava lake at y -55). So no check is skipped; the leading hypothesis is a
+  read race: the light pass reads blocks of chunks whose neighbours' FEATURES still write into them (PalettedContainer
+  reads during a resize can return a wrong state for a cell nobody changed - no checkBlock ever follows for it). Vanilla
+  has the same race but its sorter delays light ~1 s behind generation, so the passes rarely overlap the writes;
+  LightDirect lights immediately. Why ownThread would avoid it is open (smaller batches: 5-6 tasks instead of 15-126,
+  shorter passes). A second candidate: a block written into a neighbour without a checkBlock (ProtoChunk.setBlockState
+  sends one only once the chunk's status is INITIALIZE_LIGHT or later) after LightDirect already propagated light into
+  that neighbour's sections - vanilla's ordering of the generation steps should forbid it, but GenGraph schedules the
+  steps itself; the sorter's delay would hide such a window. SNAPSHOT A/B below.
+
+### Throughput (chunks/s, mean of r1 / r2 per run)
+| box | base | LightDirect FIFO | LightLanes | LightLanes + ownThread | FIFO + ownThread |
+|---|---|---|---|---|---|
+| Xeon .103 | 81.7 / 94.7 / 87.1 / 88.5 = **88.0** (r2 97.0) | 106.5 / 114.2 / 105.2 / 104.3 = 107.5 | 110.0 / 108.1 / 107.2 = **108.4** (r2 121.1) | 108.8 / 109.0 / 108.4 = **108.7** (r2 119.4) | |
+| N100 | 69.0 / 67.6 / 70.7 / 73.2 / 64.1 / 72.8 / 68.6 = **69.4** (r2 75.5) | 73.3 / 75.2 / 76.2 / 70.8 / 71.9 / 75.0 = 73.7 | 77.2 / 72.3 / 71.9 = **73.8** (r2 79.2) | 72.0 / 71.7 / 72.2 = **72.0** (r2 80.3) | 73.1 / 71.8 / 75.0 = 73.3 |
+Xeon +23 % (as the first runs' +16.5 %), N100 +4-6 %: the N100's 4 hardware threads are all busy generating - light was
+not on its critical path; the latency fell anyway (lightChunk future, r1 / r2: N100 1.0 / 0.6 s -> 86 / 52 ms, with
+ownThread 7 ms; Xeon 0.8 / 1.1 s -> 77 / 80 ms, ownThread 8-10 ms). ownThread adds no throughput at 4 cores; it makes the
+latency milliseconds (no turn on the busy pool).
+
+### Play: does the light queue delay what the player sees? (.103 production client, fresh world)
+Teleports (ClientAuto tp to 2000 / -2000; new: "near (r 4) chunks received", and the client-side times counted only once
+the client's player is at the target - the old "-1.9 s" values were the old place's chunks):
+| variant | near (r <= 4) received, s | all received, s | server FULL, s |
+|---|---|---|---|
+| base (tpb1-2, tqb1-2) | 2.1, 2.3, 2.0, 2.0, 1.2, 2.1, 5.2 | 8.0-12.6 | 7.6-13.0 |
+| FIFO (tpd1-2) | 1.3, 2.1, 1.6 | 7.5-11.8 | 7.7-11.5 |
+| FIFO + thread (tpt1-2) | 1.1, 1.6 | 7.1-7.4 | 7.1-7.7 |
+| LightLanes (tqp1-2) | 2.1, 1.8, 1.6, 1.7 | 7.5-12.0 | 7.7-12.1 |
+| LightLanes + thread (tqt1-2) | 1.7, 1.5, 2.5, 2.7 | 7.8-13.7 | 7.9-13.8 |
+lightChunk latency in play is 3-6 ms in every variant (initializeLight 10-30 ms base, < 1 ms with ownThread): in play the
+sorter's queue is short and light never holds a chunk back. (The "terrain generated + meshed" end sometimes runs long -
+26-35 s instead of ~18 - in base and LightDirect alike, tqb1 34.0 / 26.2: late light-update packets re-dirty sections
+after everything arrived; not a LightDirect effect.)
+Flight (new: -Dsleep.clientAuto.orbit=0,150,0,0,100000,0,0,40 = straight +x at 40 blocks/s for the 40 s steady window,
+fresh world; -Dsleep.clientAuto.holes now also counts the holes within 8 and within 4 chunks of the player):
+| variant | holes / s (all) | within 8 chunks | within 4 |
+|---|---|---|---|
+| base (6 runs) | 75.0, 57.9, 57.7, 67.9, 50.2, 75.2 (64.0) | 5.15, 3.03, 2.75, 5.05, 2.40, 5.50 (3.98) | 0 |
+| FIFO (2) | 104.5, 69.6 | 18.45, 4.10 | 0.68, 0 |
+| FIFO + thread (2) | 62.8, 68.4 | 3.68, 3.98 | 0 |
+| LightLanes (4) | 76.9, 74.9, 71.0, 57.8 (70.2) | 4.23, 5.53, 2.93, 2.75 (3.86) | 0 |
+| LightLanes + thread (4) | 50.0, 62.7, 71.0, 55.5 (59.8) | 1.18, 2.95, 3.63, 1.88 (2.41) | 0 |
+At 40 blocks/s .103 (client + server on 4 cores) cannot generate fast enough: holes at the view's edge in every variant;
+the light latency in the flight is 3-4.5 ms everywhere, the holes are generation's. No variant delays the nearest chunks;
+LightLanes + ownThread has the fewest holes within 8 chunks.
+
+### Exactness suite (light-sensitive scenes)
+Not run: tools/exactness.py needs the host's dev setup (not used here). Scenes where game logic reads light or light
+changes a lot: crops (growth, saplings, grass need light >= 9), zoo (zombies / skeletons burn by sky light), redstone (32
+lamps toggling: block-light bursts), furnaces / smelters (lit state), fluids (lava). LightDirect changes only when queued
+light tasks reach the actor (same tasks, vanilla's priority order); with an idle server the sorter forwards them at once
+too. Run those five with -Dlab.opt.LightDirect=true -Dlab.light.ownThread=true on the host before the default goes in.
+
+### Compatibility
+Mixin targets of the light mods in F:/compat (scratchpad light/mixscan.py over 488 1.21.1 jars, nested jars included):
+- Moonrise (NeoForge 0.1.0-beta.15): @Overwrite of ThreadedLevelLightEngine.addTask (both), runUpdate, tryScheduleUpdate,
+  initializeLight, lightChunk, waitForPendingTasks, checkBlock, updateSectionStatus ... (its Starlight engine and chunk
+  system). Our @Redirect inside addTask would be refused by Mixin: must give way.
+- ScalableLux 0.3.0 (top121) / 0.1.0.1: @Redirect of `new ThreadedLevelLightEngine` in ChunkMap.<init> (its own
+  ThreadedLevelLightEngineVanillaInterface subclass: overrides initializeLight / lightChunk / checkBlock /
+  waitForPendingTasks and never calls addTask) + @WrapOperation in runUpdate / tryScheduleUpdate.
+- C2ME 0.4.0-alpha.0.124: threading-lighting's MixinServerLightingProvider on tryScheduleUpdate, an invoker for addTask,
+  its chunk-system rewrite on the ticket manager.
+- Nothing else among the 488 jars touches ThreadedLevelLightEngine or the sorter (alltheleaks only names it in a debug
+  mixin; Lithium / Radium / ModernFix / Noisium / DH / Chunky do not).
+New rule in MixinYield (lightScheduling): every LightDirect* / LightPar* mixin gives way when ANY foreign mixin changes a
+method of ThreadedLevelLightEngine (not only on a method-level clash: our thread and order assume vanilla's actor, which
+those mods replace or reschedule); no culprits are named to the rules, so a "never give way" rule cannot take mixins out
+of another mod's light engine. Checked on the N100 (production server, our jar with LightDirect + ownThread + probe,
+genbench 12 x 12): alone all three LightDirect mixins apply; with ScalableLux 0.3.0, Moonrise beta.15 or C2ME 0.4.0
+each, all LightDirect* and LightPar* mixins print "not applied: another mod changes the light engine's scheduling
+(ThreadedLevelLightEngine) - by <mod> (<mixin>)", the server starts and generates (25.5 / 20.1 / 12.5 chunks/s), no
+exception of ours (C2ME's own optional-target warnings only). The existing rules also took LightProbeThreadedMixin out
+under Moonrise (runUpdate overwritten) and MainReactorLightNotifyMixin under C2ME (onLightUpdate changed).
+
+### SNAPSHOT A/B and GenGraph off (N100 warm-up hunts, LightLanes without ownThread)
+LightLanes with LightSnapshot + LightLayerCache off (nk1-10) 0 / 10, the interleaved control (np1-10) 0 / 10 -
+inconclusive (the control did not hit either; ~12 % rate). LightLanes with GenGraph off (ng1-12): 0 / 12 - suggestive
+(P = 0.88^12 = 21 % at the same rate), not proof. Both worth repeating with ~40 runs each: GenGraph's own step order
+(direct dependencies instead of vanilla's layers: a chunk can reach LIGHT while a neighbour two away has not run FEATURES
+yet, whose writes then land in light already propagated) together with light that no longer waits ~1 s in the sorter
+is the most specific lead.
+
+### Recommendation for 1.3.4
+**Not a default yet.** The gain is real and play is not hurt (Xeon +23 % chunks/s, N100 +4-6 %, lightChunk latency
+~1 s -> ~80 ms, with ownThread ~8 ms; no delay of the nearest chunks in teleports or a 40 b/s flight; mod conflicts
+handled), but LightDirect without its own thread leaves block light below vanilla's in ~12 % of N100 warm-ups (base
+never), and the cause is not found. LightDirect + ownThread had 0 differences in 18 N100 runs + every Xeon run + Nether /
+End - the candidate if anything, but "0 of 18" at a ~12 % base rate with an unknown mechanism is not the bit-exact bar.
+Next, in order: (1) find the mechanism - the N100 warm-up of seed 20260924 reproduces it at a few fixed spots (lava
+spring 64087,-22,64124; lava lake ~64073,-55,64132; 64036,-40,64055; 64195,8,64182): -Dlab.light.trace on those boxes,
+plus a record of the block reads of the light pass in the box (state read vs state at the end) to test the read-race
+hypothesis; (2) then fix it inside LightDirect (or prove ownThread structurally closes the window) and re-run the hunt
+until >= 60 clean N100 warm-ups per variant; (3) the host's 16-thread genbench and the exactness suite's light scenes
+(crops, zoo, redstone, furnaces / smelters, fluids); (4) only then defaults.txt:
+`-Dlab.opt.LightDirect=true` and `-Dlab.light.ownThread=true` (lab.light.prio stays default on).
