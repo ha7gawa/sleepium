@@ -639,6 +639,7 @@ public final class EntitySleep {
 
 
     static void onWrite(SharedWatch sw, int id) {
+        if (dev.lull.optsupport.ServerParallelItems.defer(() -> onWrite(sw, id))) return;
         for (int i = 0; i < sw.n; i++) sw.w[i].write(id);
     }
 
@@ -887,6 +888,24 @@ public final class EntitySleep {
 
     private static ES es(Entity e) {
         return (ES) ((EntSleeperHolder) e).sleep$es();
+    }
+
+    /**
+     * ServerParallelItems (lab): this entity's next server tick is vanilla's plain tick here - no observation, probe,
+     * inline or replay, nothing of this engine's shared state touched (decided on the main thread before a parallel run;
+     * the deadline poll of the tick is done here first). tickCount + 1: tickNonPassenger counts before the tick.
+     */
+    public static boolean plainNext(Entity e) {
+        if (!ON) return true;
+        if (TIMING || TRACE >= 0 || DIAG != null || e.level().isClientSide) return false;
+        long now = e.level().getGameTime();
+        if (now != S().lastPoll) poll(now);
+        ES s = es(e);
+        if (s == null || s.st == St.ASLEEP) return false;
+        if (s.st == St.NEVER) return s.c.retryAt <= 0 || s.c.retryAt == Long.MAX_VALUE;
+        int tc = e.tickCount + 1;
+        if (tc < s.observeFrom) return true;
+        return PROBE && s.c.comp != null && s.k < 0 && !s.probeOk && tc < s.probeFrom;
     }
 
     static ES esOf(Entity e) {
