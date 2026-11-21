@@ -261,3 +261,4 @@
 -Dlab.opt.NoiseLazyInterpMixin=true
 -Dlab.chunkmd.uboWindows=auto
 -Dlab.opt.WorldgenReactor=true
+-Dlab.gpu.framesInFlight.atSwap=true
