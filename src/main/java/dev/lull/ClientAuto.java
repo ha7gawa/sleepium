@@ -753,6 +753,9 @@ public final class ClientAuto {
             var d = m.levelRenderer.getSectionRenderDispatcher();
             boolean idle = d != null && m.levelRenderer.hasRenderedAllSections() && d.getToUpload() == 0 && d.getToBatchCount() == 0;
             idleTicks = idle ? idleTicks + 1 : 0;
+            // the hashed frame is the last drawn one: particles cleared every tick of the wait, so it was drawn without any
+            // (ambient water / spore specks landed in different places in two launches of one jar - 11-21's candidate checks)
+            if (m.level != null) m.particleEngine.setLevel(m.level);   // (setLevel clears the particles; clearParticles is private)
             if (idleTicks >= 20 || ticks >= hashAt + 600) {
                 hashAt = -1;
                 if (idleTicks < 20) log("frame hash: renderer NOT idle after 30 s");
@@ -815,6 +818,7 @@ public final class ClientAuto {
                     mc.options.pauseOnLostFocus = false;
                     if (FRAMEHASH) {   // nothing that moves by itself
                         mc.options.cloudStatus().set(net.minecraft.client.CloudStatus.OFF);
+                        mc.options.particles().set(net.minecraft.client.ParticleStatus.MINIMAL);   // ambient specks differed launch to launch (11-21)
                         mc.options.hideGui = true;
                     }
                     // measure the renderer, not the monitor: no vsync, no frame cap (260 = unlimited)
