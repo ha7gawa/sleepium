@@ -2,6 +2,7 @@
 normal ticking (/perf start: 10 s, a zip in debug/ with the profiler's text), the section tree flattened to "ms per tick" (1.3.4: the server tick as a graph - measure first).
 
     python tools/tick_profile.py [scene ...] [--secs 10] [--off] [--flags "..."] [--depth 4]
+    python tools/tick_profile.py mobs --bots 50 [--botmode mix] [--botspread 48]   (bot players: dev.lull.bots.BotLoad)
 
 Each scene: a fresh flat world, the scene built as tools/exactness.py does (frozen clock, game time 300, reseeded), then
 the clock unfrozen, a few seconds of warm-up, the profiled window. The engine's defaults are on unless --off.
@@ -27,6 +28,10 @@ ap.add_argument('--off', action='store_true')
 ap.add_argument('--flags', default='')
 ap.add_argument('--depth', type=int, default=4)
 ap.add_argument('--top', type=int, default=18)
+ap.add_argument('--bots', default='0', help='bot players (BotLoad) around the scene, moving by --botmode while profiled; a list (0,10,50,100) = one window per count in one server')
+ap.add_argument('--botmode', default='mix', help='mix | idle | "circle 4.3 24" | "orbit 10 160" | "line 15" | "tp 15 2000"')
+ap.add_argument('--botspread', type=float, default=48)
+ap.add_argument('--botwarm', type=int, default=20, help='seconds of bot movement before the profiled window (their first chunks)')
 a = ap.parse_args()
 
 LINE = re.compile(r'^\[(\d+)\]\s*([| ]*)(\S.*?)\((\d+)/(\d+)\)\s*-\s*([\d.]+)%/([\d.]+)%')
@@ -53,11 +58,52 @@ def parse(path):
     return out, (int(m.group(1)) if m else None), (int(m2.group(1)) if m2 else None)
 
 
+KEY = [('tick', 'tick'), ('entities', '/tick/entities'), ('chunkSource', '/tick/chunkSource'),
+       ('chunks', '/tick/chunkSource/chunks'), ('tracker+', '/tick/chunkSource/chunks/unspecified'),
+       ('spawnAndTick', '/tick/chunkSource/chunks/pollingChunks/spawnAndTick'), ('unload', '/tick/chunkSource/unload'),
+       ('connection', 'tick/connection'), ('players', 'tick/players'), ('send chunks', 'tick/send chunks'),
+       ('tasks', 'nextTickWait/')]
+
+
+def report(scene, n, zpath, bots_line):
+    z = zipfile.ZipFile(zpath)
+    names = [x for x in z.namelist() if x.endswith('profiling.txt')]
+    if not names:
+        print('%s: no profiling.txt in %s' % (scene, zpath), flush=True)
+        return
+    txt = os.path.join(RUN, 'tickprof-%s-%dbots-profiling.txt' % (scene, n))
+    open(txt, 'wb').write(z.read(names[0]))
+    rows, span_ms, ticks = parse(txt)
+    if not rows or not ticks:
+        print('%s: profile not parsed: %s' % (scene, zpath), flush=True)
+        return
+    ms_total = span_ms or 0
+    ms = lambda pct: pct / 100.0 * ms_total / ticks
+    print('=== %s (%s, %d bots %s): %d ticks in %d ms; profile %s' % (scene, 'off' if a.off else 'on', n, a.botmode if n else '', ticks, ms_total, os.path.basename(zpath)), flush=True)
+    print('  ' + bots_line, flush=True)
+    # the key phases in one line (the overworld's; tasks = work between ticks: packets handled, minus idle "unspecified")
+    ow = 'tick/levels/ServerLevel[world] minecraft:overworld'
+    key = []
+    for name, suffix in KEY:
+        if name == 'tasks':
+            v = sum(ms(r[2]) for r in rows if r[0].startswith('nextTickWait/') and r[1] == 1 and not r[0].endswith('/unspecified'))
+        elif suffix.startswith('/'):
+            v = sum(ms(r[2]) for r in rows if r[0] == ow + suffix)
+        else:
+            v = sum(ms(r[2]) for r in rows if r[0] == suffix)
+        key.append('%s %.2f' % (name, v))
+    print('  key ms/tick: ' + '; '.join(key), flush=True)
+    shown = [r for r in rows if r[1] <= a.depth]
+    shown.sort(key=lambda r: -r[2])
+    for pth, depth, pct, calls in shown[:a.top]:
+        print('  %6.2f ms/tick  %5.1f%%  %s' % (ms(pct), pct, pth), flush=True)
+
+
+steps = [int(v) for v in str(a.bots).split(',')]
 for scene in a.scenes:
     x1, z1, x2, z2 = scene_area(scene)
     jvm = ['-Dsleep.seedEntities=true'] + ([] if a.off else ['-Dlab.opt.defaults=true']) + a.flags.split()
     log = os.path.join(RUN, 'tickprof-%s.log' % scene)
-    before = set(glob.glob(os.path.join(RUN, 'debug', 'profiling', '*.zip')))
     with Server(jvm, {'spawn-monsters': 'false'}, log) as s:
         s.wait_for(r'Done \(')
         s.cmd('forceload add %d %d %d %d' % (x1, z1, x2, z2))
@@ -68,29 +114,26 @@ for scene in a.scenes:
         s.cmd('function sleep:lag_clear')
         s.cmd('function sleep:lag_%s' % scene)
         s.cmd('tick unfreeze')
-        time.sleep(a.warm)
-        s.cmd('perf start')
-        s.wait_for(r'Created debug report', timeout=60, start=len(s.lines))
-        time.sleep(3)
-    after = sorted(set(glob.glob(os.path.join(RUN, 'debug', 'profiling', '*.zip'))) - before)
-    if not after:
-        print('%s: no profile written (see %s)' % (scene, log), flush=True)
-        continue
-    z = zipfile.ZipFile(after[-1])
-    names = [n for n in z.namelist() if n.endswith('profiling.txt')]
-    if not names:
-        print('%s: no profiling.txt in %s: %s' % (scene, after[-1], z.namelist()[:10]), flush=True)
-        continue
-    txt = os.path.join(RUN, 'tickprof-%s-profiling.txt' % scene)
-    open(txt, 'wb').write(z.read(names[0]))
-    rows, span_ms, ticks = parse(txt)
-    if not rows or not ticks:
-        print('%s: profile not parsed: %s' % (scene, after[-1]), flush=True)
-        continue
-    ms_total = span_ms if span_ms else 0
-    print('=== %s (%s): %d ticks in %d ms; profile %s' % (scene, 'off' if a.off else 'on', ticks, ms_total, os.path.basename(after[-1])), flush=True)
-    shown = [r for r in rows if r[1] <= a.depth]
-    shown.sort(key=lambda r: -r[2])
-    for p, depth, pct, calls in shown[:a.top]:
-        ms_per_tick = pct / 100.0 * ms_total / ticks
-        print('  %6.2f ms/tick  %5.1f%%  %s' % (ms_per_tick, pct, p), flush=True)
+        have = 0
+        for i, n in enumerate(steps):
+            if n < have:
+                s.ask('sleep bots remove', r'bots: \d+ removed', timeout=60)
+                have = 0
+            if n > have:
+                s.ask('sleep bots add %d %d %d %g' % (n - have, (x1 + x2) // 2, (z1 + z2) // 2, a.botspread), r'bots: \d+ joined', timeout=120)
+                s.cmd('sleep bots move %s' % a.botmode)
+                have = n
+                time.sleep(a.botwarm)
+            time.sleep(a.warm if i == 0 else 3)
+            before = set(glob.glob(os.path.join(RUN, 'debug', 'profiling', '*.zip')))
+            start = len(s.lines)
+            s.cmd('sleep bots measure %d %s-%dbots' % (a.secs, scene, n))
+            s.cmd('perf start')
+            s.wait_for(r'Created debug report', timeout=60, start=start)
+            m = s.wait_for(r"sleep: (bots measure '.*)", timeout=30, start=start)
+            st = s.ask('sleep bots stats', r'sleep: (bots stats: .*)', timeout=30)
+            after = sorted(set(glob.glob(os.path.join(RUN, 'debug', 'profiling', '*.zip'))) - before)
+            if not after:
+                print('%s: no profile written (see %s)' % (scene, log), flush=True)
+                continue
+            report(scene, n, after[-1], m.group(1) + '\n  ' + st.group(1)[:600])
