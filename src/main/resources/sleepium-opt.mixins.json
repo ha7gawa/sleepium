@@ -108,6 +108,8 @@
     "SurfacePlanMixin",
     "SurfaceFastMixin",
     "SurfaceBiomeMemoMixin",
+    "NoiseLazyInterpMixin",
+    "NoiseLazyInterpolatorMixin",
     "SurfacePlanContextMixin",
     "SurfaceFluidEmptyMixin",
     "PersistentPoolsMixin",
