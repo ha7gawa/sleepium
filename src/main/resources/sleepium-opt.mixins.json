@@ -97,6 +97,7 @@
     "SurfaceConditionsContextMixin",
     "SurfacePlanMixin",
     "SurfaceFastMixin",
+    "SurfaceBiomeMemoMixin",
     "SurfacePlanContextMixin",
     "SurfaceFluidEmptyMixin",
     "PersistentPoolsMixin",
