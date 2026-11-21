@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "overwrites": { "conformVisibility": true },
   "mixins": [
+    "ServeMeterPacketMixin",
     "SeedEntitiesMixin",
     "SeedLevelMixin",
     "SeedLevelAccessor",
@@ -91,6 +92,9 @@
     "BrainTimeTickMixin"
   ],
   "client": [
+    "ServeFeelClientMixin",
+    "ServeFeelLevelAccessor",
+    "ServeFeelRollbackMixin",
     "ClientEntSleepTickMixin",
     "GenTraceClientMixin",
     "FrameHashFreezeMixin",

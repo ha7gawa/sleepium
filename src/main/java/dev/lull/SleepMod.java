@@ -42,6 +42,14 @@ public final class SleepMod {
         dev.lull.optsupport.DuplicateJars.find();   // two Sleepium jars in mods: said in the log (and in the chat on the client)
         gameBus.addListener(SleepCommand::register);
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Pre.class, e -> NetBench.onTickStart());
+        if (ServeMeter.ON) {   // what a slow tick does to the players (notes/92): measurement only
+            gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Pre.class, e -> ServeMeter.tickStart());
+            gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> ServeMeter.tickEnd());
+        }
+        if (ServeMeter.ON || ServeMeter.SLOW_TICK > 0)   // the test load: a slow overworld tick, /sleep stall
+            gameBus.addListener(net.neoforged.neoforge.event.tick.LevelTickEvent.Post.class, e -> {
+                if (e.getLevel() instanceof net.minecraft.server.level.ServerLevel l && l.dimension() == net.minecraft.world.level.Level.OVERWORLD) ServeMeter.levelTick();
+            });
         modBus.addListener(net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent.class, dev.lull.net.BulkPayloads::register);
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.net.Bulk.pump(e.getServer()));
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.api.Travel.tick());

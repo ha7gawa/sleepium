@@ -104,6 +104,11 @@ final class SleepCommand {
                                             ready ? "the destination was ready" : "timed out"));
                             return 1;
                         })))))
+                .then(Commands.literal("stall")   // a one-off stall of the server thread (notes/92's test load)
+                        .then(Commands.argument("ms", IntegerArgumentType.integer(1, 120000)).executes(ctx -> {
+                            ServeMeter.stall(IntegerArgumentType.getInteger(ctx, "ms"));
+                            return 1;
+                        })))
                 .then(Commands.literal("net")
                         .then(Commands.argument("seconds", IntegerArgumentType.integer(1, 600))
                                 .then(Commands.argument("label", StringArgumentType.word()).executes(ctx -> {
