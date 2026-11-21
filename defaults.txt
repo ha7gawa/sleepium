@@ -268,3 +268,4 @@
 -Dlab.opt.NoiseLazyInterpMixin=true
 -Dlab.opt.DfcNoiseChunkMixin=true
 -Dlab.chunkmd.uboWindows=auto
+-Dlab.gpu.framesInFlight.atSwap=true

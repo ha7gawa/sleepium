@@ -17,9 +17,15 @@ import java.util.concurrent.atomic.LongAdder;
 public final class ModProfile {
     private ModProfile() {}
 
-    public static final int BE_TICK = 0, ENT_TICK = 1, CLIENT_ENT_TICK = 2, ENT_DRAW = 3, SERVER_EVENT = 4, CLIENT_EVENT = 5, KINDS = 6;
+    public static final int BE_TICK = 0, ENT_TICK = 1, CLIENT_ENT_TICK = 2, ENT_DRAW = 3, SERVER_EVENT = 4, CLIENT_EVENT = 5, BE_DRAW = 6, KINDS = 7;
     /** server-side kinds are per server tick, client-side ones per frame */
-    private static final boolean[] SERVER_SIDE = {true, true, false, false, true, false};
+    private static final boolean[] SERVER_SIDE = {true, true, false, false, true, false, false};
+    /** the kinds in the order the mod page lists them (lang keys sleepium.ui.mods.kind.<name>) */
+    public static final String[] KIND_NAMES = {"blockTick", "entityTick", "clientEntityTick", "entityDraw", "serverEvent", "clientEvent", "blockDraw"};
+
+    public static boolean serverSide(int kind) {
+        return SERVER_SIDE[kind];
+    }
     private static volatile Thread serverThread;
 
     /**
@@ -261,8 +267,29 @@ public final class ModProfile {
         }
     }
 
-    /** one mod's cost: per kind (ms per tick for server kinds, ms per frame for client kinds) and its costliest types */
-    public record Result(String mod, double[] ms, List<String> top) {
+    /** one type's cost inside a mod's kind: "zombie" 0.31 (ms per tick or per frame, by the kind's side) */
+    public record Part(String type, double ms) {}
+
+    /**
+     * one mod's cost: per kind (ms per tick for server kinds, ms per frame for client kinds), its costliest types overall,
+     * and per kind its costliest types (the mod page's breakdown)
+     */
+    public record Result(String mod, double[] ms, List<String> top, List<List<Part>> parts) {
+        public double server() {
+            return ms[BE_TICK] + ms[ENT_TICK] + ms[SERVER_EVENT];
+        }
+
+        public double client() {
+            return ms[CLIENT_ENT_TICK] + ms[ENT_DRAW] + ms[CLIENT_EVENT] + ms[BE_DRAW];
+        }
+
+        /** the kind with the largest share (-1: nothing measured) */
+        public int mainKind() {
+            int best = -1;
+            for (int k = 0; k < KINDS; k++) if (ms[k] > 0 && (best < 0 || ms[k] > ms[best])) best = k;
+            return best;
+        }
+
         public double total() {
             double t = 0;
             for (double v : ms) t += v;
@@ -272,15 +299,15 @@ public final class ModProfile {
         /** "server 0.82 ms/tick (blocks 0.50, mobs 0.32) · client 1.20 ms/frame (drawing 1.10)" */
         public String line() {
             List<String> parts = new ArrayList<>();
-            double server = ms[BE_TICK] + ms[ENT_TICK] + ms[SERVER_EVENT], client = ms[CLIENT_ENT_TICK] + ms[ENT_DRAW] + ms[CLIENT_EVENT];
+            double server = server(), client = client();
             if (server >= 0.005) parts.add(String.format(java.util.Locale.ROOT, "server %.2f ms/tick (blocks %.2f, entities %.2f, events %.2f)", server, ms[BE_TICK], ms[ENT_TICK], ms[SERVER_EVENT]));
-            if (client >= 0.005) parts.add(String.format(java.util.Locale.ROOT, "client %.2f ms/frame (drawing %.2f, ticks %.2f, events %.2f)", client, ms[ENT_DRAW], ms[CLIENT_ENT_TICK], ms[CLIENT_EVENT]));
+            if (client >= 0.005) parts.add(String.format(java.util.Locale.ROOT, "client %.2f ms/frame (drawing entities %.2f, blocks %.2f, ticks %.2f, events %.2f)", client, ms[ENT_DRAW], ms[BE_DRAW], ms[CLIENT_ENT_TICK], ms[CLIENT_EVENT]));
             return parts.isEmpty() ? "under 0.01 ms" : String.join(" · ", parts);
         }
 
         /** "0.82 ms/t · 1.20 ms/f" */
         public String brief() {
-            double server = ms[BE_TICK] + ms[ENT_TICK] + ms[SERVER_EVENT], client = ms[CLIENT_ENT_TICK] + ms[ENT_DRAW] + ms[CLIENT_EVENT];
+            double server = server(), client = client();
             List<String> parts = new ArrayList<>();
             if (server >= 0.005) parts.add(String.format(java.util.Locale.ROOT, "%.2f ms/tick", server));
             if (client >= 0.005) parts.add(String.format(java.util.Locale.ROOT, "%.2f ms/frame", client));
@@ -296,6 +323,7 @@ public final class ModProfile {
     private static List<Result> compute() {
         Map<String, double[]> by = new HashMap<>();
         Map<String, Map<String, Double>> types = new HashMap<>();
+        Map<String, List<Map<String, Double>>> perKind = new HashMap<>();
         long t = Math.max(1, ticks), f = Math.max(1, frames);
         for (int k = 0; k < KINDS; k++) {
             for (var e : BY_TYPE[k].entrySet()) {
@@ -304,8 +332,14 @@ public final class ModProfile {
                 double ms = e.getValue().sum() / 1e6 / (SERVER_SIDE[k] ? t : f);
                 by.computeIfAbsent(mod, x -> new double[KINDS])[k] += ms;
                 String name = e.getKey() instanceof String s ? s.substring(s.indexOf('|') + 1) + " (event)"
-                        : typeName(e.getKey()) + (k == BE_TICK ? " (block)" : k == ENT_DRAW ? " (drawing)" : "");
+                        : typeName(e.getKey()) + (k == BE_TICK ? " (block)" : k == ENT_DRAW ? " (drawing)" : k == BE_DRAW ? " (block drawing)" : "");
                 types.computeIfAbsent(mod, x -> new HashMap<>()).merge(name + (SERVER_SIDE[k] ? " /tick" : " /frame"), ms, Double::sum);
+                String plain = e.getKey() instanceof String s ? s.substring(s.indexOf('|') + 1) : typeName(e.getKey());
+                perKind.computeIfAbsent(mod, x -> {
+                    List<Map<String, Double>> l = new ArrayList<>();
+                    for (int i = 0; i < KINDS; i++) l.add(new HashMap<>());
+                    return l;
+                }).get(k).merge(plain, ms, Double::sum);
             }
         }
         List<Result> out = new ArrayList<>();
@@ -313,7 +347,13 @@ public final class ModProfile {
             List<String> top = types.getOrDefault(e.getKey(), Map.of()).entrySet().stream().sorted((a, b) -> Double.compare(b.getValue(), a.getValue())).limit(6)
                     .map(x -> String.format(java.util.Locale.ROOT, "%s %.3f ms%s", x.getKey().substring(0, x.getKey().lastIndexOf(' ')), x.getValue(), x.getKey().substring(x.getKey().lastIndexOf(' '))))
                     .toList();
-            out.add(new Result(e.getKey(), e.getValue(), top));
+            List<List<Part>> parts = new ArrayList<>();
+            List<Map<String, Double>> pk = perKind.get(e.getKey());
+            for (int k = 0; k < KINDS; k++) {
+                parts.add(pk == null ? List.of() : pk.get(k).entrySet().stream().sorted((a, b) -> Double.compare(b.getValue(), a.getValue())).limit(8)
+                        .map(x -> new Part(x.getKey(), x.getValue())).toList());
+            }
+            out.add(new Result(e.getKey(), e.getValue(), top, parts));
         }
         out.sort((a, b) -> Double.compare(b.total(), a.total()));
         return out;

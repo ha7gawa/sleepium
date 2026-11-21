@@ -217,5 +217,19 @@
   "sleepium.ui.decoupled.tip": "Новое в 1.3: кадр рисуется в своём потоке и по своим часам — плавно даже во время долгого тика; мобы тикают в рабочих потоках и рисуются из поз с частотой тика. Не точно (интерполяция) — на свой страх и риск. Нужен перезапуск.",
   "sleepium.ui.decoupled.restart": "нужен перезапуск",
   "sleepium.ui.decoupled.hint.title": "Sleepium 1.3: развязанные кадры",
-  "sleepium.ui.decoupled.hint.body": "Плавнее кадры — попробуйте: Настройки > Sleepium"
+  "sleepium.ui.decoupled.hint.body": "Плавнее кадры — попробуйте: Настройки > Sleepium",
+  "sleepium.ui.mods.kind.blockTick": "Его блоки (сервер)",
+  "sleepium.ui.mods.kind.blockTick.tip": "Время в коде тиков его блок-сущностей за тик сервера (машины, печи, трубы...).",
+  "sleepium.ui.mods.kind.entityTick": "Его мобы и сущности (сервер)",
+  "sleepium.ui.mods.kind.entityTick.tip": "Время в коде тиков его сущностей на сервере за тик (ИИ, движение, снаряды...).",
+  "sleepium.ui.mods.kind.clientEntityTick": "Его мобы и сущности (клиент)",
+  "sleepium.ui.mods.kind.clientEntityTick.tip": "Время клиентского тика его сущностей за кадр (анимации, эффекты).",
+  "sleepium.ui.mods.kind.entityDraw": "Отрисовка его мобов и сущностей",
+  "sleepium.ui.mods.kind.entityDraw.tip": "Время отрисовки его сущностей за кадр (модели, анимации).",
+  "sleepium.ui.mods.kind.serverEvent": "Его обработчики событий (сервер)",
+  "sleepium.ui.mods.kind.serverEvent.tip": "Время в его слушателях игровых событий на сервере за тик.",
+  "sleepium.ui.mods.kind.clientEvent": "Его обработчики событий (клиент)",
+  "sleepium.ui.mods.kind.clientEvent.tip": "Время в его слушателях игровых событий на клиенте за кадр (HUD, хуки отрисовки...).",
+  "sleepium.ui.mods.kind.blockDraw": "Отрисовка его блоков",
+  "sleepium.ui.mods.kind.blockDraw.tip": "Время отрисовки его блок-сущностей за кадр (анимированные машины, сундуки, таблички...)."
 }
