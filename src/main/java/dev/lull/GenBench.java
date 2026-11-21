@@ -158,6 +158,7 @@ final class GenBench {
         }
         String par = dev.lull.optsupport.ParallelGen.ENABLED ? "; " + dev.lull.optsupport.ParallelGen.report() : "";
         if (dev.lull.optsupport.GenReactor.ENABLED) par += "; " + dev.lull.optsupport.GenReactor.report();
+        if (dev.lull.optsupport.GenGraph.ENABLED) par += "; " + dev.lull.optsupport.GenGraph.report();
         if (dev.lull.optsupport.FullRing.ENABLED) par += "; " + dev.lull.optsupport.FullRing.report();
         if (dev.lull.optsupport.LightNotifyRing.ENABLED) par += "; " + dev.lull.optsupport.LightNotifyRing.report();
         if (dev.lull.optsupport.GenReactor.ENABLED) par += "; " + dev.lull.optsupport.ReadJournal.report();
@@ -208,6 +209,7 @@ final class GenBench {
             }
         }
         double secs = (System.nanoTime() - startNanos) / 1e9;
+        if (GenTimeline.ON) GenTimeline.sample(level, x0, z0, side, secs);
         if (done < total && secs < 600) {
             return;
         }
@@ -219,6 +221,7 @@ final class GenBench {
         String cpuLine = burstReport() + System.lineSeparator() + cpu.report(secs, 12) + System.lineSeparator() + GenProfile.reportAndReset(done)
                 + (Boolean.getBoolean("lab.genscout") ? System.lineSeparator() + dev.lull.optsupport.GenScout.reportAndReset() + System.lineSeparator() + dev.lull.optsupport.GenScout.perlinBench()
                         + System.lineSeparator() + dev.lull.optsupport.ColumnBound.report() : "");
+        if (GenTimeline.ON) cpuLine += System.lineSeparator() + GenTimeline.reportAndReset();
         String hashLine = writeChunkHashes(server) + "\n" + cpuLine;
         Path report = SleepCommand.finishRecording(server, "genbench-" + label, line + "\n" + hashLine);
         for (int dx = 0; dx < side; dx++) {

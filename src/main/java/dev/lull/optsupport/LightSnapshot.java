@@ -29,6 +29,15 @@ public final class LightSnapshot {
     private LightSnapshot() {}
 
     public static final boolean VERIFY = Boolean.getBoolean("lab.lightsnap.verify");
+    /**
+     * -Dlab.lightsnap.shards (11-18): the base cut into 256 pieces by place (8 x 8 columns each, tiling 128 x 128
+     * columns), each with its own base and keys written since. A snapshot copies only the pieces written since the
+     * last one (delta, or a new piece base when the delta outgrows it); the others are the previous snapshot's pieces,
+     * shared. In flight at distance 32 the whole-map copies were 1-2 MB arrays ~7 times a second (G1 humongous
+     * allocations, each starting a concurrent cycle: 1.2-1.5 cores every ~7 s); a piece is at most tens of KB.
+     */
+    public static final boolean SHARDS = Boolean.getBoolean("lab.lightsnap.shards");
+    public static final AtomicLong pieceCopies = new AtomicLong(), pieceDeltas = new AtomicLong();
     public static final AtomicLong snapshots = new AtomicLong(), fullCopies = new AtomicLong(), deltaEntries = new AtomicLong(), mismatches = new AtomicLong();
     /** a removed key in a delta */
     static final DataLayer TOMB = new DataLayer();
@@ -44,12 +53,31 @@ public final class LightSnapshot {
         final LongOpenHashSet dirty = new LongOpenHashSet();
 
         public void written(long key) {
-            if (base != null) dirty.add(key);
+            if (shards != null) shards.written(key);
+            else if (base != null) dirty.add(key);
         }
 
+        Shards shards;
+
         public Long2ObjectOpenHashMap<DataLayer> snapshot(Long2ObjectOpenHashMap<DataLayer> live) {
+            if (!SaveStats.ON) return snapshot0(live);
+            long b = SaveStats.bytes(), t = System.nanoTime();
+            try {
+                return snapshot0(live);
+            } finally {
+                SaveStats.add(SaveStats.LIGHT, b, t);
+            }
+        }
+
+        private Long2ObjectOpenHashMap<DataLayer> snapshot0(Long2ObjectOpenHashMap<DataLayer> live) {
             snapshots.incrementAndGet();
             Long2ObjectOpenHashMap<DataLayer> out;
+            if (SHARDS) {
+                if (shards == null) shards = new Shards();
+                out = shards.snapshot(live);
+                if (VERIFY) verify(out, live);
+                return out;
+            }
             if (base == null || dirty.size() > Math.max(64, (int) Math.sqrt(32.0 * base.size()))) {
                 out = live.clone();
                 base = out;
@@ -82,8 +110,178 @@ public final class LightSnapshot {
 
     public static String report() {
         long s = snapshots.get(), f = fullCopies.get();
+        if (SHARDS) return String.format(java.util.Locale.ROOT, "light snapshots (pieces): %d published, %d piece copies, %d piece deltas%s",
+                s, pieceCopies.get(), pieceDeltas.get(), VERIFY ? ", mismatches " + mismatches.get() : "");
         return String.format(java.util.Locale.ROOT, "light snapshots: %d published, %d full copies, %.0f delta entries per delta snapshot%s",
                 s, f, s - f == 0 ? 0 : (double) deltaEntries.get() / (s - f), VERIFY ? ", mismatches " + mismatches.get() : "");
+    }
+
+    static final int PIECES = 256;
+
+    /** the piece of a section key: 8 x 8 columns, tiling 128 x 128 columns (SectionPos.asLong's x and z) */
+    static int piece(long key) {
+        int x = (int) (key >> 42), z = (int) (key << 22 >> 42);
+        return ((x >> 3) & 15) | (((z >> 3) & 15) << 4);
+    }
+
+    /** the updating map's pieces (light thread only): each piece's base, the keys written since, the last published view */
+    static final class Shards {
+        final Long2ObjectOpenHashMap<DataLayer>[] base;
+        final LongOpenHashSet[] dirty = new LongOpenHashSet[PIECES];
+        /** pieces written since the last snapshot */
+        final boolean[] touched = new boolean[PIECES];
+        /** the last published view of each piece: its base, or a DeltaMap over it */
+        final Long2ObjectOpenHashMap<DataLayer>[] view;
+        boolean built;
+
+        @SuppressWarnings("unchecked")
+        Shards() {
+            base = new Long2ObjectOpenHashMap[PIECES];
+            view = new Long2ObjectOpenHashMap[PIECES];
+            for (int i = 0; i < PIECES; i++) dirty[i] = new LongOpenHashSet();
+        }
+
+        void written(long key) {
+            if (!built) return;
+            int p = piece(key);
+            dirty[p].add(key);
+            touched[p] = true;
+        }
+
+        Long2ObjectOpenHashMap<DataLayer> snapshot(Long2ObjectOpenHashMap<DataLayer> live) {
+            if (!built) {
+                for (int i = 0; i < PIECES; i++) base[i] = new Long2ObjectOpenHashMap<>();
+                for (var it = live.long2ObjectEntrySet().fastIterator(); it.hasNext(); ) {
+                    var e = it.next();
+                    base[piece(e.getLongKey())].put(e.getLongKey(), e.getValue());
+                }
+                for (int i = 0; i < PIECES; i++) view[i] = base[i];
+                built = true;
+                fullCopies.incrementAndGet();
+            } else {
+                for (int i = 0; i < PIECES; i++) {
+                    if (!touched[i]) continue;
+                    touched[i] = false;
+                    LongOpenHashSet d = dirty[i];
+                    Long2ObjectOpenHashMap<DataLayer> b = base[i];
+                    if (d.size() > Math.max(16, (int) Math.sqrt(32.0 * b.size()))) {
+                        Long2ObjectOpenHashMap<DataLayer> nb = b.clone();
+                        for (var it = d.iterator(); it.hasNext(); ) {
+                            long k = it.nextLong();
+                            DataLayer v = live.get(k);
+                            if (v == null) nb.remove(k); else nb.put(k, v);
+                        }
+                        base[i] = nb;
+                        view[i] = nb;
+                        d.clear();
+                        pieceCopies.incrementAndGet();
+                    } else {
+                        Long2ObjectOpenHashMap<DataLayer> delta = new Long2ObjectOpenHashMap<>(d.size());
+                        for (var it = d.iterator(); it.hasNext(); ) {
+                            long k = it.nextLong();
+                            DataLayer v = live.get(k);
+                            delta.put(k, v == null ? TOMB : v);
+                        }
+                        view[i] = new DeltaMap(b, delta);
+                        pieceDeltas.incrementAndGet();
+                    }
+                }
+            }
+            return new PieceMap(view.clone(), live.size());
+        }
+    }
+
+    /** A published snapshot cut in pieces: reads go to the key's piece; any other use gets a merged copy, built once. */
+    static final class PieceMap extends Long2ObjectOpenHashMap<DataLayer> {
+        final Long2ObjectOpenHashMap<DataLayer>[] pieces;
+        private final int size;
+        private volatile Long2ObjectOpenHashMap<DataLayer> merged;
+
+        PieceMap(Long2ObjectOpenHashMap<DataLayer>[] pieces, int size) {
+            super(1);
+            this.pieces = pieces;
+            this.size = size;
+        }
+
+        @Override
+        public DataLayer get(long k) {
+            return pieces[piece(k)].get(k);
+        }
+
+        @Override
+        public boolean containsKey(long k) {
+            return pieces[piece(k)].containsKey(k);
+        }
+
+        @Override
+        public DataLayer getOrDefault(long k, DataLayer d) {
+            Long2ObjectOpenHashMap<DataLayer> p = pieces[piece(k)];
+            return p.containsKey(k) ? p.get(k) : d;
+        }
+
+        @Override
+        public int size() {
+            return size;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return size == 0;
+        }
+
+        private Long2ObjectOpenHashMap<DataLayer> merged() {
+            Long2ObjectOpenHashMap<DataLayer> m = merged;
+            if (m == null) {
+                m = new Long2ObjectOpenHashMap<>(size);
+                for (Long2ObjectOpenHashMap<DataLayer> p : pieces)
+                    for (var it = p.long2ObjectEntrySet().fastIterator(); it.hasNext(); ) {
+                        var e = it.next();
+                        m.put(e.getLongKey(), e.getValue());
+                    }
+                merged = m;
+            }
+            return m;
+        }
+
+        @Override
+        public Long2ObjectMap.FastEntrySet<DataLayer> long2ObjectEntrySet() {
+            return merged().long2ObjectEntrySet();
+        }
+
+        @Override
+        public LongSet keySet() {
+            return merged().keySet();
+        }
+
+        @Override
+        public ObjectCollection<DataLayer> values() {
+            return merged().values();
+        }
+
+        @Override
+        public boolean containsValue(Object v) {
+            return merged().containsValue(v);
+        }
+
+        @Override
+        public Long2ObjectOpenHashMap<DataLayer> clone() {
+            return merged().clone();
+        }
+
+        @Override
+        public DataLayer put(long k, DataLayer v) {
+            throw new UnsupportedOperationException("a published light snapshot is read-only");
+        }
+
+        @Override
+        public DataLayer remove(long k) {
+            throw new UnsupportedOperationException("a published light snapshot is read-only");
+        }
+
+        @Override
+        public void clear() {
+            throw new UnsupportedOperationException("a published light snapshot is read-only");
+        }
     }
 
     /**

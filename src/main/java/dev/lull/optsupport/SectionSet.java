@@ -21,8 +21,13 @@ import org.joml.FrustumIntersection;
  * reread then.
  */
 public final class SectionSet extends LinkedHashSet<Object> {
-    private Object[] sec = new Object[256];
-    private int[] ox = new int[256], oy = new int[256], oz = new int[256], rid = new int[256], sidx = new int[256];
+    /**
+     * the last sets' size and largest section index (11-18): a new set (one per full graph update) is made at that size
+     * at once instead of doubling from 256 - in flight at distance 32 the doublings were ~6 MB of garbage an update.
+     */
+    private static volatile int sizeHint = 256, posHint = 0;
+    private Object[] sec = new Object[sizeHint];
+    private int[] ox = new int[sec.length], oy = new int[sec.length], oz = new int[sec.length], rid = new int[sec.length], sidx = new int[sec.length];
     private int n, regions, epoch = -1;
     private int[] rx = new int[64], ry = new int[64], rz = new int[64];
     private final Long2IntOpenHashMap regionOf = new Long2IntOpenHashMap();
@@ -39,7 +44,7 @@ public final class SectionSet extends LinkedHashSet<Object> {
     private static final int[] MOVED = new int[LOG];
     private static long movedHead;
     private long consumed = -1;
-    private int[] posOf = new int[0];   // RenderSection.index -> position + 1
+    private int[] posOf = new int[posHint];   // RenderSection.index -> position + 1
     private boolean noIndex;
 
     /** RenderSection.setOrigin (SectionOriginEpochMixin) */
@@ -62,9 +67,33 @@ public final class SectionSet extends LinkedHashSet<Object> {
         }
     }
 
+    /**
+     * OcclusionFast (lab.occlusionFast): the set's own arrays are the set - a node is in it when its section's index is
+     * (graph nodes are equal by their section's origin: one node a section), no hashing of nodes (21 % of the graph's
+     * walk). Reads come from the arrays in order; anything else than add moves the nodes into LinkedHashSet for good.
+     */
+    private final boolean own = OcclusionFast.ON;
+    private Object[] nodeArr = own ? new Object[sec.length] : null;
+    private boolean delegated;
+
+    private void delegate() {
+        if (!own || delegated) return;
+        delegated = true;
+        for (int i = 0; i < n; i++) super.add(nodeArr[i]);
+    }
+
+    private boolean arrays() {
+        return own && !delegated;
+    }
+
     @Override
     public boolean add(Object node) {
-        if (!super.add(node)) return false;
+        if (arrays()) {
+            int si = ((dev.lull.opt.SectionNodeAccessor) node).sleep$section().index;
+            if (si < 0) delegate();
+            else if (si < posOf.length && posOf[si] != 0) return false;
+        }
+        if (!arrays() && !super.add(node)) return false;
         if (n == sec.length) {
             int c = n * 2;
             sec = java.util.Arrays.copyOf(sec, c);
@@ -73,17 +102,23 @@ public final class SectionSet extends LinkedHashSet<Object> {
             oz = java.util.Arrays.copyOf(oz, c);
             rid = java.util.Arrays.copyOf(rid, c);
             sidx = java.util.Arrays.copyOf(sidx, c);
+            if (own) nodeArr = java.util.Arrays.copyOf(nodeArr, c);
         }
+        if (own) nodeArr[n] = node;
         SectionRenderDispatcher.RenderSection s = ((dev.lull.opt.SectionNodeAccessor) node).sleep$section();
         sec[n] = s;
         sidx[n] = s.index;
         if (s.index < 0) noIndex = true;
         else {
-            if (s.index >= posOf.length) posOf = java.util.Arrays.copyOf(posOf, Math.max(s.index + 1, posOf.length * 2));
+            if (s.index >= posOf.length) {
+                posOf = java.util.Arrays.copyOf(posOf, Math.max(s.index + 1, posOf.length * 2));
+                if (posOf.length > posHint) posHint = posOf.length;
+            }
             posOf[s.index] = n + 1;
         }
         place(n, s);
         n++;
+        if (n > sizeHint) sizeHint = sec.length;
         return true;
     }
 
@@ -94,7 +129,21 @@ public final class SectionSet extends LinkedHashSet<Object> {
         oz[i] = o.getZ();
         int x = ox[i] >> SHIFT, y = oy[i] >> SHIFT, z = oz[i] >> SHIFT;
         long key = ((long) x & 0x1FFFFF) << 42 | ((long) y & 0x1FFFFF) << 21 | ((long) z & 0x1FFFFF);
-        int r = regionOf.get(key);
+        int r;
+        int slot = -1;
+        if (own) {   // OcclusionFast: a direct-mapped slot in front of the map (the same ids: the map gives them out)
+            if (slotKey == null) {
+                slotKey = new long[SLOTS];
+                slotId = new int[SLOTS];
+                java.util.Arrays.fill(slotId, -1);
+            }
+            slot = ((x & 31) << 9) | ((z & 31) << 4) | (y & 15);
+            if (slotId[slot] >= 0 && slotKey[slot] == key) {
+                rid[i] = slotId[slot];
+                return;
+            }
+        }
+        r = regionOf.get(key);
         if (r < 0) {
             r = regions++;
             if (r == rx.length) {
@@ -108,13 +157,72 @@ public final class SectionSet extends LinkedHashSet<Object> {
             regionOf.put(key, r);
         }
         rid[i] = r;
+        if (slot >= 0) {
+            slotKey[slot] = key;
+            slotId[slot] = r;
+        }
     }
 
-    @Override public boolean remove(Object o) { broken = true; return super.remove(o); }
-    @Override public void clear() { broken = true; super.clear(); }
-    @Override public boolean removeAll(Collection<?> c) { broken = true; return super.removeAll(c); }
-    @Override public boolean retainAll(Collection<?> c) { broken = true; return super.retainAll(c); }
-    @Override public boolean removeIf(java.util.function.Predicate<? super Object> f) { broken = true; return super.removeIf(f); }
+    private static final int SLOTS = 32 * 32 * 16;
+    private long[] slotKey;
+    private int[] slotId;
+
+    @Override public boolean remove(Object o) { delegate(); broken = true; return super.remove(o); }
+    @Override public void clear() { delegate(); broken = true; super.clear(); }
+    @Override public boolean removeAll(Collection<?> c) { delegate(); broken = true; return super.removeAll(c); }
+    @Override public boolean retainAll(Collection<?> c) { delegate(); broken = true; return super.retainAll(c); }
+    @Override public boolean removeIf(java.util.function.Predicate<? super Object> f) { delegate(); broken = true; return super.removeIf(f); }
+
+    // reads, from the arrays while they are the set
+    @Override public int size() { return arrays() ? n : super.size(); }
+    @Override public boolean isEmpty() { return arrays() ? n == 0 : super.isEmpty(); }
+
+    @Override
+    public boolean contains(Object o) {
+        if (!arrays()) return super.contains(o);
+        if (!(o instanceof dev.lull.opt.SectionNodeAccessor a)) return false;
+        int si = a.sleep$section().index;
+        return si >= 0 && si < posOf.length && posOf[si] != 0;
+    }
+
+    @Override
+    public java.util.Iterator<Object> iterator() {
+        if (!arrays()) return super.iterator();
+        return new java.util.Iterator<>() {
+            int i;
+            @Override public boolean hasNext() { return i < n; }
+            @Override public Object next() {
+                if (i >= n) throw new java.util.NoSuchElementException();
+                return nodeArr[i++];
+            }
+        };
+    }
+
+    @Override public Object[] toArray() { return arrays() ? java.util.Arrays.copyOf(nodeArr, n) : super.toArray(); }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T[] toArray(T[] a) {
+        if (!arrays()) return super.toArray(a);
+        if (a.length < n) a = (T[]) java.lang.reflect.Array.newInstance(a.getClass().getComponentType(), n);
+        System.arraycopy(nodeArr, 0, a, 0, n);
+        if (a.length > n) a[n] = null;
+        return a;
+    }
+
+    @Override
+    public void forEach(java.util.function.Consumer<? super Object> action) {
+        if (!arrays()) {
+            super.forEach(action);
+            return;
+        }
+        for (int i = 0; i < n; i++) action.accept(nodeArr[i]);
+    }
+
+    @Override
+    public java.util.Spliterator<Object> spliterator() {
+        return arrays() ? java.util.Spliterators.spliterator(java.util.Arrays.copyOf(nodeArr, n), java.util.Spliterator.DISTINCT | java.util.Spliterator.ORDERED) : super.spliterator();
+    }
 
     public boolean usable() {
         return !broken && n == size();
@@ -149,6 +257,7 @@ public final class SectionSet extends LinkedHashSet<Object> {
             if (full) {
                 regionOf.clear();
                 regions = 0;
+                if (slotId != null) java.util.Arrays.fill(slotId, -1);
                 for (int i = 0; i < n; i++) place(i, (SectionRenderDispatcher.RenderSection) sec[i]);
                 places++;
                 placeNs += System.nanoTime() - t0;

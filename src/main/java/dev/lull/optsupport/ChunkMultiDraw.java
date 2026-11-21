@@ -95,7 +95,7 @@ public final class ChunkMultiDraw {
         // No 'readonly' on storage blocks: a memory qualifier needs GLSL 4.20 (Intel's compiler refuses it under 150)
         String out = src.replaceFirst("#version 150", "#version 150\n#extension GL_ARB_shader_draw_parameters : require"
                         + (ssbo() ? "\n#extension GL_ARB_shader_storage_buffer_object : require" : ""))
-                .replace(decl, decl + "\nuniform int ProbeMultiDraw;\n" + (ssbo()
+                .replace(decl, decl + "\nuniform int ProbeMultiDraw;\n" + (ssbo() && !uboWindows()
                         ? "layout(std430) buffer ProbeChunkOffsets { vec4 ProbeOffsets[]; };"
                         : "layout(std140) uniform ProbeChunkOffsets { vec4 ProbeOffsets[" + MAX_DRAWS + "]; };"))
                 .replace(use, "vec3 pos = Position; if (ProbeMultiDraw == 2) pos = (Position - 2048.0) * 0.00390625; if (ProbeMultiDraw != 0) pos += ProbeOffsets[" + drawIndex() + "].xyz; else pos += ChunkOffset;")
@@ -356,7 +356,7 @@ public final class ChunkMultiDraw {
     }
 
     private static final Long2ObjectOpenHashMap<Arena>[] ARENAS = newMaps(), PACKED_ARENAS = newMaps();
-    private static final List<RenderType> LAYERS = new ArrayList<>();
+    static final List<RenderType> LAYERS = new ArrayList<>();
 
     @SuppressWarnings("unchecked")
     private static Long2ObjectOpenHashMap<Arena>[] newMaps() {
@@ -600,6 +600,7 @@ public final class ChunkMultiDraw {
 
     /** From RenderSection.reset (origin change, release): every layer's entry. */
     public static void release(SectionRenderDispatcher.RenderSection section) {
+        if (MeshPark.ON) MeshPark.park(section);   // (a kept mesh's entries are detached first: nothing to release then)
         RegionDraw.release(section);
         for (RenderType t : LAYERS) release(section, t);
         if (LightVolumes.ON) LightVolumes.released(section);
@@ -702,6 +703,7 @@ public final class ChunkMultiDraw {
 
         if (!RETIRED.isEmpty()) reapRetired();
         if (!PENDING_COMPILED.isEmpty()) drainCompiled();
+        if (MeshPark.ON) MeshPark.drain();
         int[] ps = programState(shader.getId());
         if (ps == null) return false;
         program = shader.getId();
@@ -829,7 +831,7 @@ public final class ChunkMultiDraw {
         List<Arena> as = lc.arenas;
         int n = as.size();
         if (!lc.stable) {
-            if (uboAlign == 0) uboAlign = Math.max(16, GL11C.glGetInteger(GL43C.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT));
+            offsetAlign(true);
             if (lc.uboOffs.length < n) {
                 lc.uboOffs = new int[n];
                 lc.cmdOffs = new long[n];
@@ -864,12 +866,15 @@ public final class ChunkMultiDraw {
                     MemoryUtil.memPutInt(p + 4, 1);
                     MemoryUtil.memPutInt(p + 8, 0);
                     MemoryUtil.memPutInt(p + 12, MemoryUtil.memGetInt(a.bases + 4L * k));
-                    MemoryUtil.memPutInt(p + 16, k);
+                    MemoryUtil.memPutInt(p + 16, windowed() ? k & (MAX_DRAWS - 1) : k);
                 }
             }
             if (lc.ssbo == 0) lc.ssbo = GL15C.glGenBuffers();
             GL15C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, lc.ssbo);
-            GL15C.nglBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, total + 16L, st, GL15C.GL_STATIC_DRAW);
+            if (uboWindows()) {   // (a window's whole block lies inside the buffer)
+                GL15C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, total + 16L * MAX_DRAWS, GL15C.GL_STATIC_DRAW);
+                GL15C.nglBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 0, total, st);
+            } else GL15C.nglBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, total + 16L, st, GL15C.GL_STATIC_DRAW);
             // commands in an immutable store (Intel draws indirect only from those), a new one per kept list
             if (lc.cmd != 0) GL15C.glDeleteBuffers(lc.cmd);
             lc.cmd = GL15C.glGenBuffers();
@@ -1007,6 +1012,7 @@ public final class ChunkMultiDraw {
         int li = LAYERS.indexOf(layer);
         if (li < 0) return false;
         if (!PENDING_COMPILED.isEmpty()) drainCompiled();
+        if (MeshPark.ON) MeshPark.drain();
         int[] ps = programState(shader.getId());
         if (ps == null) return false;
         // SectionLists: only the sections with a non-empty translucent layer, in the same order (the loop below skips the
@@ -1114,7 +1120,7 @@ public final class ChunkMultiDraw {
     private static void flushAll0(RenderType layer, int[] ps, boolean keep) {
         boolean sb = ssbo();
         int target = sb ? GL43C.GL_SHADER_STORAGE_BUFFER : GL31C.GL_UNIFORM_BUFFER;
-        if (uboAlign == 0) uboAlign = Math.max(16, GL11C.glGetInteger(sb ? GL43C.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT : GL31C.GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT));
+        offsetAlign(sb);
         int total = 0;
         for (Arena a : LISTED) {
             a.listed = false;
@@ -1134,7 +1140,7 @@ public final class ChunkMultiDraw {
         int buf = sb ? ssboBuffer() : ubo();
         GL15C.glBindBuffer(target, buf);
         // new storage each time (no wait on the previous frame's draws); a uniform block's full size past the last range
-        GL15C.glBufferData(target, total + (sb ? 16L : 16L * MAX_DRAWS), GL15C.GL_STREAM_DRAW);
+        GL15C.glBufferData(target, total + (sb && !uboWindows() ? 16L : 16L * MAX_DRAWS), GL15C.GL_STREAM_DRAW);
         staging.limit(total).position(0);
         GL15C.glBufferSubData(target, 0, staging);
         staging.clear();
@@ -1175,7 +1181,7 @@ public final class ChunkMultiDraw {
                     MemoryUtil.memPutInt(p + 4, 1);
                     MemoryUtil.memPutInt(p + 8, 0);
                     MemoryUtil.memPutInt(p + 12, MemoryUtil.memGetInt(a.bases + 4L * i));
-                    MemoryUtil.memPutInt(p + 16, i);   // base instance = the draw's index: its offset (a GPU pass may drop draws)
+                    MemoryUtil.memPutInt(p + 16, windowed() ? i & (MAX_DRAWS - 1) : i);   // base instance = the draw's index: its offset (a GPU pass may drop draws; in windows: the index in its window)
                 }
             }
             long tUp = System.nanoTime();
@@ -1235,6 +1241,26 @@ public final class ChunkMultiDraw {
                 seq.bind(a.maxIndices);
                 // a shaderpack's vertex prologue reads the quad's other vertices from the arena
                 if (dev.lull.shaders.ShaderPipeline.active) GL30C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, 9, a.vbo);
+                if (sb && phase <= 0 && windowed()) {
+                    if (dev.lull.DrawStats.ON) dev.lull.DrawStats.phaseBegin(3);
+                    long tD = System.nanoTime();
+                    for (int w0 = 0; w0 < a.n; w0 += MAX_DRAWS) {
+                        int wn = Math.min(MAX_DRAWS, a.n - w0);
+                        GL30C.glBindBufferRange(GL31C.GL_UNIFORM_BUFFER, UBO_BINDING, buf, a.uboOffset + 16L * w0, 16L * MAX_DRAWS);
+                        if (indirect)
+                            GL43C.glMultiDrawElementsIndirect(GL15C.GL_TRIANGLES, seq.type().asGLType, cmdBase + a.cmdOffset + 20L * w0, wn, 20);
+                        else GL32C.nglMultiDrawElementsBaseVertex(GL15C.GL_TRIANGLES, a.counts + 4L * w0, seq.type().asGLType, a.indices + 8L * w0, wn, a.bases + 4L * w0);
+                        windowDraws++;
+                    }
+                    drawNanos += System.nanoTime() - tD;
+                    if (dev.lull.DrawStats.ON) dev.lull.DrawStats.phaseEnd(3);
+                    multiDraws++;
+                    if (!keep) {
+                        a.n = 0;
+                        a.maxIndices = 0;
+                    }
+                    continue;
+                }
                 GL30C.glBindBufferRange(target, UBO_BINDING, buf, a.uboOffset, sb ? 16L * a.n : 16L * MAX_DRAWS);
                 if (dev.lull.DrawStats.ON) dev.lull.DrawStats.phaseBegin(3);
                 if (phase > 0)   // the layer's commands, those this phase does not draw with no instance (the order kept)
@@ -1255,6 +1281,8 @@ public final class ChunkMultiDraw {
         }
     }
 
+    /** uniform block windows drawn (uboWindows) */
+    public static long windowDraws;
     private static ByteBuffer cmdStaging = MemoryUtil.memAlloc(1 << 16);
     private static final IndirectCommands COMMANDS = new IndirectCommands();
     /** indirect possible here (GL 4.3 / ARB_multi_draw_indirect, not refused by a flag): decided once, before the shaders are patched */
@@ -1298,10 +1326,10 @@ public final class ChunkMultiDraw {
                 indirectNow = true;
                 why = " (forced)";
             } else {
-                String c = Calibration.get("chunks");
+                String c = Calibration.get(PathTune.KEY);
                 if ("indirect".equals(c) || "direct".equals(c)) {   // measured on this machine before: the single-path shaders
                     indirectNow = "indirect".equals(c);
-                    pathChoice = c + " (calibrated earlier: " + Calibration.get("chunks.why") + ")";
+                    pathChoice = c + " (calibrated earlier: " + Calibration.get(PathTune.KEY + ".why") + ")";
                     why = " - " + pathChoice;
                 } else {
                     indirectNow = !intel;
@@ -1323,6 +1351,13 @@ public final class ChunkMultiDraw {
      * layer's draw (once a frame). Stored for this machine: the next start uses it from the first frame.
      */
     static final class PathTune {
+        /**
+         * the calibration key: "chunks2" since 1.3.3 - "chunks" could be measured before the frames-in-flight limit, where
+         * the N100's driver queued 8+ frames and stalled ~250 ms: the trimmed frames between the stalls held the CPU's
+         * cost only (1.3.1 kept indirect there: "3.015 ms indirect, 3.145 direct"); with the queue bounded the same
+         * machine measures 6.1 direct against 6.5 indirect (11-21). Measured again once, after the queue has settled.
+         */
+        static final String KEY = "chunks2";
         private static final int WINDOW = 180, SETTLE = 30, ROUNDS = 2;
         private static final long QUIET = 20_000_000_000L, HITCH = 250_000_000L;
         private static final double GAIN = 0.97, FAR = 1.3;
@@ -1352,6 +1387,10 @@ public final class ChunkMultiDraw {
             }
             switch (phase) {
                 case 0 -> {
+                    if (!UploadRing.queueSettled()) {   // the frames-in-flight watch still deciding: the GPU's cost not in the frames yet
+                        since = 0;
+                        return;
+                    }
                     if (since == 0) since = now;
                     if (now - since < QUIET) return;
                     start = indirectNow;
@@ -1401,7 +1440,7 @@ public final class ChunkMultiDraw {
                     indirectNow ? "indirect" : "direct", ind / 1e6, dir / 1e6, rounds, rounds == 1 ? "" : "s");
             System.out.println("[sleep/opt] chunk multidraw: " + pathChoice);
             phase = 3;
-            Calibration.put("chunks", indirectNow ? "indirect" : "direct", pathChoice);
+            Calibration.put(KEY, indirectNow ? "indirect" : "direct", pathChoice);
         }
 
         /** Calibration.reset: measured again (only where the shaders read both indices; else at the next start) */
@@ -1807,6 +1846,47 @@ public final class ChunkMultiDraw {
         return s;
     }
 
+    /**
+     * -Dlab.chunkmd.uboWindows=true|auto (lab, 11-21; auto: on Intel's graphics only): the opaque layers' offsets stay
+     * in the storage buffer's store (every storage-buffer feature kept: one arena, kept lists, parallel lists), but the
+     * vertex shader reads them through a
+     * uniform block - each multi-draw split into windows of MAX_DRAWS draws, the block bound to the window's 16 KB of the
+     * same buffer (gl_DrawID restarts at every call; an indirect command's base instance is its index in its window).
+     * N100 (Intel UHD), steady scene with GPU timers: the storage-buffer read per vertex cost the terrain 5.90 ms of GPU a
+     * frame against vanilla's 5.50-5.57; the uniform block (-Dlab.chunkmd.noSsbo) 5.56. The same floats are added to
+     * the same positions: bit-exact either way. Not with occlusion culling (its compute pass finds offsets by base instance).
+     */
+    private static final String UBO_WINDOWS_MODE = System.getProperty("lab.chunkmd.uboWindows", "false");
+    /** "true": on; "auto": on where measured faster - Intel's graphics (other vendors untested yet: off); else off */
+    private static final boolean UBO_WINDOWS_FLAG = "true".equals(UBO_WINDOWS_MODE) || "auto".equals(UBO_WINDOWS_MODE);
+    private static Boolean uboWindows;
+
+    static boolean uboWindows() {
+        Boolean w = uboWindows;
+        if (w == null) {
+            boolean want = "true".equals(UBO_WINDOWS_MODE) || "auto".equals(UBO_WINDOWS_MODE)
+                    && String.valueOf(GL11C.glGetString(GL11C.GL_VENDOR)).toLowerCase(java.util.Locale.ROOT).contains("intel");
+            uboWindows = w = want && ssbo() && !OcclusionCull.ON;
+            if (UBO_WINDOWS_FLAG) System.out.println("[sleep/opt] chunk multidraw: offsets read through uniform block windows " + w + " (" + UBO_WINDOWS_MODE + ")");
+        }
+        return w;
+    }
+
+    /** drawn in windows now: not while sleep's shaderpack pipeline runs (its programs read the storage buffer by the draw's whole index) */
+    private static boolean windowed() {
+        return uboWindows() && !dev.lull.shaders.ShaderPipeline.active;
+    }
+
+    /** offset alignment of an arena's offsets in the shared buffer (storage buffer's, and the uniform block's in windows) */
+    private static int offsetAlign(boolean sb) {
+        if (uboAlign == 0) {
+            int a = Math.max(16, GL11C.glGetInteger(sb ? GL43C.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT : GL31C.GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT));
+            if (sb && uboWindows()) a = Math.max(a, GL11C.glGetInteger(GL31C.GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT));
+            uboAlign = a;
+        }
+        return uboAlign;
+    }
+
     private static int ubo() {
         if (ubo == 0) {
             ubo = GL15C.glGenBuffers();
@@ -1824,12 +1904,16 @@ public final class ChunkMultiDraw {
             boolean sb = ssbo();
             int block = sb ? GL43C.glGetProgramResourceIndex(program, GL43C.GL_SHADER_STORAGE_BLOCK, "ProbeChunkOffsets")
                     : GL31C.glGetUniformBlockIndex(program, "ProbeChunkOffsets");
+            if (sb && block == GL31C.GL_INVALID_INDEX && uboWindows()) {   // our opaque programs in windows: a uniform block
+                block = GL31C.glGetUniformBlockIndex(program, "ProbeChunkOffsets");
+                sb = false;
+            }
             if (flag < 0 || block == GL31C.GL_INVALID_INDEX) {
                 s = new int[0];
             } else {
                 if (sb) GL43C.glShaderStorageBlockBinding(program, block, UBO_BINDING);
                 else GL31C.glUniformBlockBinding(program, block, UBO_BINDING);
-                if (sb && LightVolumes.ON) {
+                if (ssbo() && LightVolumes.ON) {   // (the light volumes stay a storage block in windows too)
                     int lv = GL43C.glGetProgramResourceIndex(program, GL43C.GL_SHADER_STORAGE_BLOCK, "ProbeLightVolumes");
                     if (lv != GL31C.GL_INVALID_INDEX) GL43C.glShaderStorageBlockBinding(program, lv, LightVolumes.BINDING);
                     if (lv != GL31C.GL_INVALID_INDEX && GL20C.glGetAttribLocation(program, "ProbeRecipe") < 0) LightVolumes.recipesIgnored("a chunk program");
@@ -1920,6 +2004,7 @@ public final class ChunkMultiDraw {
                 drawReuses, 100.0 * quadsPacked / Math.max(1, quadsPacked + quadsFull), PATCHED, multiDraws, sectionsMulti, sectionsVanilla, sectionsSkipped, 100.0 * quadsDrawn / Math.max(1, quadsTotal), FACE_CULL ? "on" : "off",
                 uploads, arenas, bytes / 1048576.0, grows,
                 KEEP_VANILLA || PATCHED.size() != SUPPORTED.size() ? "filled" : "not filled") + packReport()
+                + (UBO_WINDOWS_FLAG ? "; uniform block windows " + uboWindows() + " (" + windowDraws + " drawn)" : "")
                 + (TRANSLUCENT ? String.format(java.util.Locale.ROOT, "; translucent: patched %s, multi-draws %d, frames the vanilla way %d, resorts %d",
                         translucentPatched, translucentDraws, translucentFallbacks, resorts) : "")
                 + String.format(java.util.Locale.ROOT, "; list rebuilds %d (reused %d): section loop %.1f us each (%.0f sections, %.0f ns a section), the flush after %.1f us each",

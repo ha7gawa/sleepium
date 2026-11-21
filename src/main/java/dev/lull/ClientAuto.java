@@ -119,6 +119,8 @@ public final class ClientAuto {
     /** -Dsleep.clientAuto.framehash=true: freeze, then hash the frame's pixels and save it as a PNG (render exactness) */
     private static final boolean FRAMEHASH = Boolean.getBoolean("sleep.clientAuto.framehash");
     private static int hashAt = -1, idleTicks, sceneAt;
+    private static final int ANIM_TICKS = Integer.getInteger("sleep.clientAuto.animTicks", 0);
+    private static int animUntil = -1;
     /** -Dsleep.clientAuto.shot=S: a screenshot S seconds into the measured window, nothing frozen (moving scenes) */
     private static final double SHOT_S = Double.parseDouble(System.getProperty("sleep.clientAuto.shot", "-1"));   // seconds, fractions allowed
     private static int shotAt = -1;
@@ -211,9 +213,12 @@ public final class ClientAuto {
         }
         if (FRAMEHASH) {
             // no /tick freeze: frozen, the server stops sending the light that new sections need to be built
-            dev.lull.optsupport.ClientCounters.freezeTextures = true;
+            // -Dsleep.clientAuto.animTicks=N (11-20, the double atlas check): the animations reset, then run N ticks, then
+            // freeze - two runs with the same N hash the same animated frames (the atlas content after N ticks)
+            dev.lull.optsupport.ClientCounters.freezeTextures = ANIM_TICKS == 0;
             resetAnimations();
-            hashAt = ticks + 60;
+            animUntil = ANIM_TICKS > 0 ? ticks + ANIM_TICKS : -1;
+            hashAt = ticks + 60 + ANIM_TICKS;
             // -Dsleep.clientAuto.remesh=true: the scene's sections re-meshed first (the plain re-mesh path, light as it is
             // now): every renderer takes the light at the same moment, whatever each kept since the last light change
             if (Boolean.getBoolean("sleep.clientAuto.remesh")) Minecraft.getInstance().levelRenderer.setBlocksDirty(-16, 216, 0, 64, 272, 80);
@@ -373,7 +378,7 @@ public final class ClientAuto {
             boolean v = b != flipA;
             if (ClientMeter.measuring()) {
                 flipField.setBoolean(null, v);
-                log("flip w=" + win + " frame=" + ClientMeter.frameIndex() + " value=" + v + " (" + (b ? "B" : "A") + ")");
+                log("flip w=" + win + " frame=" + ClientMeter.frameIndex() + " value=" + v + " (" + (b ? "B" : "A") + ")" + (dev.lull.optsupport.RegionStates.TIME ? " | " + dev.lull.optsupport.RegionStates.timeReport() : ""));
             } else if (win > 0) {   // the window is over: back to A
                 flipField.setBoolean(null, flipA);
                 log("flip done, " + flipField.getName() + " back to " + flipA);
@@ -608,6 +613,10 @@ public final class ClientAuto {
         boolean idle = d != null && mc.levelRenderer.hasRenderedAllSections() && d.getToUpload() == 0 && d.getToBatchCount() == 0
                 && (!ALL_CHUNKS || allChunksIn(mc));
         stableTicks = idle ? stableTicks + 1 : 0;
+        if (phase == Phase.TP_WAIT_DONE) {   // the teleport's client side: all chunks received; first idle mesher (before the 2 s of stability)
+            if (tpClientAllAt < 0 && allChunksIn(mc)) tpClientAllAt = since(tpStart);
+            if (tpIdleAt < 0 && idle) tpIdleAt = since(tpStart);
+        }
         return stableTicks >= 40;
     }
 
@@ -648,7 +657,47 @@ public final class ClientAuto {
         });
     }
 
+    /**
+     * -Dsleep.clientAuto.remeshEvery=S (with remeshRadius=R chunks, 8 by default): in the measured window, every S
+     * seconds the sections within R chunks of the camera are marked dirty - the same set meshed again and again, for a
+     * mesher's cost a section (lab.meshTime) independent of how many sections a flight happened to bring.
+     */
+    private static final int REMESH_EVERY = Integer.getInteger("sleep.clientAuto.remeshEvery", 0), REMESH_R = Integer.getInteger("sleep.clientAuto.remeshRadius", 8);
+
+    /**
+     * -Dsleep.clientAuto.holes=true: once a second in the window, the chunks within view distance - 1 of the player the
+     * client does not have (a missing chunk is a hole in the ground) - summed and the worst second.
+     */
+    private static final boolean HOLES = Boolean.getBoolean("sleep.clientAuto.holes");
+    static long holeSum, holeSamples;
+    static int holeMax;
+
+    private static void holes() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null) return;
+        int r = mc.options.getEffectiveRenderDistance() - 1, cx = mc.player.chunkPosition().x, cz = mc.player.chunkPosition().z, n = 0;
+        var cs = mc.level.getChunkSource();
+        for (int dx = -r; dx <= r; dx++)
+            for (int dz = -r; dz <= r; dz++)
+                if (dx * dx + dz * dz <= r * r && !cs.hasChunk(cx + dx, cz + dz)) n++;
+        holeSum += n;
+        holeSamples++;
+        holeMax = Math.max(holeMax, n);
+        log("holes " + holeSamples + ": " + n);
+    }
+
+    public static String holesReport() {
+        return HOLES ? String.format(java.util.Locale.ROOT, "holes: %.1f a second (worst %d) over %d s", holeSamples == 0 ? 0.0 : (double) holeSum / holeSamples, holeMax, holeSamples) : "";
+    }
+
     private static void tick() {
+        if (HOLES && dev.lull.ClientMeter.measuring() && ticks % 20 == 0) holes();
+        if (REMESH_EVERY > 0 && dev.lull.ClientMeter.measuring() && (ticks - windowStart) % (REMESH_EVERY * 20) == 0 && Minecraft.getInstance().player != null) {
+            var p = Minecraft.getInstance().player.blockPosition();
+            int r = REMESH_R * 16;
+            Minecraft.getInstance().levelRenderer.setBlocksDirty(p.getX() - r, -64, p.getZ() - r, p.getX() + r, 319, p.getZ() + r);
+            log("remesh at " + ticks + ": " + dev.lull.optsupport.RegionStates.timeReport());
+        }
         for (java.util.Iterator<Object[]> it = CMDS.iterator(); it.hasNext(); ) {
             Object[] c = it.next();
             if (ticks >= (int) c[0]) {
@@ -693,6 +742,11 @@ public final class ClientAuto {
         }
         if (abAt >= 0 && ticks >= abAt) abTick(Minecraft.getInstance());
         if (FLIP != null && flipFrom >= 0) flipTick();
+        if (animUntil >= 0 && ticks >= animUntil) {
+            dev.lull.optsupport.ClientCounters.freezeTextures = true;
+            animUntil = -1;
+            log("frame hash: animations frozen after " + ANIM_TICKS + " ticks");
+        }
         if (hashAt >= 0 && ticks >= hashAt) {
             // only when the renderer is idle: every section built and uploaded (the scene's sections may still be queued)
             Minecraft m = Minecraft.getInstance();
@@ -856,10 +910,32 @@ public final class ClientAuto {
                 if ((STOP_IN_TP < 0 || tpIndex < TP.length - 1) && (queueBusy(mc) || since(phaseStart) > 5)) enter2Done();
             }
             case TP_WAIT_DONE -> {
+                // the integrated server's side: when every chunk within the render distance of the target is FULL there
+                // (asked on the server thread every 10 ticks; the time is when the asking tick ran) - generation vs meshing
+                var srv = mc.getSingleplayerServer();
+                if (srv != null && tpServerFullAt < 0 && ticks % 10 == 0) {
+                    int[] tp = TP[tpIndex];
+                    int r = mc.options.getEffectiveRenderDistance();
+                    double t = since(tpStart);
+                    srv.execute(() -> {
+                        var cs = srv.overworld().getChunkSource();
+                        // the circle the client tracks (as allChunksIn), not the square: a pack's corners may never load
+                        int n = 0, want = 0;
+                        for (int dx = -r; dx <= r; dx++)
+                            for (int dz = -r; dz <= r; dz++)
+                                if (dx * dx + dz * dz <= r * r) {
+                                    want++;
+                                    if (cs.getChunkNow((tp[0] >> 4) + dx, (tp[1] >> 4) + dz) != null) n++;
+                                }
+                        if (n == want && tpServerFullAt < 0) tpServerFullAt = t;
+                    });
+                }
                 if (meshedStable(mc) || since(phaseStart) > 60) {
                     int[] p = TP[tpIndex];
                     log(String.format(Locale.ROOT, "teleport %d to (%d, %d): terrain generated + meshed in %.1f s (%s)%s", tpIndex + 1, p[0], p[1],
-                            since(tpStart) - 2.0, sectionStats(mc), since(phaseStart) > 60 ? " TIMEOUT" : ""));
+                            since(tpStart) - 2.0, sectionStats(mc), since(phaseStart) > 60 ? " TIMEOUT" : "")
+                            + String.format(Locale.ROOT, "; server: all chunks in the render distance FULL at %.1f s; client: all chunks received at %.1f s, meshing idle at %.1f s",
+                                    tpServerFullAt - 2.0, tpClientAllAt - 2.0, tpIdleAt - 2.0));
                     tpIndex++;
                     if (tpIndex < TP.length) enter(Phase.RECORD);
                     else enter(Phase.FINISH);
@@ -904,9 +980,14 @@ public final class ClientAuto {
     }
 
     private static long tpStart;
+    private static volatile double tpServerFullAt = -1;
+    private static double tpClientAllAt = -1, tpIdleAt = -1;
 
     private static void enter2Done() {
         tpStart = phaseStart;   // measured from the teleport command
+        tpServerFullAt = -1;
+        tpClientAllAt = -1;
+        tpIdleAt = -1;
         phase = Phase.TP_WAIT_DONE;
         stableTicks = 0;
     }

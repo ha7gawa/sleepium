@@ -19,4 +19,10 @@ public abstract class ChunkChurnCompileMixin {
             net.minecraft.client.renderer.SectionBufferBuilderPack pack, java.util.List<?> extra, CallbackInfoReturnable<?> cir) {
         dev.lull.optsupport.ChunkChurn.compiled(pos, region);
     }
+
+    @Inject(method = "compile(Lnet/minecraft/core/SectionPos;Lnet/minecraft/client/renderer/chunk/RenderChunkRegion;Lcom/mojang/blaze3d/vertex/VertexSorting;Lnet/minecraft/client/renderer/SectionBufferBuilderPack;Ljava/util/List;)Lnet/minecraft/client/renderer/chunk/SectionCompiler$Results;", at = @At("RETURN"))
+    private void sleep$results(SectionPos pos, RenderChunkRegion region, com.mojang.blaze3d.vertex.VertexSorting sorting,
+            net.minecraft.client.renderer.SectionBufferBuilderPack pack, java.util.List<?> extra, CallbackInfoReturnable<net.minecraft.client.renderer.chunk.SectionCompiler.Results> cir) {
+        dev.lull.optsupport.ChunkChurn.results(pos, region, cir.getReturnValue());
+    }
 }

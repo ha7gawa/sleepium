@@ -26,6 +26,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
     private boolean sleep$decide(String targetClassName, String mixinClassName) {
         String simple = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
         boolean on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt." + simple);
+        if (simple.startsWith("AtlasDouble") || simple.equals("AtlasIdAccessor")) on = Boolean.getBoolean("lab.atlasDouble");   // (lab, 11-20: the double atlas)
         // helpers that belong to a feature flag
         if (simple.equals("EntitySectionIterMixin") || simple.equals("ClassInstanceMultiMapAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.EntitySectionScanMixin")
@@ -58,6 +59,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.prender.tickPoses");
         if (simple.equals("ViewAreaStripsMixin"))   // repositionCamera visits the moved columns only
             on = Boolean.getBoolean("lab.viewAreaStrips");
+        if (simple.equals("MeshThreadsMixin"))   // at most lab.meshThreads section meshes at once
+            on = Integer.getInteger("lab.meshThreads", 0) > 0;
         if (simple.startsWith("MeshMemo"))   // a section with its mesh's inputs is not meshed again (MeshMemo)
             on = Boolean.getBoolean("lab.meshMemo");
         if (simple.startsWith("TintBlend"))   // biome blending by running sums (TintBlend)
@@ -177,10 +180,30 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenSkip") || Boolean.getBoolean("lab.opt.WorldgenShare");
         if (simple.startsWith("WorldgenShare"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenShare");
+        // 11-21 noise allocation (lab-nalloc): the NoiseChunk halves of their flags
+        if (simple.equals("WorldgenMapMemoChunkMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenMapMemoMixin");
+        if (simple.equals("NoiseSlicePoolChunkMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseSlicePoolMixin");
+        // 11-21 lab-fill: the interpolator half of the lazy interpolation flag
+        if (simple.equals("NoiseLazyInterpolatorMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseLazyInterpMixin");
+        if (simple.equals("NoiseMathWrapMixin"))   // part of the Perlin octave flag
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseMathMixin");
+        // the surface step's helpers belong to their feature's flag
+        if (simple.equals("SurfaceBiomeCellsContextMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SurfaceBiomeCellsMixin");
+        if (simple.equals("SurfaceConditionsContextMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SurfaceConditionsMixin");
+        if (simple.equals("SurfacePlanContextMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SurfacePlanMixin");
         if (simple.equals("WorldgenAllocPlacementMixin") || simple.equals("WorldgenAllocJointMixin"))   // FEATURES: not yet verified
             on = Boolean.getBoolean("lab.opt.WorldgenFeatureAlloc");
+        if (simple.equals("PlacementFilterInvoker") || simple.equals("RepeatingPlacementInvoker") || simple.equals("HeightRangePlacementAccessor")
+                || simple.equals("RandomOffsetPlacementAccessor") || simple.equals("HeightmapPlacementAccessor") || simple.equals("EnvironmentScanPlacementAccessor"))
+            on = Boolean.getBoolean("lab.opt.WorldgenFeatureAlloc");   // PlacementWalk's views of the modifiers
+        if (simple.equals("HeightmapsChunkAccessor") || simple.equals("HeightmapDataAccessor"))   // OreScan's views of the heightmaps
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenOreScanMixin");
+        if (simple.equals("ShapeFullMemoShapeMixin"))   // the slot of ShapeFullMemoMixin's answer
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ShapeFullMemoMixin");
         if (simple.equals("WorldgenReactorMixin") || simple.startsWith("Reactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenReactor");
+        if (simple.startsWith("GenGraph")) on = Boolean.getBoolean("lab.opt.GenGraph");
+        if (simple.equals("WorldgenReactorMixin") && Boolean.getBoolean("lab.opt.GenGraph")) on = false;   // the graph replaces its runGenerationTask
         if (simple.startsWith("MainReactor") || simple.equals("EventLoopQueueAccessor") || simple.equals("ChunkCacheExecutorAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.MainReactor");
         if (simple.startsWith("MainReactorScout")) on = Boolean.getBoolean("lab.reactor.scout");   // measurement only
@@ -196,6 +219,12 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.equals("LightTimingMixin")) on = Boolean.getBoolean("lab.lighttime");   // measurement only
         if (simple.startsWith("Scout") && simple.endsWith("Mixin"))   // measurement only, never with lab.opt.all
             on = Boolean.getBoolean("lab.scout");
+        if (simple.startsWith("SaveDirect"))   // palettes without the codec machinery (optsupport/SavePalettes)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SaveDirect");
+        if (simple.startsWith("SaveTicks"))   // tick lists of deferred saves made on the pool (optsupport/SaveWrite, with SaveWriteMixin)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SaveTicks");
+        if (simple.startsWith("SaveStreams"))   // chunk records encoded through per-thread streams (optsupport/SaveStreams)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SaveStreams");
         if (simple.equals("AsyncChunkSaveEncodeMixin") || simple.equals("AsyncChunkSaveStorageMixin"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.AsyncChunkSaveMixin");
         if (simple.equals("ChunkTickMemoChunkMixin") || simple.equals("ChunkTickMemoEpochMixin"))
@@ -301,6 +330,10 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         }
         // the worldgen reactor removes the worldgen actor; FEATURES of neighbouring chunks are then kept apart only by
         // ParallelGen's 3x3 claims (ParallelWorldgenMixin): without them two chunks' features write one section at once
+        if (Boolean.getBoolean("lab.opt.GenGraph") && !Boolean.getBoolean("lab.opt.WorldgenReactor")) {   // the reactor's chunk-load, FULL and gate helpers
+            System.setProperty("lab.opt.WorldgenReactor", "true");
+            System.out.println("[sleep/opt] lab.opt.GenGraph uses WorldgenReactor's helpers (its runGenerationTask stays off): turned on");
+        }
         if (Boolean.getBoolean("lab.opt.WorldgenReactor") && !Boolean.getBoolean("lab.opt.ParallelWorldgenMixin") && !Boolean.getBoolean("lab.opt.all")) {
             System.setProperty("lab.opt.ParallelWorldgenMixin", "true");
             System.out.println("[sleep/opt] lab.opt.WorldgenReactor needs ParallelWorldgenMixin (its FEATURES claims): turned on");

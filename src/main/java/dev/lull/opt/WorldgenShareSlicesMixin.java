@@ -1,6 +1,7 @@
 package dev.lull.opt;
 
 import dev.lull.optsupport.CellProof;
+import dev.lull.optsupport.Dfc;
 import dev.lull.optsupport.SliceColumns;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +45,7 @@ public abstract class WorldgenShareSlicesMixin {
     @Shadow @Final private Blender blender;
 
     @Unique private RandomState sleep$random;
+    @Unique private Object sleep$beardifier;
     /** 0 undecided, 1 share, 2 do not */
     @Unique private byte sleep$share;
     @Unique private SliceColumns sleep$table;
@@ -53,6 +55,7 @@ public abstract class WorldgenShareSlicesMixin {
                             DensityFunctions.BeardifierOrMarker beardifier, NoiseGeneratorSettings noiseGeneratorSettings,
                             Aquifer.FluidPicker fluidPicker, Blender blendifier, CallbackInfo ci) {
         sleep$random = random;
+        sleep$beardifier = beardifier;
     }
 
     @Unique
@@ -61,7 +64,8 @@ public abstract class WorldgenShareSlicesMixin {
             boolean ok = blender == Blender.empty() && sleep$random != null && !interpolators.isEmpty();
             if (ok) {
                 List<DensityFunction> roots = new ArrayList<>(interpolators);
-                ok = SliceColumns.cache2dAreFlat(roots);
+                ok = SliceColumns.WALK_EACH ? SliceColumns.cache2dAreFlat(roots)
+                        : SliceColumns.cache2dAreFlat(sleep$random, sleep$beardifier, roots);
             }
             if (ok) sleep$table = SliceColumns.forState(sleep$random, cellNoiseMinY, cellCountY, cellWidth, interpolators.size());
             sleep$share = (byte) (ok ? 1 : 2);
@@ -98,10 +102,23 @@ public abstract class WorldgenShareSlicesMixin {
                 }
             }
 
-            for (NoiseChunk.NoiseInterpolator noisechunk$noiseinterpolator : this.interpolators) {
-                CellProof.Corners c = (CellProof.Corners) noisechunk$noiseinterpolator;
-                double[] adouble = (isSlice0 ? c.sleep$slice0() : c.sleep$slice1())[i];
-                noisechunk$noiseinterpolator.fillArray(adouble, this.sliceFillingContextProvider);
+            // DFC (lab): the column of every interpolator by compiled code when this NoiseChunk has it (see Dfc)
+            if (((Object) this) instanceof Dfc.Host h && h.sleep$dfcCorners(isSlice0, i)) {
+                if (Dfc.VERIFY) {
+                    for (NoiseChunk.NoiseInterpolator noisechunk$noiseinterpolator : this.interpolators) {
+                        CellProof.Corners c = (CellProof.Corners) noisechunk$noiseinterpolator;
+                        double[] adouble = (isSlice0 ? c.sleep$slice0() : c.sleep$slice1())[i];
+                        double[] t = new double[adouble.length];
+                        noisechunk$noiseinterpolator.fillArray(t, this.sliceFillingContextProvider);
+                        Dfc.check(adouble, t);
+                    }
+                }
+            } else {
+                for (NoiseChunk.NoiseInterpolator noisechunk$noiseinterpolator : this.interpolators) {
+                    CellProof.Corners c = (CellProof.Corners) noisechunk$noiseinterpolator;
+                    double[] adouble = (isSlice0 ? c.sleep$slice0() : c.sleep$slice1())[i];
+                    noisechunk$noiseinterpolator.fillArray(adouble, this.sliceFillingContextProvider);
+                }
             }
             if (border) {
                 double[][] cols = new double[this.interpolators.size()][];

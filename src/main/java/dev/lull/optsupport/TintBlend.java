@@ -34,6 +34,9 @@ public final class TintBlend {
     private static final class Scratch {
         int[] col = new int[0], rowR = new int[0], rowG = new int[0], rowB = new int[0];
         final BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+        double[] fx = new double[0], fy = new double[0], fz = new double[0];
+        Object[] biome = new Object[0];
+        boolean[] done = new boolean[0];
     }
 
     private static final ThreadLocal<Scratch> SCRATCH = ThreadLocal.withInitial(Scratch::new);
@@ -84,11 +87,12 @@ public final class TintBlend {
         }
         int[] col = sc.col, rr = sc.rowR, rg = sc.rowG, rb = sc.rowB;
         BlockPos.MutableBlockPos m = sc.m;
-        for (int dz = 0; dz < s; dz++)
-            for (int dx = 0; dx < s; dx++) {
-                m.set(x0 + dx, y, z0 + dz);
-                col[dz * s + dx] = res.getColor(level.getBiome(m).value(), (double) m.getX(), (double) m.getZ());
-            }
+        if (!ZOOM || !zoomed(level, res, x0, z0, y, s, col, sc))
+            for (int dz = 0; dz < s; dz++)
+                for (int dx = 0; dx < s; dx++) {
+                    m.set(x0 + dx, y, z0 + dz);
+                    col[dz * s + dx] = res.getColor(level.getBiome(m).value(), (double) m.getX(), (double) m.getZ());
+                }
         // along x: each row's window sums for the 16 output columns
         for (int dz = 0; dz < s; dz++) {
             int r = 0, g = 0, bl = 0, base = dz * s;
@@ -133,8 +137,94 @@ public final class TintBlend {
         return filled;
     }
 
+    /**
+     * -Dlab.tintBlend.zoom (11-18): the layer's biomes by BiomeManager.getBiome's own arithmetic, with what it repeats for
+     * every block worked out once: a quart corner's three fiddles (8 LCG steps each time, shared by the 4 x 4 x 4 blocks
+     * around the corner) and a quart cell's noise biome (a chunk lookup each time). The same doubles in the same order:
+     * the same corner picked, the same biome. Only for the vanilla biome manager reading the level itself.
+     */
+    public static final boolean ZOOM = Boolean.getBoolean("lab.tintBlend.zoom");
+
+    private static boolean zoomed(ClientLevel level, ColorResolver res, int x0, int z0, int y, int s, int[] col, Scratch sc) {
+        net.minecraft.world.level.biome.BiomeManager bm = level.getBiomeManager();
+        if (bm.getClass() != net.minecraft.world.level.biome.BiomeManager.class) return false;
+        dev.lull.opt.TintBlendBiomeAccessor acc = (dev.lull.opt.TintBlendBiomeAccessor) (Object) bm;
+        if (acc.sleep$source() != level) return false;
+        long seed = acc.sleep$zoomSeed();
+        // the quart box the layer's blocks reach: getBiome looks at (b - 2) >> 2 and that + 1 on each axis
+        int qx0 = (x0 - 2) >> 2, qz0 = (z0 - 2) >> 2, qy0 = (y - 2) >> 2;
+        int qw = ((x0 + s - 1 - 2) >> 2) - qx0 + 2, qd = ((z0 + s - 1 - 2) >> 2) - qz0 + 2;
+        int cells = qw * qd * 2;
+        if (sc.fx.length < cells) {
+            sc.fx = new double[cells];
+            sc.fy = new double[cells];
+            sc.fz = new double[cells];
+            sc.biome = new Object[cells];
+            sc.done = new boolean[cells];
+        }
+        java.util.Arrays.fill(sc.done, 0, cells, false);
+        java.util.Arrays.fill(sc.biome, 0, cells, null);
+        double[] fx = sc.fx, fy = sc.fy, fz = sc.fz;
+        Object[] biome = sc.biome;
+        boolean[] done = sc.done;
+        int j = y - 2;
+        int i1 = j >> 2;
+        double d1 = (double) (j & 3) / 4.0;
+        for (int dz = 0; dz < s; dz++)
+            for (int dx = 0; dx < s; dx++) {
+                int bx = x0 + dx, bz = z0 + dz;
+                int i = bx - 2, k = bz - 2;
+                int l = i >> 2, j1 = k >> 2;
+                double d0 = (double) (i & 3) / 4.0;
+                double d2 = (double) (k & 3) / 4.0;
+                int k1 = 0;
+                double d3 = Double.POSITIVE_INFINITY;
+                for (int l1 = 0; l1 < 8; l1++) {
+                    boolean flag = (l1 & 4) == 0, flag1 = (l1 & 2) == 0, flag2 = (l1 & 1) == 0;
+                    int i2 = flag ? l : l + 1, j2 = flag1 ? i1 : i1 + 1, k2 = flag2 ? j1 : j1 + 1;
+                    double d4 = flag ? d0 : d0 - 1.0, d5 = flag1 ? d1 : d1 - 1.0, d6 = flag2 ? d2 : d2 - 1.0;
+                    int c = ((k2 - qz0) * qw + (i2 - qx0)) * 2 + (j2 - qy0);
+                    if (!done[c]) {   // BiomeManager.getFiddledDistance's three fiddles for this corner
+                        long r = net.minecraft.util.LinearCongruentialGenerator.next(seed, (long) i2);
+                        r = net.minecraft.util.LinearCongruentialGenerator.next(r, (long) j2);
+                        r = net.minecraft.util.LinearCongruentialGenerator.next(r, (long) k2);
+                        r = net.minecraft.util.LinearCongruentialGenerator.next(r, (long) i2);
+                        r = net.minecraft.util.LinearCongruentialGenerator.next(r, (long) j2);
+                        r = net.minecraft.util.LinearCongruentialGenerator.next(r, (long) k2);
+                        fx[c] = fiddle(r);
+                        r = net.minecraft.util.LinearCongruentialGenerator.next(r, seed);
+                        fy[c] = fiddle(r);
+                        r = net.minecraft.util.LinearCongruentialGenerator.next(r, seed);
+                        fz[c] = fiddle(r);
+                        done[c] = true;
+                    }
+                    double d7 = net.minecraft.util.Mth.square(d6 + fz[c]) + net.minecraft.util.Mth.square(d5 + fy[c]) + net.minecraft.util.Mth.square(d4 + fx[c]);
+                    if (d3 > d7) {
+                        k1 = l1;
+                        d3 = d7;
+                    }
+                }
+                int l2 = (k1 & 4) == 0 ? l : l + 1, i3 = (k1 & 2) == 0 ? i1 : i1 + 1, j3 = (k1 & 1) == 0 ? j1 : j1 + 1;
+                int c = ((j3 - qz0) * qw + (l2 - qx0)) * 2 + (i3 - qy0);
+                Object b = biome[c];
+                if (b == null) biome[c] = b = level.getNoiseBiome(l2, i3, j3);
+                @SuppressWarnings("unchecked")
+                net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> h = (net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome>) b;
+                col[dz * s + dx] = res.getColor(h.value(), (double) bx, (double) bz);
+            }
+        ZOOMED.incrementAndGet();
+        return true;
+    }
+
+    private static double fiddle(long seed) {   // BiomeManager.getFiddle
+        double d0 = (double) Math.floorMod(seed >> 24, 1024) / 1024.0;
+        return (d0 - 0.5) * 0.9;
+    }
+
+    private static final java.util.concurrent.atomic.AtomicLong ZOOMED = new java.util.concurrent.atomic.AtomicLong();
+
     public static String report() {
-        return String.format(java.util.Locale.ROOT, "tint blend: layers %d, entries filled %d%s", LAYERS.get(), FILLED.get(),
+        return String.format(java.util.Locale.ROOT, "tint blend: layers %d (%d by the kept zoom), entries filled %d%s", LAYERS.get(), ZOOMED.get(), FILLED.get(),
                 VERIFY ? ", mismatches with vanilla " + MISMATCHES.get() + " (a chunk loading meanwhile " + UNSTABLE.get() + ")" : "");
     }
 }

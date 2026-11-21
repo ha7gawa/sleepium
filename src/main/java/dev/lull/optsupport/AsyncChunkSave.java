@@ -72,25 +72,132 @@ public final class AsyncChunkSave {
         if (!(chunk instanceof LevelChunk) && !(chunk instanceof net.minecraft.world.level.chunk.ProtoChunk)) return false;
         if (((StorageAccess) storage).sleep$legacyHandler() != null) return false;
         return NeoForge.EVENT_BUS instanceof CompositeEventBus cb && (!cb.mayHaveListeners(ChunkDataEvent.Save.class)
+                || onlyCounters(cb)   // the engine's own event counting (/sleepium report, genbench rounds)
                 || SaveListeners.ON && SaveListeners.onlyOwnKeys(cb));   // lab.asyncsave.listeners: listeners that keep to their own keys
+    }
+
+    /** the listener array last decided, and whether it held only the engine's counting listeners */
+    private record Counted(net.neoforged.bus.api.EventListener[] listeners, boolean only) {}
+
+    private static volatile Counted counted;
+    public static final AtomicLong countedOnly = new AtomicLong();
+
+    /**
+     * 11-21: while /sleepium report or a genbench round records, EventCounter puts a counting listener on every event
+     * type - ChunkDataEvent.Save too - and every save went back to the vanilla way on the main thread (a fifth of the
+     * genbench's saves, 34 % of the server thread's allocation in its JFR). A counting listener never sees the tag.
+     */
+    private static boolean onlyCounters(CompositeEventBus cb) {
+        net.neoforged.bus.api.EventListener[] ls = cb.listenersOf(ChunkDataEvent.Save.class);
+        if (ls == null || ls.length == 0) return false;
+        Counted c = counted;
+        if (c == null || c.listeners() != ls) {
+            boolean only = true;
+            for (net.neoforged.bus.api.EventListener l : ls) if (!dev.lull.EventCounter.isCounting(l)) { only = false; break; }
+            counted = c = new Counted(ls, only);
+        }
+        if (c.only()) countedOnly.incrementAndGet();
+        return c.only();
     }
 
     /** ChunkMap.save's ChunkSerializer.write, main thread. */
     public static CompoundTag write(ChunkStorage storage, net.minecraft.server.level.ServerLevel level, ChunkAccess chunk) {
+        if (!SaveStats.ON) return write0(storage, level, chunk);
+        long b = SaveStats.bytes(), t = System.nanoTime();
+        try {
+            return write0(storage, level, chunk);
+        } finally {
+            SaveStats.add(SaveStats.WRITE, b, t);
+        }
+    }
+
+    private static CompoundTag write0(ChunkStorage storage, net.minecraft.server.level.ServerLevel level, ChunkAccess chunk) {
         LAST_PENDING.remove();
+        LAST_REFERENCE.remove();
         if (!shouldDefer(storage, chunk)) {
             vanilla.incrementAndGet();
             return net.minecraft.world.level.chunk.storage.ChunkSerializer.write(level, chunk);
         }
+        // the same chunk written the vanilla way just before and just after: its bytes, for after the pool filled the palettes
+        // (only when both agree - the light engine may publish other layers in between: such a chunk is not compared)
+        byte[] before = VERIFY_CHUNK ? vanillaWrite(level, chunk) : null;
         List<Object[]> list = new ArrayList<>(48);
         COLLECTING.set(list);
         try {
             CompoundTag tag = net.minecraft.world.level.chunk.storage.ChunkSerializer.write(level, chunk);
             LAST_PENDING.set(list);
+            if (VERIFY_CHUNK) {
+                COLLECTING.remove();
+                byte[] after = vanillaWrite(level, chunk);
+                if (java.util.Arrays.equals(before, after)) LAST_REFERENCE.set(after);
+                else chunkUnstable.incrementAndGet();
+            }
             return tag;
         } finally {
             COLLECTING.remove();
         }
+    }
+
+    /**
+     * {@code -Dlab.asyncsave.verifyChunk=true}: every deferred chunk is also written the vanilla way on the main thread
+     * (codecs, no placeholders) at the same moment; once the pool filled its palettes, the whole chunk tag's bytes
+     * (NbtIo.write, as the region file gets them before compression) are compared with the vanilla tag's.
+     */
+    public static final boolean VERIFY_CHUNK = Boolean.getBoolean("lab.asyncsave.verifyChunk");
+    public static final AtomicLong chunkVerified = new AtomicLong(), chunkMismatches = new AtomicLong(), chunkUnstable = new AtomicLong();
+    private static final ThreadLocal<byte[]> LAST_REFERENCE = new ThreadLocal<>();
+
+    /** the chunk written the vanilla way: no deferral, none of SaveWrite / SaveDirect */
+    private static byte[] vanillaWrite(net.minecraft.server.level.ServerLevel level, ChunkAccess chunk) {
+        List<Object[]> c = COLLECTING.get();
+        COLLECTING.remove();
+        SaveWrite.vanilla(true);
+        try {
+            return raw(net.minecraft.world.level.chunk.storage.ChunkSerializer.write(level, chunk));
+        } finally {
+            SaveWrite.vanilla(false);
+            if (c != null) COLLECTING.set(c);
+        }
+    }
+
+    static byte[] raw(CompoundTag t) {
+        try {
+            ByteArrayOutputStream b = new ByteArrayOutputStream(16384);
+            NbtIo.write(t, new DataOutputStream(b));
+            return b.toByteArray();
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
+    private static void verifyChunk(ChunkPos pos, CompoundTag tag, byte[] reference) {
+        chunkVerified.incrementAndGet();
+        if (!java.util.Arrays.equals(raw(tag), reference) && chunkMismatches.incrementAndGet() <= 5) {
+            String where = "?";
+            try {
+                CompoundTag ref = NbtIo.read(new java.io.DataInputStream(new java.io.ByteArrayInputStream(reference)));
+                where = ChunkIo.diff(ChunkIo.canonical(ref), ChunkIo.canonical(tag));
+                if (ref.get("sections") instanceof net.minecraft.nbt.ListTag a && tag.get("sections") instanceof net.minecraft.nbt.ListTag b && a.size() == b.size())
+                    for (int i = 0; i < a.size(); i++) {
+                        String d = ChunkIo.diff(ChunkIo.canonical(a.getCompound(i)), ChunkIo.canonical(b.getCompound(i)));
+                        if (!d.isEmpty()) where += " [section " + i + ": " + d + "]";
+                    }
+                if (where.isEmpty()) where = "same content, other order";
+            } catch (Exception e) {
+                where = "unreadable: " + e;
+            }
+            System.out.println("[sleep/opt] async chunk save: chunk " + pos + " DIFFERS from the vanilla write: " + where);
+        }
+    }
+
+    /** this thread writes a chunk whose save is deferred: a job of another kind (SaveWrite's tick lists) may join it */
+    public static boolean collecting() {
+        return COLLECTING.get() != null;
+    }
+
+    /** the job filled on the pool before the tag goes to the IOWorker, in the order jobs were added */
+    public static void defer(Tag placeholder, Object job) {
+        COLLECTING.get().add(new Object[] {placeholder, job, null, null});
     }
 
     /** ChunkSerializer.write's palette encodes (every Codec.encodeStart there goes through here). */
@@ -100,19 +207,36 @@ public final class AsyncChunkSave {
         if (!(value instanceof PalettedContainer<?> pc) || ops != NbtOps.INSTANCE || (collecting = COLLECTING.get()) == null) return codec.encodeStart(ops, value);
         CompoundTag placeholder = new CompoundTag();
         Tag reference = VERIFY ? (Tag) codec.encodeStart(ops, value).getOrThrow() : null;
-        collecting.add(new Object[] {placeholder, pc.copy(), codec, reference});
+        long b = SaveStats.ON ? SaveStats.bytes() : 0, t = SaveStats.ON ? System.nanoTime() : 0;
+        collecting.add(new Object[] {placeholder, SavePalettes.ON ? SavePalettes.snapshot(pc) : pc.copy(), codec, reference});
+        if (SaveStats.ON) SaveStats.add(SaveStats.PALETTES, b, t);
         return DataResult.success(placeholder);
     }
 
     /** ChunkMap.save's storage write, main thread. */
     public static CompletableFuture<Void> store(ChunkStorage storage, ChunkPos pos, CompoundTag tag) {
+        if (!SaveStats.ON) return store0(storage, pos, tag);
+        long b = SaveStats.bytes(), t = System.nanoTime();
+        try {
+            return store0(storage, pos, tag);
+        } finally {
+            SaveStats.add(SaveStats.STORE, b, t);
+        }
+    }
+
+    private static CompletableFuture<Void> store0(ChunkStorage storage, ChunkPos pos, CompoundTag tag) {
         List<Object[]> jobs = LAST_PENDING.get();
         LAST_PENDING.remove();
+        byte[] reference = LAST_REFERENCE.get();
+        LAST_REFERENCE.remove();
         if (jobs == null || jobs.isEmpty()) return storage.write(pos, tag);
         deferred.incrementAndGet();
         long key = pos.toLong();
         CompletableFuture<Void> previous = STORED.get(key);
-        CompletableFuture<Void> encoded = CompletableFuture.runAsync(() -> fill(jobs), ServerReactor.pool());
+        CompletableFuture<Void> encoded = CompletableFuture.runAsync(reference == null ? () -> fill(jobs) : () -> {
+            fill(jobs);
+            verifyChunk(pos, tag, reference);
+        }, ServerReactor.pool());
         CompletableFuture<CompletableFuture<Void>> handed = (previous == null ? encoded : encoded.thenCombine(previous.exceptionally(t -> null), (a, b) -> null))
                 .thenApply(v -> storage.write(pos, tag));
         CompletableFuture<Void> stored = handed.thenApply(f -> (Void) null);
@@ -122,10 +246,26 @@ public final class AsyncChunkSave {
     }
 
     private static void fill(List<Object[]> jobs) {
+        if (!SaveStats.ON) {
+            fill0(jobs);
+            return;
+        }
+        long b = SaveStats.bytes(), t = System.nanoTime();
+        fill0(jobs);
+        SaveStats.add(SaveStats.FILL, b, t);
+    }
+
+    private static void fill0(List<Object[]> jobs) {
         for (Object[] j : jobs) {
+            if (j[1] instanceof SaveWrite.TickJob t) {   // a tick list (SaveWrite, -Dlab.opt.SaveTicks)
+                t.fill((net.minecraft.nbt.ListTag) j[0]);
+                continue;
+            }
             CompoundTag placeholder = (CompoundTag) j[0];
+            if (VERIFY && j[1] instanceof SavePalettes.Snapshot snap) SavePalettes.selfTest((Codec<?>) j[2], snap);
             @SuppressWarnings({"unchecked", "rawtypes"})
-            Tag enc = (Tag) ((Codec) j[2]).encodeStart(NbtOps.INSTANCE, j[1]).getOrThrow();
+            Tag enc = j[1] instanceof SavePalettes.Snapshot snap ? SavePalettes.encode((Codec) j[2], snap)
+                    : (Tag) ((Codec) j[2]).encodeStart(NbtOps.INSTANCE, j[1]).getOrThrow();
             CompoundTag e = (CompoundTag) enc;
             for (String k : e.getAllKeys()) placeholder.put(k, e.get(k));
             sections.incrementAndGet();
@@ -171,6 +311,8 @@ public final class AsyncChunkSave {
 
     public static String report() {
         return "async chunk save: deferred " + deferred + " chunks (" + sections + " palettes on the pool), vanilla " + vanilla + ", reads that waited "
-                + waitedReads + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "");
+                + waitedReads + ", deferred with only the engine's counting listeners " + countedOnly
+                + (SavePalettes.ON ? ", " + SavePalettes.report() : "") + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "")
+                + (VERIFY_CHUNK ? ", whole chunks verified " + chunkVerified + ", differing " + chunkMismatches + ", not compared (two vanilla writes differed) " + chunkUnstable : "");
     }
 }

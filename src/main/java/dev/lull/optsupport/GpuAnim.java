@@ -55,6 +55,27 @@ public final class GpuAnim {
         return c;
     }
     private static final boolean VERIFY = Boolean.getBoolean("lab.gpuAnim.verify");
+    /**
+     * -Dlab.gpuAnim.scratch (lab, 11-20, a measurement only - the picture stops animating): every animation write of an
+     * atlas tick goes into an unused texture of the atlas's size instead of the atlas. The Pi's tiled V3D spent ~10 ms an
+     * atlas tick writing into the atlas it was still reading: this shows the same work without that conflict.
+     */
+    public static final boolean SCRATCH = Boolean.getBoolean("lab.gpuAnim.scratch");
+    private static final Map<Integer, Integer> SCRATCHES = new java.util.HashMap<>();
+
+    public static int scratchFor(int atlasId) {
+        Integer s = SCRATCHES.get(atlasId);
+        if (s != null) return s;
+        GlStateManager._bindTexture(atlasId);
+        int w = GL11C.glGetTexLevelParameteri(GL11C.GL_TEXTURE_2D, 0, GL11C.GL_TEXTURE_WIDTH);
+        int h = GL11C.glGetTexLevelParameteri(GL11C.GL_TEXTURE_2D, 0, GL11C.GL_TEXTURE_HEIGHT);
+        int levels = GL11C.glGetTexParameteri(GL11C.GL_TEXTURE_2D, org.lwjgl.opengl.GL12C.GL_TEXTURE_MAX_LEVEL);
+        int id = TextureUtil.generateTextureId();
+        TextureUtil.prepareImage(id, Math.min(levels, 8), w, h);
+        SCRATCHES.put(atlasId, id);
+        LOG.info("[sleep/opt] gpu anim: SCRATCH target {} for atlas {} ({}x{}, {} levels) - animation writes go there (measurement only)", id, atlasId, w, h, levels);
+        return id;
+    }
     /** the atlas cycleAnimationFrames is ticking (0 outside it: the first frames at stitching go vanilla's way) */
     public static int atlas;
     private static final Map<SpriteContents, Integer> SHEETS = new java.util.concurrent.ConcurrentHashMap<>();   // (concurrent: the frame thread's atlas ticks and the main thread's release during a reload; the audit 11-16)
@@ -209,13 +230,19 @@ public final class GpuAnim {
             copies++;
             return true;
         }
+        int levels = 0;
         for (int i = 0; i < mips.length; i++) {
             if ((w >> i) <= 0 || (h >> i) <= 0) break;   // NeoForge's bound, as in upload
+            levels++;
             if (blit) {
                 if (!blitCopy(sheet, i, frameX >> i, frameY >> i, x >> i, y >> i, w >> i, h >> i)) return i == 0 ? false : true;
             } else {
                 GL43C.glCopyImageSubData(sheet, GL11C.GL_TEXTURE_2D, i, frameX >> i, frameY >> i, 0, atlas, GL11C.GL_TEXTURE_2D, i, x >> i, y >> i, 0, w >> i, h >> i, 1);
             }
+        }
+        if (AtlasDouble.ON) {
+            if (blit) AtlasDouble.record(x, y, w, h);
+            else AtlasDouble.recordCopy(sheet, frameX, frameY, x, y, w, h, levels);
         }
         copyNs += System.nanoTime() - t0;
         if (VERIFY && readBack) verify(mips[0], x, y, frameX, frameY, w, h);
@@ -278,6 +305,7 @@ public final class GpuAnim {
                     + (pbo != 0 ? String.format(java.util.Locale.ROOT, "; the ring's fence wait %.3f ms (delete %.3f, trusted by age %d), fence + flush %.3f ms a tick",
                     beginWaitNs / 1e6 / ticks, deleteNs / 1e6 / ticks, trusted, endFlushNs / 1e6 / ticks) : "") + perAtlas()
                     + (SKIP_FENCE || skippedFences > 0 ? String.format(java.util.Locale.ROOT, "; fences skipped %d (frame-fence looks %d, finishes %d)", skippedFences, frameFenceWaits, finishes) : "")
+                    + (CHECK_REUSE ? String.format(java.util.Locale.ROOT, "; reuse check: %d segments, %d still busy", reuseChecked, reuseBusy) : "")
                     + (GlWorker.ON ? String.format(java.util.Locale.ROOT, "; worker ticks %d%s", workerTicks, WK_VERIFY ? ", checked " + workerVerified + ", mismatches " + workerMismatches + " " + diag() : "") + GlWorker.report() : ""));
     }
 
@@ -290,6 +318,11 @@ public final class GpuAnim {
      * only) -> 3.15 ms - so opt-in; the copies alone (the default with the feature) gain or tie everywhere measured.
      */
     static final boolean PBO = ON && Boolean.getBoolean("lab.gpuAnim.pbo");
+
+    /** the ring would carry the interpolated frames (AtlasDouble: no replay then - the unpack buffer binding) */
+    static boolean pbo() {
+        return pboCapable && PBO;
+    }
     // 8 segments of 256 KiB (a tick's interpolated frames are ~15 KiB): a segment comes back ~4 client ticks later, long
     // read by then - with 3 the fence wait blocked the render thread in a GPU-bound scene (1.20.1 N100: tick 2.5 -> 3.6 ms)
     private static final int SEG = 1 << 18, NSEG = 8;
@@ -308,6 +341,16 @@ public final class GpuAnim {
     private static final boolean[] NO_FENCE = new boolean[8];
     public static long skippedFences, frameFenceWaits, finishes;
     private static final long[] FENCE_FRAME = new long[8];
+    /** a no-fence segment: UploadRing.fencesMade after its uploads (the next frame fence covers them: fenceAfter) */
+    private static final long[] FENCE_SEQ_AT = new long[8];
+    /**
+     * -Dlab.gpuAnim.checkReuse=true (test): a fence of its own after every atlas tick's ring uploads, looked at when the
+     * segment comes round - after the way chosen (trusted by age, the frame's fence waited for, its own fence, glFinish).
+     * Still busy there = the CPU is about to overwrite bytes the GPU has not read yet (counted, the first ones logged).
+     */
+    private static final boolean CHECK_REUSE = Boolean.getBoolean("lab.gpuAnim.checkReuse");
+    private static final long[] CHECK = new long[8];
+    public static long reuseChecked, reuseBusy;
     /** -Dlab.gpuAnim.noFlush=true: no glFlush after the ring's fence (the next frame's swap sends it; the wait 8 ticks later flushes anyway) */
     public static boolean NO_FLUSH = Boolean.getBoolean("lab.gpuAnim.noFlush");   // (not final: ClientAuto's flip)
 
@@ -437,8 +480,8 @@ public final class GpuAnim {
         if (NO_FENCE[seg]) {   // written without a fence of its own (SKIP_FENCE)
             NO_FENCE[seg] = false;
             long w0 = System.nanoTime();
-            if (!(UploadRing.limitingNow() && UploadRing.frames - FENCE_FRAME[seg] >= TRUST_AGE)) {
-                long f = UploadRing.fenceAfter(FENCE_FRAME[seg]);
+            if (!(TRUST_AGE > 0 && UploadRing.limitingNow() && UploadRing.frames - FENCE_FRAME[seg] >= TRUST_AGE)) {   // (trustAge 0: always the fence, as below)
+                long f = UploadRing.fenceAfter(FENCE_SEQ_AT[seg]);
                 if (f != 0) {
                     frameFenceWaits++;
                     if (org.lwjgl.opengl.GL32C.glClientWaitSync(f, 0, 0) == org.lwjgl.opengl.GL32C.GL_TIMEOUT_EXPIRED) {
@@ -469,6 +512,23 @@ public final class GpuAnim {
             FENCES[seg] = 0;
             beginWaitNs += System.nanoTime() - w0;
         }
+        if (CHECK[seg] != 0) checkReuse(seg);
+    }
+
+    /** the reuse check's totals (ClientCounters' end-of-window report; "" without -Dlab.gpuAnim.checkReuse) */
+    public static String checkReport() {
+        return CHECK_REUSE ? String.format(java.util.Locale.ROOT, "gpu anim reuse check: %d segments, %d still busy; trusted %d, ring waits %d, fences skipped %d, frame-fence looks %d, finishes %d",
+                reuseChecked, reuseBusy, trusted, ringWaits, skippedFences, frameFenceWaits, finishes) : "";
+    }
+
+    private static void checkReuse(int s) {
+        reuseChecked++;
+        if (org.lwjgl.opengl.GL32C.glClientWaitSync(CHECK[s], org.lwjgl.opengl.GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 0) == org.lwjgl.opengl.GL32C.GL_TIMEOUT_EXPIRED
+                && reuseBusy++ < 10)
+            LOG.warn("[sleep/opt] gpu anim reuse check: segment {} still read by the GPU when reused ({} frames after its uploads, limit {}, no own fence {})",
+                    s, UploadRing.frames - FENCE_FRAME[s], UploadRing.limitingNow(), SKIP_FENCE);
+        org.lwjgl.opengl.GL32C.glDeleteSync(CHECK[s]);
+        CHECK[s] = 0;
     }
 
     /** an atlas's animation tick ends: a fence after the segment's uploads */
@@ -489,9 +549,14 @@ public final class GpuAnim {
             return;
         }
         if (batchN > 0) batchFlush();
+        if (CHECK_REUSE && pbo != 0 && segUsed > 0) {   // (right after the uploads, before the segment's own fence and flush: own fence done -> this one done)
+            if (CHECK[seg] != 0) org.lwjgl.opengl.GL32C.glDeleteSync(CHECK[seg]);
+            CHECK[seg] = org.lwjgl.opengl.GL32C.glFenceSync(org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        }
         if (pbo != 0 && segUsed > 0 && SKIP_FENCE && UploadRing.limitingNow()) {
             NO_FENCE[seg] = true;
             FENCE_FRAME[seg] = UploadRing.frames;
+            FENCE_SEQ_AT[seg] = UploadRing.fencesMade;
             skippedFences++;
         } else if (pbo != 0 && segUsed > 0) {
             long f0 = System.nanoTime();
@@ -846,6 +911,10 @@ public final class GpuAnim {
     public static String interpChoice = "not decided";
 
     /** the blend's windows are running: the other measured choices wait (each would measure the other's switching) */
+    public static boolean blendsMayDraw() {   // (AtlasDouble: the GPU blends' windows or the GPU chosen)
+        return INTERP && !interpBroken && (tunePhase == 2 || tunePhase == 3 || tunePhase == 4);
+    }
+
     public static boolean measuring() {
         return tunePhase >= 1 && tunePhase <= 3;
     }

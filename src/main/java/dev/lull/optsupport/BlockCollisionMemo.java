@@ -157,6 +157,9 @@ public final class BlockCollisionMemo {
     /** Implemented on LevelChunkSection: bumped on every block-state write. */
     public interface Counted {
         int sleep$mod();
+
+        /** a write that went around setBlockState (FillWriter's packed writes into a fresh section) */
+        void sleep$touch();
     }
 
     /** Implemented on BlockState (ShapeCacheMixin): collision shape proven to depend on the state alone. */

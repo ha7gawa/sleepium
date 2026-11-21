@@ -7,19 +7,19 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * -Dlab.meshMemo: a tint cache invalidated (a chunk loaded nearby) - counted before and after, so a compile that ran
- * across it (and may have read the old colours) keeps no memo (MeshMemo.TINT_EPOCH).
+ * -Dlab.meshMemo: a tint cache invalidated - for a chunk: its 3 x 3 columns stamped (MeshMemo.tintCleared), all: the
+ * global TINT_EPOCH - before and after, so a compile that ran across it (and may have read old colours) keeps no memo.
  */
 @Mixin(BlockTintCache.class)
 public abstract class MeshMemoTintMixin {
     @Inject(method = "invalidateForChunk", at = @At("HEAD"))
     private void sleep$tintBefore(int x, int z, CallbackInfo ci) {
-        dev.lull.optsupport.MeshMemo.TINT_EPOCH.incrementAndGet();
+        dev.lull.optsupport.MeshMemo.tintCleared(x, z);
     }
 
     @Inject(method = "invalidateForChunk", at = @At("RETURN"))
     private void sleep$tintAfter(int x, int z, CallbackInfo ci) {
-        dev.lull.optsupport.MeshMemo.TINT_EPOCH.incrementAndGet();
+        dev.lull.optsupport.MeshMemo.tintCleared(x, z);
     }
 
     @Inject(method = "invalidateAll", at = @At("HEAD"))

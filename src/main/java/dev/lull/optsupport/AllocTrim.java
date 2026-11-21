@@ -14,10 +14,22 @@ import org.objectweb.asm.tree.MethodNode;
  * exactly that size (swapPalette walks the whole array, so the size must match), fully overwritten by unpack.
  */
 public final class AllocTrim {
+    /** StateIdMixin: a block state's registry id, kept on the state */
+    public interface StateId {
+        int sleep$id();
+    }
+
+    /** a state's id - kept on it when StateIdMixin is applied, else Block.getId */
+    public static int id(net.minecraft.world.level.block.state.BlockState s) {
+        return s instanceof StateId k ? k.sleep$id() : net.minecraft.world.level.block.Block.getId(s);
+    }
+
     private AllocTrim() {}
 
     /** Block.shouldRenderFace's occlusion cache keyed by a long (AllocTrimFaceMixin): vanilla's size, load factor, no rehash */
-    public static final ThreadLocal<it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap> FACES = ThreadLocal.withInitial(() -> {
+    public static final ThreadLocal<it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap> FACES = ThreadLocal.withInitial(AllocTrim::newFaces);
+
+    private static it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap newFaces() {
         it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap map = new it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap(2048, 0.25F) {
             @Override
             protected void rehash(int newN) {
@@ -25,7 +37,49 @@ public final class AllocTrim {
         };
         map.defaultReturnValue((byte) 127);
         return map;
-    });
+    }
+
+    /** this thread's face cache: on a pool thread its slot, else the ThreadLocal (one map a thread either way) */
+    public static it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap faces() {
+        Object[] s = ThreadSlots.mine();
+        if (s == null) return FACES.get();
+        Object m = s[ThreadSlots.FACES];
+        if (m == null) s[ThreadSlots.FACES] = m = newFaces();
+        return (it.unimi.dsi.fastutil.longs.Long2ByteLinkedOpenHashMap) m;
+    }
+
+    /**
+     * -Dlab.faceTable (11-18): shouldRenderFace's answers in a direct-mapped table of the thread (65 536 entries: the
+     * key, the answer) instead of the linked LRU of 2048 (Long2ByteLinkedOpenHashMap.getAndMoveToFirst: 3.3 % of the
+     * meshing workers in flight). Same key, same computation on a miss. For pairs whose face shapes do not depend on the
+     * position (all vanilla blocks) every cache gives vanilla's answer; where a mod's shape does depend on it, vanilla's
+     * own answer depends on which thread meshed what before (its LRU is per thread) - no order to be exact to.
+     */
+    public static final boolean FACE_TABLE = Boolean.getBoolean("lab.faceTable");
+
+    public static final class FaceTable {
+        public final long[] keys = new long[1 << 16];
+        public final byte[] vals = new byte[1 << 16];
+
+        FaceTable() {
+            java.util.Arrays.fill(keys, -1L);
+        }
+
+        public static int slot(long key) {
+            long h = key * 0x9E3779B97F4A7C15L;
+            return (int) (h >>> 48);
+        }
+    }
+
+    private static final ThreadLocal<FaceTable> FACE_TABLES = ThreadLocal.withInitial(FaceTable::new);
+
+    public static FaceTable faceTable() {
+        Object[] s = ThreadSlots.mine();
+        if (s == null) return FACE_TABLES.get();
+        Object m = s[ThreadSlots.FACE_TABLE];
+        if (m == null) s[ThreadSlots.FACE_TABLE] = m = new FaceTable();
+        return (FaceTable) m;
+    }
 
     private static final ThreadLocal<int[][]> INTS = ThreadLocal.withInitial(() -> new int[4][]);
 

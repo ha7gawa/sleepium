@@ -83,10 +83,50 @@ public abstract class WorldgenSkipAquiferMixin implements dev.lull.optsupport.Ce
         int k4 = this.getIndex(l3, i4, j4);
         long i5 = this.aquiferLocationCache[k4];
         if (i5 != Long.MAX_VALUE) return i5;
-        RandomSource randomsource = this.positionalRandomFactory.at(l3, i4, j4);
+        RandomSource randomsource = SLEEP$SCRATCH ? dev.lull.optsupport.ReusableRandom.at(this.positionalRandomFactory, l3, i4, j4, dev.lull.optsupport.ReusableRandom.AQUIFER)
+                : this.positionalRandomFactory.at(l3, i4, j4);
         long l4 = BlockPos.asLong(l3 * 16 + randomsource.nextInt(10), i4 * 12 + randomsource.nextInt(9), j4 * 16 + randomsource.nextInt(10));
         this.aquiferLocationCache[k4] = l4;
         return l4;
+    }
+
+    /**
+     * AquiferCells (-Dlab.opt.AquiferCells): computeSubstance's slow path finds the 3 nearest of its base cell's 12
+     * candidate locations for every block; the candidates depend only on the base cell, which consecutive blocks share
+     * (a base cell is 16 x 12 x 16 blocks, the fill walks 4 x 8 x 4 noise cells). The last cell's 12 locations are kept
+     * unpacked, in vanilla's loop order, made through the same location cache (filled as vanilla's loop fills it): the
+     * same distances compared in the same order, the same three picked.
+     */
+    @Unique private static final boolean SLEEP$CELLS = Boolean.getBoolean("lab.opt.AquiferCells");
+    /**
+     * AquiferScratch (-Dlab.opt.AquiferScratch, 11-21): the slow path's barrier holder (vanilla: a new MutableDouble(NaN)
+     * per call, ~2 % of generation's allocation) is one per aquifer, set to NaN where vanilla makes it - calculatePressure
+     * only reads and sets it during the call, and an aquifer serves one chunk's steps one after another on one thread
+     * (computeSubstance is not re-entered). A grid point's random location from ReusableRandom's per-thread source
+     * (the state the factory's new XoroshiroRandomSource would have; other factories as vanilla).
+     */
+    @Unique private static final boolean SLEEP$SCRATCH = Boolean.getBoolean("lab.opt.AquiferScratch");
+    @Unique private final MutableDouble sleep$substance = new MutableDouble(Double.NaN);
+    @Unique private int sleep$ml = Integer.MIN_VALUE, sleep$mi, sleep$mj;
+    @Unique private final int[] sleep$mxyz = new int[36];
+    @Unique private final long[] sleep$mloc = new long[12];
+
+    @Unique
+    private void sleep$cell(int l, int i1, int j1) {
+        int c = 0;
+        for (int i3 = 0; i3 <= 1; i3++)
+            for (int j3 = -1; j3 <= 1; j3++)
+                for (int k3 = 0; k3 <= 1; k3++) {
+                    long l4 = sleep$location(l + i3, i1 + j3, j1 + k3);
+                    sleep$mloc[c] = l4;
+                    sleep$mxyz[c * 3] = BlockPos.getX(l4);
+                    sleep$mxyz[c * 3 + 1] = BlockPos.getY(l4);
+                    sleep$mxyz[c * 3 + 2] = BlockPos.getZ(l4);
+                    c++;
+                }
+        sleep$ml = l;
+        sleep$mi = i1;
+        sleep$mj = j1;
     }
 
     /**
@@ -215,6 +255,34 @@ public abstract class WorldgenSkipAquiferMixin implements dev.lull.optsupport.Ce
                 long k2 = 0L;
                 long l2 = 0L;
 
+                if (SLEEP$CELLS) {
+                    // AquiferCells: the 12 candidates of this base cell unpacked once per cell (consecutive blocks share it)
+                    if (l != sleep$ml || i1 != sleep$mi || j1 != sleep$mj) sleep$cell(l, i1, j1);
+                    int[] xyz = sleep$mxyz;
+                    long[] locs = sleep$mloc;
+                    for (int c = 0; c < 12; c++) {
+                        int i6 = xyz[c * 3] - i;
+                        int j5 = xyz[c * 3 + 1] - j;
+                        int k5 = xyz[c * 3 + 2] - k;
+                        int l5 = i6 * i6 + j5 * j5 + k5 * k5;
+                        if (k1 >= l5) {
+                            l2 = k2;
+                            k2 = j2;
+                            j2 = locs[c];
+                            i2 = l1;
+                            l1 = k1;
+                            k1 = l5;
+                        } else if (l1 >= l5) {
+                            l2 = k2;
+                            k2 = locs[c];
+                            i2 = l1;
+                            l1 = l5;
+                        } else if (i2 >= l5) {
+                            l2 = locs[c];
+                            i2 = l5;
+                        }
+                    }
+                } else
                 for (int i3 = 0; i3 <= 1; i3++) {
                     for (int j3 = -1; j3 <= 1; j3++) {
                         for (int k3 = 0; k3 <= 1; k3++) {
@@ -227,7 +295,9 @@ public abstract class WorldgenSkipAquiferMixin implements dev.lull.optsupport.Ce
                             if (i5 != Long.MAX_VALUE) {
                                 l4 = i5;
                             } else {
-                                RandomSource randomsource = this.positionalRandomFactory.at(l3, i4, j4);
+                                RandomSource randomsource = SLEEP$SCRATCH
+                                        ? dev.lull.optsupport.ReusableRandom.at(this.positionalRandomFactory, l3, i4, j4, dev.lull.optsupport.ReusableRandom.AQUIFER)
+                                        : this.positionalRandomFactory.at(l3, i4, j4);
                                 l4 = BlockPos.asLong(
                                     l3 * 16 + randomsource.nextInt(10), i4 * 12 + randomsource.nextInt(9), j4 * 16 + randomsource.nextInt(10)
                                 );
@@ -268,7 +338,11 @@ public abstract class WorldgenSkipAquiferMixin implements dev.lull.optsupport.Ce
                     this.shouldScheduleFluidUpdate = true;
                     return blockstate;
                 } else {
-                    MutableDouble mutabledouble = new MutableDouble(Double.NaN);
+                    MutableDouble mutabledouble;
+                    if (SLEEP$SCRATCH) {
+                        mutabledouble = sleep$substance;
+                        mutabledouble.setValue(Double.NaN);
+                    } else mutabledouble = new MutableDouble(Double.NaN);
                     Aquifer.FluidStatus aquifer$fluidstatus2 = this.getAquiferStatus(k2);
                     double d2 = d1 * this.calculatePressure(context, mutabledouble, aquifer$fluidstatus1, aquifer$fluidstatus2);
                     if (substance + d2 > 0.0) {

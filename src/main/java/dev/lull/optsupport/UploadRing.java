@@ -66,18 +66,48 @@ public final class UploadRing {
     private static final int FIF = FIF_FIXED > 0 ? FIF_FIXED : AUTO ? 3 : 0;
     private static final int DEEP = Integer.getInteger("lab.gpu.framesInFlight.deep", 6), AUTO_WINDOW = 240;
     private static final long[] FRAME_FENCES = new long[16];
-    /** per FRAME_FENCES slot: the frame count (frames) when the fence was made - it covers that frame's commands */
-    private static final long[] FENCE_AT = new long[16];
+    /** per FRAME_FENCES slot: the fence's number in the order made (fencesMade then) */
+    private static final long[] FENCE_SEQ = new long[16];
+    /**
+     * frame fences made so far (with framesInFlight.every: counted when one is due, made or not) - a caller notes it
+     * after its commands; any fence numbered higher was made after them on this thread and covers them (fenceAfter)
+     */
+    public static long fencesMade;
 
     /**
-     * the fence made at the start of the frame after the one counted {@code at} (every command of frame {@code at},
-     * its atlas ticks included, before it), or 0 if not made (yet) or gone
+     * the first frame fence made after fencesMade was {@code seq} (every command sent before that moment before it), or
+     * 0 if none made yet (the same frame) or gone. With a fence every N frames (framesInFlight.every): the first one made
+     * (a later fence covers the same commands)
      */
-    public static long fenceAfter(long at) {
+    public static long fenceAfter(long seq) {
+        // By the order the fences were made, not by frame counts (11-21): with atSwap a frame's fence is made before its
+        // swap, and the frame count of uploads is not enough: with "that frame's fence or later" -Dlab.gpuAnim.checkReuse
+        // caught 8 segments still read when reused, 0 frames after their uploads, all at a world's join / quit (most
+        // likely a runTick nested in another - updateScreenAndTick - making its fence mid-frame, before the outer
+        // frame's later uploads with the same frame count). The frame
+        // count rule "a later frame's fence only" was safe but sent a segment reused in the next frame to glFinish
+        // (N100 motion, skipFence: 281 finishes against 117 with the fence at the frame's start).
+        long f = 0, fs = Long.MAX_VALUE;
         for (int i = 0; i < 16; i++)
-            if (FRAME_FENCES[i] != 0 && FENCE_AT[i] == at) return FRAME_FENCES[i];
-        return 0;
+            if (FRAME_FENCES[i] != 0 && FENCE_SEQ[i] > seq && FENCE_SEQ[i] < fs) {
+                f = FRAME_FENCES[i];
+                fs = FENCE_SEQ[i];
+            }
+        return f;
     }
+    /**
+     * -Dlab.gpu.framesInFlight.every=N (test, 11-21): a fence every N frames only (the wait: on the newest fence at least K
+     * frames back - K to K + N - 1 queued). N100 standing: any K costs ~4.5 % fps against no limit (148-149 vs 155.5,
+     * K = 2..6 alike), and fences without waits cost as much (a flip run) - is it the fence per frame?
+     */
+    private static final int EVERY = Math.max(1, Math.min(8, Integer.getInteger("lab.gpu.framesInFlight.every", 1)));
+    /**
+     * -Dlab.gpu.framesInFlight.atSwap=true (test, 11-21): the frame's fence made right before the swap (runTick's
+     * Window.updateDisplay) instead of at the next frame's start - a fence at the start of a nearly empty batch may cost
+     * the Intel driver a submit of its own; before the swap it goes with the swap's. The wait stays at the frame's start.
+     */
+    private static final boolean AT_SWAP = Boolean.getBoolean("lab.gpu.framesInFlight.atSwap");
+    private static boolean swapFenced, swapLogged;
     private static int frameNo;
     public static long fifWaits, fifWaitNs, frames, deepFrames;
     /** off: no waiting (the fences still made) - ClientAuto's in-window flip switches it */
@@ -95,11 +125,27 @@ public final class UploadRing {
     public static boolean limitingNow() {
         return FIF > 0 && limiting && fifEnabled;
     }
+
+    /**
+     * the queue's depth is settled: the automatic limit has decided (on, or off after its quiet windows), or there is no
+     * automatic watch. A measured choice timing whole frames waits for it - before the limit, a driver that queues deep
+     * (the N100's Intel) lets the CPU run 8+ frames ahead and then stalls ~250 ms: the frames between the stalls show the
+     * CPU's cost only, the GPU's is hidden in the stalls (which a trimmed mean drops). A short queue: settled after two
+     * quiet windows of the watch.
+     */
+    public static boolean queueSettled() {
+        return !AUTO || limiting || quietWindows >= 2 || !watching;
+    }
     private static boolean autoChecked;
     private static int autoFrames, autoDeep;
     public static String fifWhy = FIF_FIXED > 0 ? "fixed by the flag" : AUTO ? "watching the queue" : "off";
 
     /** a look at a fence (no flush, no wait): glGetSynci(GL_SYNC_STATUS) cost the host's NVIDIA driver 45 % of its frames */
+    /**
+     * -Dlab.gpu.framesInFlight.queueLog=false: no queue column in measured windows - its looks at up to 15 fences a frame
+     * are a measurement's own cost (does it change what is measured? 11-21 N100 test)
+     */
+    private static final boolean QUEUE_LOG = !"false".equals(System.getProperty("lab.gpu.framesInFlight.queueLog"));
     /** per measured frame: the frames still queued at its start (the frame log's queue column; -1 none) */
     public static final byte[] DEPTH = new byte[1 << 16];
 
@@ -152,16 +198,32 @@ public final class UploadRing {
         autoDeep = 0;
     }
 
+    /** runTick before Window.updateDisplay (UploadRingMixin, atSwap only): the frame's fence */
+    public static void beforeSwap() {
+        if (!AT_SWAP || FIF <= 0 || !(limiting || watching)) return;
+        if (!swapLogged) {
+            swapLogged = true;
+            System.out.println("[sleep/opt] frames in flight: fences made before the swap");
+        }
+        makeFrameFence();
+        swapFenced = true;
+    }
+
+    private static void makeFrameFence() {
+        int i = frameNo & 15;
+        if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
+        FENCE_SEQ[i] = ++fencesMade;
+        FRAME_FENCES[i] = EVERY == 1 || frameNo % EVERY == 0 ? GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0) : 0;
+    }
+
     /** Minecraft.runTick HEAD (UploadRingMixin): the last frame gets its fence, the next segment is taken if the GPU is done with it */
     public static void frameBegin() {
         if (FIF > 0 && (limiting || watching)) {
             // a fence for every frame, the oldest one we keep waited for: at most FIF frames queued ahead of the GPU
-            int i = frameNo & 15;
-            if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
-            FRAME_FENCES[i] = GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-            FENCE_AT[i] = frames;
+            if (swapFenced) swapFenced = false;   // (made before the last swap)
+            else makeFrameFence();
             if (!limiting) watchQueue();
-            if (dev.lull.ClientMeter.measuring()) {   // the queue: frames sent whose fence is not done (looks without the flush bit)
+            if (QUEUE_LOG && dev.lull.ClientMeter.measuring()) {   // the queue: frames sent whose fence is not done (looks without the flush bit)
                 int d = 0;
                 for (int b = 1; b < 16 && b <= frameNo; b++) {
                     long fb = FRAME_FENCES[(frameNo - b) & 15];
@@ -173,6 +235,7 @@ public final class UploadRing {
             }
             int k = fifDeep ? DEEP_K : FIF;
             long old = limiting && fifEnabled && frameNo >= k ? FRAME_FENCES[(frameNo - k) & 15] : 0;
+            for (int j = 1; old == 0 && j < EVERY && limiting && fifEnabled && frameNo >= k + j; j++) old = FRAME_FENCES[(frameNo - k - j) & 15];
             if (old != 0) {
                 int r = GL32C.glClientWaitSync(old, 0, 0);   // a look without the flush bit (it made the Intel driver submit every frame; the fence K frames back went with a swap long ago)
                 if (r == GL32C.GL_TIMEOUT_EXPIRED) {

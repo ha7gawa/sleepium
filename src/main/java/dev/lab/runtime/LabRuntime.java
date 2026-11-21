@@ -80,6 +80,11 @@ public final class LabRuntime extends AbstractExecutorService {
     public static final class LabThread extends Thread {
         final LabRuntime owner;
         final Worker worker;
+        /**
+         * Per-thread state of hot paths kept on the thread itself (dev.lull.optsupport.ThreadSlots): a field read where
+         * a ThreadLocal would hash into the thread's map - every face and block meshed asks for its scratch.
+         */
+        public final Object[] slots = new Object[16];
 
         LabThread(LabRuntime owner, Worker worker, String name) {
             super(worker, name);

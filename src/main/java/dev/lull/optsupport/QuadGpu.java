@@ -405,7 +405,8 @@ public final class QuadGpu {
         int[] aint = quad.getVertices();
         var vec3i = quad.getDirection().getNormal();
         Matrix4f matrix4f = pose.pose();
-        Vector3f vector3f = pose.transformNormal((float) vec3i.getX(), (float) vec3i.getY(), (float) vec3i.getZ(), new Vector3f());
+        QuadArrays qa = QuadArrays.ON ? QuadArrays.mine() : null;   // lab.opt.QuadDataArraysMixin: the thread's vectors
+        Vector3f vector3f = pose.transformNormal((float) vec3i.getX(), (float) vec3i.getY(), (float) vec3i.getZ(), qa != null ? qa.normal : new Vector3f());
         int j = aint.length / 8;
         int k = (int) (alpha * 255.0F);
         try (MemoryStack memorystack = MemoryStack.stackPush()) {
@@ -437,7 +438,7 @@ public final class QuadGpu {
                 int j1 = self.applyBakedLighting(lightmap[l], bytebuffer);
                 float f10 = bytebuffer.getFloat(16);
                 float f9 = bytebuffer.getFloat(20);
-                Vector3f vector3f1 = matrix4f.transformPosition(f, f1, f2, new Vector3f());
+                Vector3f vector3f1 = matrix4f.transformPosition(f, f1, f2, qa != null ? qa.pos : new Vector3f());
                 self.applyBakedNormals(vector3f, bytebuffer, pose.normal());
                 self.addVertex(vector3f1.x(), vector3f1.y(), vector3f1.z(), i1, f10, f9, packedOverlay, j1, vector3f.x(), vector3f.y(), vector3f.z());
             }

@@ -1,6 +1,7 @@
 package dev.lull.opt;
 
 import dev.lull.optsupport.BiomeConfine;
+import dev.lull.optsupport.BiomeFiddleCache;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.util.LinearCongruentialGenerator;
@@ -59,6 +60,33 @@ public abstract class WorldgenShareBiomeMixin implements BiomeConfine {
     private void sleep$fill(int l, int i1, int j1) {
         if (sleep$fid == null) sleep$fid = new double[24];
         long seed = this.biomeZoomSeed;
+        if (BiomeFiddleCache.ON) {   // a pure function of (seed, cell): kept per thread for 256 cells (BiomeFiddleCache)
+            if (BiomeFiddleCache.get(seed, l, i1, j1, sleep$fid)) {
+                if (BiomeFiddleCache.VERIFY) {
+                    double[] cached = sleep$fid.clone();
+                    sleep$compute(seed, l, i1, j1);
+                    BiomeFiddleCache.check(cached, sleep$fid);
+                }
+                sleep$l = l;
+                sleep$i1 = i1;
+                sleep$j1 = j1;
+                return;
+            }
+            sleep$compute(seed, l, i1, j1);
+            BiomeFiddleCache.put(seed, l, i1, j1, sleep$fid);
+            sleep$l = l;
+            sleep$i1 = i1;
+            sleep$j1 = j1;
+            return;
+        }
+        sleep$compute(seed, l, i1, j1);
+        sleep$l = l;
+        sleep$i1 = i1;
+        sleep$j1 = j1;
+    }
+
+    @Unique
+    private void sleep$compute(long seed, int l, int i1, int j1) {
         for (int l1 = 0; l1 < 8; l1++) {
             int x = (l1 & 4) == 0 ? l : l + 1;
             int y = (l1 & 2) == 0 ? i1 : i1 + 1;
@@ -75,9 +103,6 @@ public abstract class WorldgenShareBiomeMixin implements BiomeConfine {
             s = LinearCongruentialGenerator.next(s, seed);
             sleep$fid[l1 * 3 + 2] = getFiddle(s);
         }
-        sleep$l = l;
-        sleep$i1 = i1;
-        sleep$j1 = j1;
     }
 
     /**

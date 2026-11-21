@@ -27,6 +27,7 @@ public abstract class MeshMemoTaskMixin implements dev.lull.optsupport.MeshMemo.
     @Unique private SectionRenderDispatcher.RenderSection sleep$section;
     @Unique private RenderChunkRegion sleep$region;
     @Unique private long sleep$hash, sleep$tintEpoch, sleep$lightEpoch;
+    @Unique private int sleep$tintStamp;
 
     @Override
     public void sleep$setSection(SectionRenderDispatcher.RenderSection s) {
@@ -38,6 +39,10 @@ public abstract class MeshMemoTaskMixin implements dev.lull.optsupport.MeshMemo.
         sleep$hash = 0;
         sleep$region = null;
         sleep$tintEpoch = dev.lull.optsupport.MeshMemo.TINT_EPOCH.get();
+        if (sleep$section != null) {
+            var so = sleep$section.getOrigin();
+            sleep$tintStamp = dev.lull.optsupport.MeshMemo.tintStamp(so.getX() >> 4, so.getZ() >> 4);
+        }
         sleep$lightEpoch = dev.lull.optsupport.MeshMemo.LIGHT_EPOCH.get();
         SectionRenderDispatcher.RenderSection s = sleep$section;
         RenderChunkRegion r = region;
@@ -53,6 +58,11 @@ public abstract class MeshMemoTaskMixin implements dev.lull.optsupport.MeshMemo.
         long h = dev.lull.optsupport.MeshMemo.inputs(s, r, level, !additionalRenderers.isEmpty());
         if (h == 0) {
             dev.lull.optsupport.MeshMemo.NOT_MEMO.incrementAndGet();
+            return;
+        }
+        if (h != hd.sleep$memo() && dev.lull.optsupport.MeshPark.take(s, h)) {   // a kept mesh of this position from these inputs
+            region = null;
+            cir.setReturnValue(CompletableFuture.completedFuture(dev.lull.optsupport.MeshMemo.successful()));
             return;
         }
         if (h == hd.sleep$memo()) {
@@ -80,16 +90,21 @@ public abstract class MeshMemoTaskMixin implements dev.lull.optsupport.MeshMemo.
         if (h2 != sleep$hash) {
             dev.lull.optsupport.MeshMemo.MOVED.incrementAndGet();
             hd.sleep$setIncoming(0);
+            hd.sleep$setExpectSame(false);   // (verify: the inputs moved during this mesh - no ground for comparing it)
             return;
         }
-        if (dev.lull.optsupport.MeshMemo.LIGHT_EPOCH.get() != sleep$lightEpoch || (sleep$lightEpoch & 1) != 0) {   // (odd: a batch was running)
+        if (dev.lull.optsupport.MeshMemo.LIGHT_GUARD && (dev.lull.optsupport.MeshMemo.LIGHT_EPOCH.get() != sleep$lightEpoch || (sleep$lightEpoch & 1) != 0)) {   // (odd: a batch was running)
             dev.lull.optsupport.MeshMemo.LIGHT_MOVED.incrementAndGet();
             hd.sleep$setIncoming(0);
+            hd.sleep$setExpectSame(false);   // (verify: the inputs moved during this mesh - no ground for comparing it)
             return;
         }
-        if (dev.lull.optsupport.MeshMemo.TINT_EPOCH.get() != sleep$tintEpoch || (sleep$tintEpoch & 1) != 0) {   // colours may be from before a nearby chunk loaded
+        var to = sleep$section.getOrigin();
+        if (dev.lull.optsupport.MeshMemo.TINT_EPOCH.get() != sleep$tintEpoch || (sleep$tintEpoch & 1) != 0
+                || dev.lull.optsupport.MeshMemo.tintStamp(to.getX() >> 4, to.getZ() >> 4) != sleep$tintStamp) {   // colours may be from before a nearby chunk loaded
             dev.lull.optsupport.MeshMemo.TINT_MOVED.incrementAndGet();
             hd.sleep$setIncoming(0);
+            hd.sleep$setExpectSame(false);   // (verify: the inputs moved during this mesh - no ground for comparing it)
             return;
         }
         hd.sleep$setIncoming(sleep$hash);
