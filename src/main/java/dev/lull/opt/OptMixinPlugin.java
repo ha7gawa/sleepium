@@ -183,6 +183,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         // 11-21 noise allocation (lab-nalloc): the NoiseChunk halves of their flags
         if (simple.equals("WorldgenMapMemoChunkMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenMapMemoMixin");
         if (simple.equals("NoiseSlicePoolChunkMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseSlicePoolMixin");
+        // 11-21 lab-fill: the interpolator half of the lazy interpolation flag
+        if (simple.equals("NoiseLazyInterpolatorMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseLazyInterpMixin");
         if (simple.equals("NoiseMathWrapMixin"))   // part of the Perlin octave flag
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseMathMixin");
         // the surface step's helpers belong to their feature's flag

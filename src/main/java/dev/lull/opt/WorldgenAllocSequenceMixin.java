@@ -33,6 +33,11 @@ public abstract class WorldgenAllocSequenceMixin implements dev.lull.optsupport.
         return rules.size();
     }
 
+    @Override
+    public dev.lull.optsupport.SurfacePlan sleep$planOrNull() {
+        return sleep$plan;
+    }
+
     /**
      * @author probe
      * @reason indexed loop, no iterator per call
@@ -47,6 +52,13 @@ public abstract class WorldgenAllocSequenceMixin implements dev.lull.optsupport.
             start = p.eval(y);
             if (start == dev.lull.optsupport.SurfacePlan.NULL) return null;
             if (start == dev.lull.optsupport.SurfacePlan.STATE) return p.state();
+        }
+        if (dev.lull.optsupport.SurfaceWriter.DIRECT && l instanceof RandomAccess) {
+            for (int i = start, n = l.size(); i < n; i++) {
+                BlockState s = ((net.minecraft.world.level.levelgen.SurfaceRules.SurfaceRule) l.get(i)).tryApply(x, y, z);
+                if (s != null) return s;
+            }
+            return null;
         }
         if (l instanceof RandomAccess) {
             for (int i = start, n = l.size(); i < n; i++) {

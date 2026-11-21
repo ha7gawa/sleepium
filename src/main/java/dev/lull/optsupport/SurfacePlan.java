@@ -35,6 +35,9 @@ public final class SurfacePlan {
         void sleep$plan(SurfacePlan plan);
 
         int sleep$size();
+
+        /** the plan set on this rule, or null */
+        SurfacePlan sleep$planOrNull();
     }
 
     /** SurfaceRules.Context: its min surface level (the per-column cached one) and its WorldGenerationContext */
