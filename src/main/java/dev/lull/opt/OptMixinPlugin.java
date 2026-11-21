@@ -203,6 +203,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.equals("WorldgenReactorMixin") || simple.startsWith("Reactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenReactor");
         if (simple.startsWith("GenGraph")) on = Boolean.getBoolean("lab.opt.GenGraph");
+        if (simple.startsWith("LightDirect")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.LightDirect");   // light tasks past the sorter (notes/84)
+        if (simple.startsWith("LightPar")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.LightPar");   // parallel increase pass (notes/84)
         if (simple.equals("WorldgenReactorMixin") && Boolean.getBoolean("lab.opt.GenGraph")) on = false;   // the graph replaces its runGenerationTask
         if (simple.startsWith("MainReactor") || simple.equals("EventLoopQueueAccessor") || simple.equals("ChunkCacheExecutorAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.MainReactor");
