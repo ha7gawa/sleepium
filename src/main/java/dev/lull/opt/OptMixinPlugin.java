@@ -194,6 +194,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.equals("PlacementFilterInvoker") || simple.equals("RepeatingPlacementInvoker") || simple.equals("HeightRangePlacementAccessor")
                 || simple.equals("RandomOffsetPlacementAccessor") || simple.equals("HeightmapPlacementAccessor") || simple.equals("EnvironmentScanPlacementAccessor"))
             on = Boolean.getBoolean("lab.opt.WorldgenFeatureAlloc");   // PlacementWalk's views of the modifiers
+        if (simple.equals("ChunkHeightmapsAccessor") || simple.equals("HeightmapDataAccessor"))   // OreScan's views of the heightmaps
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenOreScanMixin");
         if (simple.equals("ShapeFullMemoShapeMixin"))   // the slot of ShapeFullMemoMixin's answer
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ShapeFullMemoMixin");
         if (simple.equals("WorldgenReactorMixin") || simple.startsWith("Reactor"))

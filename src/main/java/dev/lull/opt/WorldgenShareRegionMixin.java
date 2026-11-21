@@ -43,6 +43,17 @@ public abstract class WorldgenShareRegionMixin {
     @Unique private byte sleep$state;
     @Unique private boolean[] sleep$safeAt;
     @Unique private ChunkAccess[] sleep$memo;
+    /** RegionFast: the step's dependency status at each memo slot (what vanilla's distance lookup gives there) */
+    @Unique private ChunkStatus[] sleep$memoDep;
+    /**
+     * RegionFast (-Dlab.opt.WorldgenRegionFast): a filled memo slot answers before the distance and dependency lookups.
+     * The slot of (x, z) is filled only after vanilla's path found, for this (x, z): distance i, dependency status
+     * deps.get(i), the requested status isOrBefore it, a safe distance and a chunk; the slot keeps that dependency
+     * status too. A later call for the same (x, z) computes the same i and deps.get(i) in vanilla's path, so "slot
+     * filled and requested isOrBefore the kept status" is exactly the case in which that path returns the slot; any
+     * other case (empty slot, a later status asked) still goes through it.
+     */
+    @Unique private static final boolean SLEEP$FAST = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenRegionFast");
     @Unique private int sleep$r, sleep$cx, sleep$cz;
 
     @Unique
@@ -67,6 +78,15 @@ public abstract class WorldgenShareRegionMixin {
      */
     @Overwrite
     public ChunkAccess getChunk(int x, int z, ChunkStatus chunkStatus, boolean requireChunk) {
+        if (SLEEP$FAST && sleep$state == 1) {
+            int r = sleep$r, dx = x - sleep$cx, dz = z - sleep$cz;
+            if (dx >= -r && dx <= r && dz >= -r && dz <= r) {
+                int idx = (dx + r) * (2 * r + 1) + (dz + r);
+                ChunkAccess m = sleep$memo[idx];
+                ChunkStatus dep = sleep$memoDep[idx];
+                if (m != null && dep != null && chunkStatus.isOrBefore(dep)) return m;
+            }
+        }
         int i = this.center.getPos().getChessboardDistance(x, z);
         ChunkStatus chunkstatus = i >= this.generatingStep.directDependencies().size() ? null : this.generatingStep.directDependencies().get(i);
         GenerationChunkHolder generationchunkholder;
@@ -83,6 +103,7 @@ public abstract class WorldgenShareRegionMixin {
                         sleep$cx = this.center.getPos().x;
                         sleep$cz = this.center.getPos().z;
                         int w = 2 * sleep$r + 1;
+                        sleep$memoDep = new ChunkStatus[w * w];
                         sleep$memo = new ChunkAccess[w * w];
                     }
                 }
@@ -96,7 +117,10 @@ public abstract class WorldgenShareRegionMixin {
             if (chunkStatus.isOrBefore(chunkstatus)) {
                 ChunkAccess chunkaccess = generationchunkholder.getChunkIfPresentUnchecked(chunkstatus);
                 if (chunkaccess != null) {
-                    if (idx >= 0) sleep$memo[idx] = chunkaccess;
+                    if (idx >= 0) {
+                        sleep$memoDep[idx] = chunkstatus;
+                        sleep$memo[idx] = chunkaccess;
+                    }
                     return chunkaccess;
                 }
             }

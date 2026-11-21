@@ -1,5 +1,6 @@
 package dev.lull.opt;
 
+import dev.lull.optsupport.OreScan;
 import dev.lull.optsupport.OreScratch;
 import java.util.BitSet;
 import java.util.List;
@@ -78,6 +79,68 @@ public abstract class WorldgenFeatureOreMixin {
             List<OreConfiguration.TargetBlockState> targets = config.targetStates;
             boolean indexed = targets instanceof RandomAccess;
             int nt = targets.size();
+            if (OreScan.ON) {
+                OreScan v = null;
+                if (OreScan.VERIFY) {
+                    v = OreScan.verifyStart();
+                    v.vanillaVisits(level, adouble, j, x, y, z, width, height);
+                }
+                for (int j4 = 0; j4 < j; j4++) {
+                    double d9 = adouble[j4 * 4 + 3];
+                    if (!(d9 < 0.0)) {
+                        double d11 = adouble[j4 * 4 + 0];
+                        double d13 = adouble[j4 * 4 + 1];
+                        double d15 = adouble[j4 * 4 + 2];
+                        int k4 = Math.max(Mth.floor(d11 - d9), x);
+                        int l = Math.max(Mth.floor(d13 - d9), y);
+                        int i1 = Math.max(Mth.floor(d15 - d9), z);
+                        int j1 = Math.max(Mth.floor(d11 + d9), k4);
+                        int k1 = Math.max(Mth.floor(d13 + d9), l);
+                        int l1 = Math.max(Mth.floor(d15 + d9), i1);
+                        for (int i2 = k4; i2 <= j1; i2++) {
+                            double d5 = ((double) i2 + 0.5 - d11) / d9;
+                            if (d5 * d5 < 1.0) {
+                                for (int j2 = l; j2 <= k1; j2++) {
+                                    double d6 = ((double) j2 + 0.5 - d13) / d9;
+                                    double s = d5 * d5 + d6 * d6;
+                                    // vanilla: (s + d7 * d7 < 1.0 && !outside(j2)) per cell, then the bit; all pure (OreScan)
+                                    if (s < 1.0 && !level.isOutsideBuildHeight(j2)) {
+                                        int row = i2 - x + (j2 - y) * width;
+                                        for (int k2 = i1; k2 <= l1; k2++) {
+                                            int l2 = row + (k2 - z) * width * height;
+                                            if (bitset.get(l2)) continue;
+                                            double d7 = ((double) k2 + 0.5 - d15) / d9;
+                                            if (!(s + d7 * d7 < 1.0)) continue;
+                                            bitset.set(l2);
+                                            if (v != null) v.visited(i2, j2, k2);
+                                            blockpos$mutableblockpos.set(i2, j2, k2);
+                                            if (level.ensureCanWrite(blockpos$mutableblockpos)) {
+                                                LevelChunkSection levelchunksection = scratch.getSection(blockpos$mutableblockpos);
+                                                if (levelchunksection != null) {
+                                                    int i3 = SectionPos.sectionRelative(i2);
+                                                    int j3 = SectionPos.sectionRelative(j2);
+                                                    int k3 = SectionPos.sectionRelative(k2);
+                                                    BlockState blockstate = levelchunksection.getBlockState(i3, j3, k3);
+                                                    for (int t = 0; t < nt; t++) {
+                                                        OreConfiguration.TargetBlockState target = targets.get(t);
+                                                        if (OreFeature.canPlaceOre(blockstate, scratch, random, config, target, blockpos$mutableblockpos)) {
+                                                            levelchunksection.setBlockState(i3, j3, k3, target.state, false);
+                                                            i++;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (v != null) v.verifyEnd(x, y, z);
+                return i > 0;
+            }
             for (int j4 = 0; j4 < j; j4++) {
                 double d9 = adouble[j4 * 4 + 3];
                 if (!(d9 < 0.0)) {
