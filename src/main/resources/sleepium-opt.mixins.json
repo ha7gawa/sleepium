@@ -117,6 +117,7 @@
     "SurfaceBiomeMemoMixin",
     "NoiseLazyInterpMixin",
     "NoiseLazyInterpolatorMixin",
+    "DfcNoiseChunkMixin",
     "SurfacePlanContextMixin",
     "SurfaceFluidEmptyMixin",
     "PersistentPoolsMixin",
