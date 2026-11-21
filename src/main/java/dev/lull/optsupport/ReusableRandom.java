@@ -13,7 +13,7 @@ import net.minecraft.world.level.levelgen.XoroshiroRandomSource;
  * Factories other than Xoroshiro's are called as usual.
  */
 public final class ReusableRandom {
-    public static final int GRADIENT = 0, ORE = 1, DEPTH = 2;
+    public static final int GRADIENT = 0, ORE = 1, DEPTH = 2, AQUIFER = 3;
 
     /** implemented by accessor mixins */
     public interface Factory {
@@ -34,7 +34,7 @@ public final class ReusableRandom {
         void sleep$setHi(long v);
     }
 
-    private static final ThreadLocal<XoroshiroRandomSource[]> SLOTS = ThreadLocal.withInitial(() -> new XoroshiroRandomSource[3]);
+    private static final ThreadLocal<XoroshiroRandomSource[]> SLOTS = ThreadLocal.withInitial(() -> new XoroshiroRandomSource[4]);
 
     private ReusableRandom() {}
 

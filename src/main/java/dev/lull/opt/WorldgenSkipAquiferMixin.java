@@ -83,7 +83,8 @@ public abstract class WorldgenSkipAquiferMixin implements dev.lull.optsupport.Ce
         int k4 = this.getIndex(l3, i4, j4);
         long i5 = this.aquiferLocationCache[k4];
         if (i5 != Long.MAX_VALUE) return i5;
-        RandomSource randomsource = this.positionalRandomFactory.at(l3, i4, j4);
+        RandomSource randomsource = SLEEP$SCRATCH ? dev.lull.optsupport.ReusableRandom.at(this.positionalRandomFactory, l3, i4, j4, dev.lull.optsupport.ReusableRandom.AQUIFER)
+                : this.positionalRandomFactory.at(l3, i4, j4);
         long l4 = BlockPos.asLong(l3 * 16 + randomsource.nextInt(10), i4 * 12 + randomsource.nextInt(9), j4 * 16 + randomsource.nextInt(10));
         this.aquiferLocationCache[k4] = l4;
         return l4;
@@ -97,6 +98,15 @@ public abstract class WorldgenSkipAquiferMixin implements dev.lull.optsupport.Ce
      * same distances compared in the same order, the same three picked.
      */
     @Unique private static final boolean SLEEP$CELLS = Boolean.getBoolean("lab.opt.AquiferCells");
+    /**
+     * AquiferScratch (-Dlab.opt.AquiferScratch, 11-21): the slow path's barrier holder (vanilla: a new MutableDouble(NaN)
+     * per call, ~2 % of generation's allocation) is one per aquifer, set to NaN where vanilla makes it - calculatePressure
+     * only reads and sets it during the call, and an aquifer serves one chunk's steps one after another on one thread
+     * (computeSubstance is not re-entered). A grid point's random location from ReusableRandom's per-thread source
+     * (the state the factory's new XoroshiroRandomSource would have; other factories as vanilla).
+     */
+    @Unique private static final boolean SLEEP$SCRATCH = Boolean.getBoolean("lab.opt.AquiferScratch");
+    @Unique private final MutableDouble sleep$substance = new MutableDouble(Double.NaN);
     @Unique private int sleep$ml = Integer.MIN_VALUE, sleep$mi, sleep$mj;
     @Unique private final int[] sleep$mxyz = new int[36];
     @Unique private final long[] sleep$mloc = new long[12];
@@ -285,7 +295,9 @@ public abstract class WorldgenSkipAquiferMixin implements dev.lull.optsupport.Ce
                             if (i5 != Long.MAX_VALUE) {
                                 l4 = i5;
                             } else {
-                                RandomSource randomsource = this.positionalRandomFactory.at(l3, i4, j4);
+                                RandomSource randomsource = SLEEP$SCRATCH
+                                        ? dev.lull.optsupport.ReusableRandom.at(this.positionalRandomFactory, l3, i4, j4, dev.lull.optsupport.ReusableRandom.AQUIFER)
+                                        : this.positionalRandomFactory.at(l3, i4, j4);
                                 l4 = BlockPos.asLong(
                                     l3 * 16 + randomsource.nextInt(10), i4 * 12 + randomsource.nextInt(9), j4 * 16 + randomsource.nextInt(10)
                                 );
@@ -326,7 +338,11 @@ public abstract class WorldgenSkipAquiferMixin implements dev.lull.optsupport.Ce
                     this.shouldScheduleFluidUpdate = true;
                     return blockstate;
                 } else {
-                    MutableDouble mutabledouble = new MutableDouble(Double.NaN);
+                    MutableDouble mutabledouble;
+                    if (SLEEP$SCRATCH) {
+                        mutabledouble = sleep$substance;
+                        mutabledouble.setValue(Double.NaN);
+                    } else mutabledouble = new MutableDouble(Double.NaN);
                     Aquifer.FluidStatus aquifer$fluidstatus2 = this.getAquiferStatus(k2);
                     double d2 = d1 * this.calculatePressure(context, mutabledouble, aquifer$fluidstatus1, aquifer$fluidstatus2);
                     if (substance + d2 > 0.0) {
