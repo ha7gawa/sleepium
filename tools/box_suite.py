@@ -466,14 +466,30 @@ def main():
         time.strftime('%F %T'), V, len(scenes), len(board.jobs), ' '.join('%s(%d)' % (m.name, m.cfg['slots']) for m in ready),
         os.path.basename(a.jar), a.ticks))
     threads = []
-    for m in ready:
+
+    def start(m):
         for slot in range(m.cfg['slots']):
             t = threading.Thread(target=worker, args=(m, slot, board))
             t.start()
             threads.append(t)
             time.sleep(3)
-    for t in threads:
-        t.join()
+
+    for m in ready:
+        start(m)
+    # late joiners: a machine that was busy (another test) or on battery joins when it is free while scenes still wait
+    late = [m for m in MACH.values() if not m.ready and m.why.startswith(('busy', 'on battery'))]
+    while any(t.is_alive() for t in threads):
+        with board.lock:
+            waiting = len(board.jobs)
+        for m in list(late):
+            if waiting and m.preflight(True):
+                summary('(%s: free now - joins the suite at %s)' % (m.name, time.strftime('%T')))
+                late.remove(m)
+                ready.append(m)
+                start(m)
+        deadline = time.time() + 60
+        while time.time() < deadline and any(t.is_alive() for t in threads):
+            time.sleep(2)
     wall = time.time() - t0
 
     # leftovers: no java of ours anywhere
