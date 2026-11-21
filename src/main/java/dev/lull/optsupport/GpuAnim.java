@@ -305,6 +305,7 @@ public final class GpuAnim {
                     + (pbo != 0 ? String.format(java.util.Locale.ROOT, "; the ring's fence wait %.3f ms (delete %.3f, trusted by age %d), fence + flush %.3f ms a tick",
                     beginWaitNs / 1e6 / ticks, deleteNs / 1e6 / ticks, trusted, endFlushNs / 1e6 / ticks) : "") + perAtlas()
                     + (SKIP_FENCE || skippedFences > 0 ? String.format(java.util.Locale.ROOT, "; fences skipped %d (frame-fence looks %d, finishes %d)", skippedFences, frameFenceWaits, finishes) : "")
+                    + (CHECK_REUSE ? String.format(java.util.Locale.ROOT, "; reuse check: %d segments, %d still busy", reuseChecked, reuseBusy) : "")
                     + (GlWorker.ON ? String.format(java.util.Locale.ROOT, "; worker ticks %d%s", workerTicks, WK_VERIFY ? ", checked " + workerVerified + ", mismatches " + workerMismatches + " " + diag() : "") + GlWorker.report() : ""));
     }
 
@@ -340,6 +341,16 @@ public final class GpuAnim {
     private static final boolean[] NO_FENCE = new boolean[8];
     public static long skippedFences, frameFenceWaits, finishes;
     private static final long[] FENCE_FRAME = new long[8];
+    /** a no-fence segment: UploadRing.fencesMade after its uploads (the next frame fence covers them: fenceAfter) */
+    private static final long[] FENCE_SEQ_AT = new long[8];
+    /**
+     * -Dlab.gpuAnim.checkReuse=true (test): a fence of its own after every atlas tick's ring uploads, looked at when the
+     * segment comes round - after the way chosen (trusted by age, the frame's fence waited for, its own fence, glFinish).
+     * Still busy there = the CPU is about to overwrite bytes the GPU has not read yet (counted, the first ones logged).
+     */
+    private static final boolean CHECK_REUSE = Boolean.getBoolean("lab.gpuAnim.checkReuse");
+    private static final long[] CHECK = new long[8];
+    public static long reuseChecked, reuseBusy;
     /** -Dlab.gpuAnim.noFlush=true: no glFlush after the ring's fence (the next frame's swap sends it; the wait 8 ticks later flushes anyway) */
     public static boolean NO_FLUSH = Boolean.getBoolean("lab.gpuAnim.noFlush");   // (not final: ClientAuto's flip)
 
@@ -469,8 +480,8 @@ public final class GpuAnim {
         if (NO_FENCE[seg]) {   // written without a fence of its own (SKIP_FENCE)
             NO_FENCE[seg] = false;
             long w0 = System.nanoTime();
-            if (!(UploadRing.limitingNow() && UploadRing.frames - FENCE_FRAME[seg] >= TRUST_AGE)) {
-                long f = UploadRing.fenceAfter(FENCE_FRAME[seg]);
+            if (!(TRUST_AGE > 0 && UploadRing.limitingNow() && UploadRing.frames - FENCE_FRAME[seg] >= TRUST_AGE)) {   // (trustAge 0: always the fence, as below)
+                long f = UploadRing.fenceAfter(FENCE_SEQ_AT[seg]);
                 if (f != 0) {
                     frameFenceWaits++;
                     if (org.lwjgl.opengl.GL32C.glClientWaitSync(f, 0, 0) == org.lwjgl.opengl.GL32C.GL_TIMEOUT_EXPIRED) {
@@ -501,6 +512,23 @@ public final class GpuAnim {
             FENCES[seg] = 0;
             beginWaitNs += System.nanoTime() - w0;
         }
+        if (CHECK[seg] != 0) checkReuse(seg);
+    }
+
+    /** the reuse check's totals (ClientCounters' end-of-window report; "" without -Dlab.gpuAnim.checkReuse) */
+    public static String checkReport() {
+        return CHECK_REUSE ? String.format(java.util.Locale.ROOT, "gpu anim reuse check: %d segments, %d still busy; trusted %d, ring waits %d, fences skipped %d, frame-fence looks %d, finishes %d",
+                reuseChecked, reuseBusy, trusted, ringWaits, skippedFences, frameFenceWaits, finishes) : "";
+    }
+
+    private static void checkReuse(int s) {
+        reuseChecked++;
+        if (org.lwjgl.opengl.GL32C.glClientWaitSync(CHECK[s], org.lwjgl.opengl.GL32C.GL_SYNC_FLUSH_COMMANDS_BIT, 0) == org.lwjgl.opengl.GL32C.GL_TIMEOUT_EXPIRED
+                && reuseBusy++ < 10)
+            LOG.warn("[sleep/opt] gpu anim reuse check: segment {} still read by the GPU when reused ({} frames after its uploads, limit {}, no own fence {})",
+                    s, UploadRing.frames - FENCE_FRAME[s], UploadRing.limitingNow(), SKIP_FENCE);
+        org.lwjgl.opengl.GL32C.glDeleteSync(CHECK[s]);
+        CHECK[s] = 0;
     }
 
     /** an atlas's animation tick ends: a fence after the segment's uploads */
@@ -521,9 +549,14 @@ public final class GpuAnim {
             return;
         }
         if (batchN > 0) batchFlush();
+        if (CHECK_REUSE && pbo != 0 && segUsed > 0) {   // (right after the uploads, before the segment's own fence and flush: own fence done -> this one done)
+            if (CHECK[seg] != 0) org.lwjgl.opengl.GL32C.glDeleteSync(CHECK[seg]);
+            CHECK[seg] = org.lwjgl.opengl.GL32C.glFenceSync(org.lwjgl.opengl.GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+        }
         if (pbo != 0 && segUsed > 0 && SKIP_FENCE && UploadRing.limitingNow()) {
             NO_FENCE[seg] = true;
             FENCE_FRAME[seg] = UploadRing.frames;
+            FENCE_SEQ_AT[seg] = UploadRing.fencesMade;
             skippedFences++;
         } else if (pbo != 0 && segUsed > 0) {
             long f0 = System.nanoTime();
