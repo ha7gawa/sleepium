@@ -32,7 +32,8 @@ import net.minecraft.world.level.chunk.storage.RegionFileVersion;
  * ring needs their space, and at every synchronize (flushWorker, save-all flush) and close: the world on disk after a
  * stop is the same as vanilla's. A crash loses only held early proto chunks - regenerated as they were.
  *
- * <p>One byte[] ring (lab.storedring.mb, 32) and fixed slot arrays per chunk IOWorker, allocated at its first held
+ * <p>One byte[] ring (lab.storedring.mb, 8; a 10-minute Chunky soak at 170 chunks/s peaked at 3.4 MB and 8499 records,
+ * notes/87) and fixed slot arrays (lab.storedring.slots, 16384) per chunk IOWorker, all allocated at its first held
  * store; the index maps a position to its newest slot. Every operation under the ring's lock (a release queues the
  * store in the IOWorker's mailbox before the position leaves the index: a load either sees the ring or comes after
  * the store in the mailbox).
@@ -43,8 +44,8 @@ import net.minecraft.world.level.chunk.storage.RegionFileVersion;
  */
 public final class StoredRing {
     public static final boolean VERIFY = Boolean.getBoolean("lab.storedring.verify") || ChunkIo.VERIFY;
-    static final int CAP = Math.max(1, Integer.getInteger("lab.storedring.mb", 32)) << 20;
-    static final int SLOTS = Math.max(1024, Integer.getInteger("lab.storedring.slots", 32768));
+    static final int CAP = Math.max(1, Integer.getInteger("lab.storedring.mb", 8)) << 20;
+    static final int SLOTS = Math.max(1024, Integer.getInteger("lab.storedring.slots", 16384));
     static final long HOLD_NS = Long.getLong("lab.storedring.holdMs", 120_000L) * 1_000_000L;
     static final Set<String> HOLDABLE = Set.of("minecraft:empty", "minecraft:structure_starts", "minecraft:structure_references",
             "minecraft:biomes", "minecraft:noise", "minecraft:surface");
@@ -59,11 +60,11 @@ public final class StoredRing {
     private final String name;
     private byte[] buf;   // allocated at the first held store
     private long head;    // bytes appended (monotonic); a slot's bytes at start % CAP
-    private final long[] slotPos = new long[SLOTS], slotStart = new long[SLOTS], slotTime = new long[SLOTS];
-    private final int[] slotLen = new int[SLOTS];
-    @SuppressWarnings("unchecked")
-    private final CompletableFuture<Void>[] slotFut = new CompletableFuture[SLOTS];
-    private final boolean[] slotLive = new boolean[SLOTS];
+    // (allocated with buf: a dimension that never holds a record costs nothing)
+    private long[] slotPos, slotStart, slotTime;
+    private int[] slotLen;
+    private CompletableFuture<Void>[] slotFut;
+    private boolean[] slotLive;
     private long slotHead, slotTail;   // slots in use: [tail, head)
     private final Long2IntOpenHashMap index = new Long2IntOpenHashMap();
     private int live;
@@ -95,7 +96,7 @@ public final class StoredRing {
         }
         if (rec.length > CAP / 4) return null;
         synchronized (this) {
-            if (buf == null) buf = new byte[CAP];
+            if (buf == null) allocate();
             long now = System.nanoTime();
             long key = pos.toLong();
             CompletableFuture<Void> fut;
@@ -158,6 +159,17 @@ public final class StoredRing {
             });
             return f;
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void allocate() {
+        buf = new byte[CAP];
+        slotPos = new long[SLOTS];
+        slotStart = new long[SLOTS];
+        slotTime = new long[SLOTS];
+        slotLen = new int[SLOTS];
+        slotFut = new CompletableFuture[SLOTS];
+        slotLive = new boolean[SLOTS];
     }
 
     /** room for bytes up to end and one slot: the oldest slots released (written) or skipped (replaced) */
