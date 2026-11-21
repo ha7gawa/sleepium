@@ -38,7 +38,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * region file. pendingWrites and its entries are touched on this IOWorker's mailbox thread only, as in vanilla.
  */
 @Mixin(IOWorker.class)
-public abstract class ChunkIoWorkerMixin {
+public abstract class ChunkIoWorkerMixin implements dev.lull.optsupport.ChunkIoWriter.Worker {
     @Shadow @Final private static Logger LOGGER;
     @Shadow @Final private AtomicBoolean shutdownRequested;
     @Shadow @Final private ProcessorMailbox<StrictQueue.IntRunnable> mailbox;
@@ -49,6 +49,36 @@ public abstract class ChunkIoWorkerMixin {
     @Unique private final AtomicInteger sleep$inFlight = new AtomicInteger();
     @Unique private final Map<Long, CompletableFuture<Void>> sleep$encodes = new ConcurrentHashMap<>();
     @Unique private final Map<Long, Map<String, String>> sleep$verify = ChunkIo.VERIFY ? new ConcurrentHashMap<>() : null;
+    /** ChunkIoWriter's cadence: region files of this storage are not fully durable; a commit task is in the mailbox */
+    @Unique private volatile boolean sleep$uncommitted;
+    @Unique private final AtomicBoolean sleep$commitQueued = new AtomicBoolean();
+
+    @Inject(method = "<init>", at = @At("RETURN"))
+    private void sleep$registerWriter(CallbackInfo ci) {
+        dev.lull.optsupport.ChunkIoWriter.register(this);
+    }
+
+    @Override
+    public void sleep$commitDue() {
+        if (!sleep$uncommitted || shutdownRequested.get() || !sleep$commitQueued.compareAndSet(false, true)) return;
+        mailbox.tell(new StrictQueue.IntRunnable(1, this::sleep$commitTask));   // BACKGROUND: after loads and stores
+    }
+
+    /** mailbox thread: a round for every open region file whose cadence is over */
+    @Unique
+    private void sleep$commitTask() {
+        sleep$commitQueued.set(false);
+        boolean pending = false;
+        long now = System.nanoTime();
+        for (RegionFile r : ((ChunkIo.Storage) (Object) this.storage).sleep$regions()) {
+            try {
+                pending |= ((ChunkIo.Region) r).sleep$commitDue(now);
+            } catch (IOException e) {
+                LOGGER.error("ChunkIo: committing region file failed", e);
+            }
+        }
+        sleep$uncommitted = pending;
+    }
 
     @Shadow
     private void tellStorePending() {
@@ -245,6 +275,7 @@ public abstract class ChunkIoWorkerMixin {
                 }
             }
         }
+        if (dev.lull.optsupport.ChunkIoWriter.CADENCE_MS > 0) sleep$uncommitted = true;
         if (dev.lull.IoScout.ON) dev.lull.IoScout.batch(this.storage.info().type(), n, System.nanoTime() - t0, this.pendingWrites.size());
     }
 
