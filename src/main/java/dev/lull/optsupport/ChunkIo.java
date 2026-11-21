@@ -67,11 +67,17 @@ public final class ChunkIo {
 
         /** writes n chunks (bytes as {@link #encode} makes them): sectors, one sync, the header, one sync, then the frees */
         void sleep$writeBatch(ChunkPos[] pos, byte[][] data, int n) throws IOException;
+
+        /** ChunkIoWriter's cadence: a round if one is due; true while something is still not durable */
+        boolean sleep$commitDue(long now) throws IOException;
     }
 
     /** RegionFileStorage, through ChunkIoStorageMixin. */
     public interface Storage {
         RegionFile sleep$region(ChunkPos pos) throws IOException;
+
+        /** the open region files (the storage's cache) */
+        Iterable<RegionFile> sleep$regions();
     }
 
     /** a region file's chunk record: 4 bytes length, 1 byte version, the compressed NBT — RegionFile.ChunkBuffer's bytes */
@@ -208,7 +214,7 @@ public final class ChunkIo {
 
     public static String report() {
         long b = batches.get();
-        return (SaveStreams.ON ? SaveStreams.report() + "; " : "") + String.format("chunk io: written %d in %d batches (%.1f per batch, max %d), cleared %d; encoded on the pool %d, on the IOWorker %d, stale %d; reads of pending entries %d",
+        return (SaveStreams.ON ? SaveStreams.report() + "; " : "") + ChunkIoWriter.report() + "; " + String.format("chunk io: written %d in %d batches (%.1f per batch, max %d), cleared %d; encoded on the pool %d, on the IOWorker %d, stale %d; reads of pending entries %d",
                 written.get(), b, b == 0 ? 0 : written.get() / (double) b, maxBatch.get(), cleared.get(), encodedPool.get(), encodedInline.get(), stale.get(), pendingReads.get());
     }
 
