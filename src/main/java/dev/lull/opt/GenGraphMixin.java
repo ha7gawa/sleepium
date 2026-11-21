@@ -13,6 +13,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * GenGraph (-Dlab.opt.GenGraph): ChunkMap.runGenerationTask hands the task to the generation graph (see GenGraph)
@@ -32,6 +35,12 @@ public abstract class GenGraphMixin implements GenGraph.Gate {
     @Overwrite
     private void runGenerationTask(ChunkGenerationTask task) {
         GenGraph.start((ChunkMap) (Object) this, task);
+    }
+
+    /** cancellations are applied after this tick's new tasks attached to the nodes they share */
+    @Inject(method = "runGenerationTasks", at = @At("TAIL"))
+    private void sleep$cancels(CallbackInfo ci) {
+        GenGraph.processCancels();
     }
 
     @Override

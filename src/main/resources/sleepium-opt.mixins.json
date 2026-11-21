@@ -23,6 +23,7 @@
     "GenGraphMixin",
     "GenGraphTaskAccessor",
     "GenGraphHolderMixin",
+    "GenGraphCancelMixin",
     "ReactorStorageAccessor",
     "ReactorIOWorkerInvoker",
     "ReactorRingsAccessor",

@@ -52,7 +52,11 @@ public final class GenGraph {
     public static final LongAdder ROOTS = new LongAdder(), NODES = new LongAdder(), RUN = new LongAdder(), FAILED = new LongAdder(),
             GATED = new LongAdder(), WAIT_NANOS = new LongAdder();
 
-    private static final byte WAIT_PARENT = 1, WAIT_DEPS = 2, QUEUED = 3, RUNNING = 4, DONE = 5, FAILED_STATE = 6;
+    private static final byte WAIT_PARENT = 1, WAIT_DEPS = 2, QUEUED = 3, RUNNING = 4, DONE = 5, FAILED_STATE = 6, DROPPED = 7;
+    public static final LongAdder CANCELLED = new LongAdder(), PRUNED = new LongAdder();
+    /** live roots by task (a cancellation finds its root); cancellations queued until the end of runGenerationTasks */
+    private static final java.util.concurrent.ConcurrentHashMap<ChunkGenerationTask, Root> ROOT_OF = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.concurrent.ConcurrentLinkedQueue<ChunkGenerationTask> CANCELS = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
     /** the per-holder node slots (GenGraphHolderMixin) and its applyStep */
     public interface Holder {
@@ -77,8 +81,9 @@ public final class GenGraph {
         final StaticCache2D<GenerationChunkHolder> cache;
         final ChunkMap map;
         int owned;            // nodes created by this root and not finished (LOCK)
-        boolean finished;     // its own node completed or failed (LOCK)
+        boolean finished;     // its own node completed or failed, or the task was cancelled (LOCK)
         boolean released;
+        Node node;            // the node it waits for
 
         Root(ChunkGenerationTask task, ChunkMap map) {
             this.task = task;
@@ -95,6 +100,7 @@ public final class GenGraph {
         int pending;
         ChunkStep step;
         ArrayList<Node> waiters;
+        ArrayList<Node> deps;   // the nodes this one waits for (unlinked when it is pruned)
         ArrayList<Root> roots;
         long readyNanos;
 
@@ -125,6 +131,8 @@ public final class GenGraph {
             } else {
                 if (n.roots == null) n.roots = new ArrayList<>(2);
                 n.roots.add(root);
+                root.node = n;
+                ROOT_OF.put(task, root);
             }
         }
         flush(run, rel);
@@ -162,6 +170,8 @@ public final class GenGraph {
     private static void addWaiter(Node dep, Node n) {
         if (dep.waiters == null) dep.waiters = new ArrayList<>(4);
         dep.waiters.add(n);
+        if (n.deps == null) n.deps = new ArrayList<>(4);
+        n.deps.add(dep);
     }
 
     /** the parent is complete: pick the step (generation or loading by the persisted status) and link the neighbours */
@@ -203,6 +213,7 @@ public final class GenGraph {
         if (!ok) FAILED.increment();
         Node[] slots = ((Holder) n.holder).sleep$graphSlots();
         if (slots[n.status.getIndex()] == n) slots[n.status.getIndex()] = null;
+        n.deps = null;
         if (n.waiters != null) {
             for (Node w : n.waiters) {
                 if (w.state >= DONE) continue;
@@ -228,9 +239,60 @@ public final class GenGraph {
 
     private static void finishRoot(Root r, ArrayList<Root> rel) {
         r.finished = true;
+        ROOT_OF.remove(r.task);
         if (r.owned == 0 && !r.released) {
             r.released = true;
             rel.add(r);
+        }
+    }
+
+    // ------------------------------------------------------------------ cancellation (main thread)
+
+    /** ChunkGenerationTask.markForCancellation: queued, applied at the end of runGenerationTasks (tasks that replace it
+     *  have attached to the shared nodes by then, so a re-targeted chunk does not drop and re-create its chain) */
+    public static void cancel(ChunkGenerationTask task) {
+        CANCELS.add(task);
+    }
+
+    public static void processCancels() {
+        if (CANCELS.isEmpty()) return;
+        ArrayList<Root> rel = TO_RELEASE.get();
+        ArrayList<Node> run = TO_RUN.get();
+        synchronized (LOCK) {
+            ChunkGenerationTask t;
+            while ((t = CANCELS.poll()) != null) {
+                Root r = ROOT_OF.remove(t);
+                if (r == null || r.finished) continue;
+                CANCELLED.increment();
+                Node n = r.node;
+                if (n != null && n.roots != null) n.roots.remove(r);
+                finishRoot(r, rel);
+                if (n != null) prune(n, rel);
+            }
+        }
+        flush(run, rel);
+    }
+
+    /** a node nobody waits for any more and that has not started leaves the graph, and so may its dependencies */
+    private static void prune(Node n, ArrayList<Root> rel) {
+        if (n.state != WAIT_PARENT && n.state != WAIT_DEPS && n.state != QUEUED) return;
+        if ((n.roots != null && !n.roots.isEmpty()) || (n.waiters != null && !n.waiters.isEmpty())) return;
+        n.state = DROPPED;
+        PRUNED.increment();
+        Node[] slots = ((Holder) n.holder).sleep$graphSlots();
+        if (slots[n.status.getIndex()] == n) slots[n.status.getIndex()] = null;
+        Root o = n.owner;
+        if (--o.owned == 0 && o.finished && !o.released) {
+            o.released = true;
+            rel.add(o);
+        }
+        ArrayList<Node> deps = n.deps;
+        n.deps = null;
+        if (deps != null) {
+            for (Node d : deps) {
+                if (d.waiters != null) d.waiters.remove(n);
+                prune(d, rel);
+            }
         }
     }
 
@@ -256,9 +318,12 @@ public final class GenGraph {
                 return;
             }
         }
+        synchronized (LOCK) {
+            if (n.state != QUEUED) return;   // pruned while queued
+            n.state = RUNNING;
+        }
         RUN.increment();
         WAIT_NANOS.add(System.nanoTime() - n.readyNanos);
-        n.state = RUNNING;
         CompletableFuture<ChunkResult<ChunkAccess>> f;
         try {
             f = ((Holder) n.holder).sleep$applyStep(n.step, n.owner.map, n.owner.cache);
@@ -286,7 +351,8 @@ public final class GenGraph {
 
     public static String report() {
         long run = RUN.sumThenReset();
-        return String.format(Locale.ROOT, "gen graph: %d tasks, %d nodes, %d run (ready -> start %.2f ms on average), %d failed, %d gated",
-                ROOTS.sumThenReset(), NODES.sumThenReset(), run, run == 0 ? 0.0 : WAIT_NANOS.sumThenReset() / 1e6 / run, FAILED.sumThenReset(), GATED.sumThenReset());
+        return String.format(Locale.ROOT, "gen graph: %d tasks (%d cancelled), %d nodes (%d pruned), %d run (ready -> start %.2f ms on average), %d failed, %d gated",
+                ROOTS.sumThenReset(), CANCELLED.sumThenReset(), NODES.sumThenReset(), PRUNED.sumThenReset(), run, run == 0 ? 0.0 : WAIT_NANOS.sumThenReset() / 1e6 / run,
+                FAILED.sumThenReset(), GATED.sumThenReset());
     }
 }
