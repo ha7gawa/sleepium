@@ -26,8 +26,34 @@ import net.neoforged.bus.api.IEventBus;
  * measures <b>how often</b> events fire, not how much a listener-free post costs (that is what
  * {@code /sleep bench} is for). {@link #stop()} detaches all counting listeners again.
  */
-final class EventCounter {
+public final class EventCounter {
     static final EventCounter INSTANCE = new EventCounter();
+
+    /** every counting consumer ever attached (identity): AsyncChunkSave tells them from real listeners */
+    private static final java.util.Set<Object> COUNTING = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+    private static volatile java.lang.reflect.Field consumerField;
+
+    /**
+     * A listener of the bus that is one of these counters (a ConsumerEventHandler around a counting consumer): it only
+     * counts posts, it never looks at an event's data.
+     */
+    public static boolean isCounting(Object busListener) {
+        try {
+            java.lang.reflect.Field f = consumerField;
+            if (f == null) {
+                Class<?> c = busListener.getClass();
+                while (c != null && !c.getName().equals("net.neoforged.bus.ConsumerEventHandler")) c = c.getSuperclass();
+                if (c == null) return false;
+                f = c.getDeclaredField("consumer");
+                f.setAccessible(true);
+                consumerField = f;
+            }
+            if (!f.getDeclaringClass().isInstance(busListener)) return false;
+            return COUNTING.contains(f.get(busListener));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return false;
+        }
+    }
 
     private static final int DISCOVERY_PERIOD_TICKS = 20;
 
@@ -115,6 +141,7 @@ final class EventCounter {
         for (Counter c : counters.values()) {
             if (c.listener != null) {
                 bus.unregister(c.listener);
+                COUNTING.remove(c.listener);
                 c.listener = null;
             }
         }
@@ -186,6 +213,7 @@ final class EventCounter {
             }
         };
         try {
+            COUNTING.add(listener);
             bus.addListener(EventPriority.LOWEST, true, type, listener);
             c.listener = listener;
         } catch (IllegalArgumentException e) {
