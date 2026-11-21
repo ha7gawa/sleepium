@@ -180,6 +180,9 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenSkip") || Boolean.getBoolean("lab.opt.WorldgenShare");
         if (simple.startsWith("WorldgenShare"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenShare");
+        // 11-21 noise allocation (lab-nalloc): the NoiseChunk halves of their flags
+        if (simple.equals("WorldgenMapMemoChunkMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenMapMemoMixin");
+        if (simple.equals("NoiseSlicePoolChunkMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseSlicePoolMixin");
         if (simple.equals("NoiseMathWrapMixin"))   // part of the Perlin octave flag
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseMathMixin");
         // the surface step's helpers belong to their feature's flag
