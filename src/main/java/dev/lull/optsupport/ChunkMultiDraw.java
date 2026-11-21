@@ -1873,22 +1873,27 @@ public final class ChunkMultiDraw {
     }
 
     /**
-     * -Dlab.chunkmd.uboWindows=true (lab, 11-21): the opaque layers' offsets stay in the storage buffer's store (every
-     * storage-buffer feature kept: one arena, kept lists, parallel lists), but the vertex shader reads them through a
+     * -Dlab.chunkmd.uboWindows=true|auto (lab, 11-21; auto: on Intel's graphics only): the opaque layers' offsets stay
+     * in the storage buffer's store (every storage-buffer feature kept: one arena, kept lists, parallel lists), but the
+     * vertex shader reads them through a
      * uniform block - each multi-draw split into windows of MAX_DRAWS draws, the block bound to the window's 16 KB of the
      * same buffer (gl_DrawID restarts at every call; an indirect command's base instance is its index in its window).
      * N100 (Intel UHD), steady scene with GPU timers: the storage-buffer read per vertex cost the terrain 5.90 ms of GPU a
      * frame against vanilla's 5.50-5.57; the uniform block (-Dlab.chunkmd.noSsbo) 5.56. The same floats are added to
      * the same positions: bit-exact either way. Not with occlusion culling (its compute pass finds offsets by base instance).
      */
-    private static final boolean UBO_WINDOWS_FLAG = Boolean.getBoolean("lab.chunkmd.uboWindows");
+    private static final String UBO_WINDOWS_MODE = System.getProperty("lab.chunkmd.uboWindows", "false");
+    /** "true": on; "auto": on where measured faster - Intel's graphics (other vendors untested yet: off); else off */
+    private static final boolean UBO_WINDOWS_FLAG = "true".equals(UBO_WINDOWS_MODE) || "auto".equals(UBO_WINDOWS_MODE);
     private static Boolean uboWindows;
 
     static boolean uboWindows() {
         Boolean w = uboWindows;
         if (w == null) {
-            uboWindows = w = UBO_WINDOWS_FLAG && ssbo() && !OcclusionCull.ON;
-            if (UBO_WINDOWS_FLAG) System.out.println("[sleep/opt] chunk multidraw: offsets read through uniform block windows " + w);
+            boolean want = "true".equals(UBO_WINDOWS_MODE) || "auto".equals(UBO_WINDOWS_MODE)
+                    && String.valueOf(GL11C.glGetString(GL11C.GL_VENDOR)).toLowerCase(java.util.Locale.ROOT).contains("intel");
+            uboWindows = w = want && ssbo() && !OcclusionCull.ON;
+            if (UBO_WINDOWS_FLAG) System.out.println("[sleep/opt] chunk multidraw: offsets read through uniform block windows " + w + " (" + UBO_WINDOWS_MODE + ")");
         }
         return w;
     }
