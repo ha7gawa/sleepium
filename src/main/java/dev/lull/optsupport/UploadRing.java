@@ -77,7 +77,7 @@ public final class UploadRing {
     public static long fenceAfter(long at) {
         long f = 0, fa = Long.MAX_VALUE;
         for (int i = 0; i < 16; i++)
-            if (FRAME_FENCES[i] != 0 && FENCE_AT[i] >= at && FENCE_AT[i] < fa) {
+            if (FRAME_FENCES[i] != 0 && (AT_SWAP ? FENCE_AT[i] > at : FENCE_AT[i] >= at) && FENCE_AT[i] < fa) {   // (at the swap: commands after it not covered - the next frame's)
                 f = FRAME_FENCES[i];
                 fa = FENCE_AT[i];
             }
@@ -89,6 +89,13 @@ public final class UploadRing {
      * K = 2..6 alike), and fences without waits cost as much (a flip run) - is it the fence per frame?
      */
     private static final int EVERY = Math.max(1, Math.min(8, Integer.getInteger("lab.gpu.framesInFlight.every", 1)));
+    /**
+     * -Dlab.gpu.framesInFlight.atSwap=true (test, 11-21): the frame's fence made right before the swap (runTick's
+     * Window.updateDisplay) instead of at the next frame's start - a fence at the start of a nearly empty batch may cost
+     * the Intel driver a submit of its own; before the swap it goes with the swap's. The wait stays at the frame's start.
+     */
+    private static final boolean AT_SWAP = Boolean.getBoolean("lab.gpu.framesInFlight.atSwap");
+    private static boolean swapFenced, swapLogged;
     private static int frameNo;
     public static long fifWaits, fifWaitNs, frames, deepFrames;
     /** off: no waiting (the fences still made) - ClientAuto's in-window flip switches it */
@@ -179,14 +186,30 @@ public final class UploadRing {
         autoDeep = 0;
     }
 
+    /** runTick before Window.updateDisplay (UploadRingMixin, atSwap only): the frame's fence */
+    public static void beforeSwap() {
+        if (!AT_SWAP || FIF <= 0 || !(limiting || watching)) return;
+        if (!swapLogged) {
+            swapLogged = true;
+            System.out.println("[sleep/opt] frames in flight: fences made before the swap");
+        }
+        makeFrameFence();
+        swapFenced = true;
+    }
+
+    private static void makeFrameFence() {
+        int i = frameNo & 15;
+        if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
+        FENCE_AT[i] = frames;
+        FRAME_FENCES[i] = EVERY == 1 || frameNo % EVERY == 0 ? GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0) : 0;
+    }
+
     /** Minecraft.runTick HEAD (UploadRingMixin): the last frame gets its fence, the next segment is taken if the GPU is done with it */
     public static void frameBegin() {
         if (FIF > 0 && (limiting || watching)) {
             // a fence for every frame, the oldest one we keep waited for: at most FIF frames queued ahead of the GPU
-            int i = frameNo & 15;
-            if (FRAME_FENCES[i] != 0) GL32C.glDeleteSync(FRAME_FENCES[i]);
-            FENCE_AT[i] = frames;
-            FRAME_FENCES[i] = EVERY == 1 || frameNo % EVERY == 0 ? GL32C.glFenceSync(GL32C.GL_SYNC_GPU_COMMANDS_COMPLETE, 0) : 0;
+            if (swapFenced) swapFenced = false;   // (made before the last swap)
+            else makeFrameFence();
             if (!limiting) watchQueue();
             if (QUEUE_LOG && dev.lull.ClientMeter.measuring()) {   // the queue: frames sent whose fence is not done (looks without the flush bit)
                 int d = 0;
