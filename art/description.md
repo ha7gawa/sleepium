@@ -38,6 +38,20 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.3.2: smooth frames on Intel graphics
+
+- **No more quarter-second freezes on Intel integrated graphics.** Some Intel drivers queued dozens of frames ahead
+  of the graphics card and then held the game until it caught up - several times a second, even standing still.
+  Sleepium now checks once per PC whether the driver does that and, where it does, keeps the game at most 3 frames
+  ahead. Intel N100, the slowest 1 % of frames: **257 → 16 ms**. AMD and NVIDIA cards are left as they were.
+- **Fixed:** the machine cost check from 1.3.1 could decide too early with very many machines of one kind.
+- The self-check of Sleepium's extra render threads now covers GeckoLib mobs and GPU-drawn items too.
+
+Tested before release on five machines, both versions: an RTX 4070 SUPER desktop, an Intel N100 mini PC, two
+4-core Xeon PCs with a Radeon RX 570 and an HD 7870, and a Raspberry Pi 4 (Linux, ARM) as client and server. Every
+exactness scene gives the same world as without Sleepium, frames identical to 1.3.1 bit for bit, frame rates checked
+against 1.3.1 on each machine, and a world with 562 kinds of modded machines.
+
 ## New in 1.3.1: fixes for mod packs
 
 - **Worlds full of modded machines no longer run slower than without Sleepium.** Since 1.2.0, the per-tick check

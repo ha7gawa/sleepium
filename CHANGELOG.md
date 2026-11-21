@@ -4,6 +4,33 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.3.2 - 2026-11-21
+
+Smoother frames on Intel graphics, and fixes.
+
+- **Fix: short freezes on Intel integrated graphics.** On some Intel drivers the game stopped for about a quarter of a
+  second, several times a second, even with the view standing still. Sleepium draws the terrain with very few calls, so
+  the driver queued dozens of frames ahead of the graphics card and then made the game wait until the card caught up.
+  Sleepium now checks once per PC whether the driver queues that deep, and where it does, keeps the game at most 3
+  frames ahead (the choice is remembered). Intel N100 (UHD Graphics), the slowest 1 % of frames: 257 -> 16 ms. On
+  the AMD and NVIDIA cards tested nothing changes (the check leaves them alone). Switch: `lab.gpu.framesInFlight.auto`.
+- **Fix: with very many machines of one kind, the cost check from 1.3.1 could decide too early** that their sleep does
+  not pay off - before any of them had been idle long enough to fall asleep. It now watches a kind of machine at least
+  that long first.
+- **Sleepium's self-check of its extra render threads now covers GeckoLib mobs and items drawn from the graphics
+  card** too (the check runs next to mods that wrap the entity draw call, like Entity Model Features). Before, these
+  were never checked.
+- 1.20.1 servers: no more "Attempted to load class ... for invalid dist" errors in the log with the experimental mob
+  sleep switches on.
+
+Tested before release on five machines and both versions:
+- Windows: an RTX 4070 SUPER desktop, an Intel N100 mini PC (UHD Graphics), two older 4-core Xeon PCs with a Radeon
+  RX 570 and a Radeon HD 7870; Linux: a Raspberry Pi 4 (ARM, its own Mesa V3D graphics) as client and as server.
+- Every exactness scene (23 per version: mobs, villagers, redstone, pistons, hoppers, items, carts, fluids, crops
+  and more) gives the same world as without Sleepium, bit for bit; the frames are identical to 1.3.1 bit for bit.
+- Frame rates against 1.3.1 on every machine, standing and in flight; a test world with 562 kinds of modded machines
+  (as fast as 1.3.1, about vanilla's speed); the settings screen on the release jars.
+
 ## 1.3.1 - 2026-11-19
 
 Fixes: modded machines that got slower with Sleepium, a rare deadlock at world generation, Entity Model Features heads
