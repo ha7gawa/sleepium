@@ -27,6 +27,7 @@ final class GenTimeline {
     private static int tick;
     private static final TreeMap<String, Integer> TOP = new TreeMap<>();
     private static java.lang.reflect.Method visible;
+    private static long lastBusy, lastSampleNanos;
 
     private GenTimeline() {}
 
@@ -74,6 +75,15 @@ final class GenTimeline {
         if (running * 2 < workers) lowSamples++;
         counts.forEach((k, v) -> SUM.merge(k, (long) v, Long::sum));
         LINES.append(String.format(Locale.ROOT, "  %6.2f s  workers %2d/%2d  io %d  main %-14s ", secs, running, workers, io, main.length() > 14 ? main.substring(0, 14) : main));
+        if (LightProbe.ON) {   // the light actor: its busy share since the last sample, its queue now
+            long busy = LightProbe.BUSY.get(), now = System.nanoTime();
+            var eng = level.getChunkSource().getLightEngine();
+            if (lastSampleNanos != 0)
+                LINES.append(String.format(Locale.ROOT, "light %3.0f%% q %4d  ", 100.0 * (busy - lastBusy) / Math.max(1, now - lastSampleNanos),
+                        eng instanceof LightProbe.Engine e ? e.sleep$pendingTasks() : -1));
+            lastBusy = busy;
+            lastSampleNanos = now;
+        }
         if (running <= 2 && !TOP.isEmpty()) {   // the few busy workers of a quiet sample: what they run (top frame)
             LINES.append("[");
             TOP.forEach((k, v) -> LINES.append(k).append(' '));
@@ -103,6 +113,7 @@ final class GenTimeline {
         SUM.clear();
         samples = runSum = workerSum = lowSamples = 0;
         tick = 0;
+        lastSampleNanos = 0;
         return sb.toString();
     }
 }

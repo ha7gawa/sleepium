@@ -913,7 +913,7 @@ public final class ClientAuto {
                 // the integrated server's side: when every chunk within the render distance of the target is FULL there
                 // (asked on the server thread every 10 ticks; the time is when the asking tick ran) - generation vs meshing
                 var srv = mc.getSingleplayerServer();
-                if (srv != null && tpServerFullAt < 0 && ticks % 10 == 0) {
+                if (srv != null && (tpServerFullAt < 0 || LightProbe.ON && tpServerLightAt < 0) && ticks % 10 == 0) {
                     int[] tp = TP[tpIndex];
                     int r = mc.options.getEffectiveRenderDistance();
                     double t = since(tpStart);
@@ -928,6 +928,9 @@ public final class ClientAuto {
                                     if (cs.getChunkNow((tp[0] >> 4) + dx, (tp[1] >> 4) + dz) != null) n++;
                                 }
                         if (n == want && tpServerFullAt < 0) tpServerFullAt = t;
+                        // -Dlab.light.probe: and when the light actor has nothing left (the light of those chunks done, sendable)
+                        if (n == want && LightProbe.ON && tpServerLightAt < 0 && !cs.getLightEngine().hasLightWork()
+                                && cs.getLightEngine() instanceof LightProbe.Engine e && e.sleep$pendingTasks() == 0) tpServerLightAt = t;
                     });
                 }
                 if (meshedStable(mc) || since(phaseStart) > 60) {
@@ -935,8 +938,9 @@ public final class ClientAuto {
                     log(String.format(Locale.ROOT, "teleport %d to (%d, %d): terrain generated + meshed in %.1f s (%s)%s", tpIndex + 1, p[0], p[1],
                             since(tpStart) - 2.0, sectionStats(mc), since(phaseStart) > 60 ? " TIMEOUT" : "")
                             + String.format(Locale.ROOT, "; server: all chunks in the render distance FULL at %.1f s; client: all chunks received at %.1f s, meshing idle at %.1f s",
-                                    tpServerFullAt - 2.0, tpClientAllAt - 2.0, tpIdleAt - 2.0));
-                    tpIndex++;
+                                    tpServerFullAt - 2.0, tpClientAllAt - 2.0, tpIdleAt - 2.0)
+                            + (LightProbe.ON ? String.format(Locale.ROOT, "; server light idle at %.1f s%n%s", tpServerLightAt - 2.0, LightProbe.report(1)) : ""));
+                    if (LightProbe.ON) LightProbe.reset();                    tpIndex++;
                     if (tpIndex < TP.length) enter(Phase.RECORD);
                     else enter(Phase.FINISH);
                 }
@@ -980,12 +984,14 @@ public final class ClientAuto {
     }
 
     private static long tpStart;
-    private static volatile double tpServerFullAt = -1;
+    private static volatile double tpServerFullAt = -1, tpServerLightAt = -1;
     private static double tpClientAllAt = -1, tpIdleAt = -1;
 
     private static void enter2Done() {
         tpStart = phaseStart;   // measured from the teleport command
         tpServerFullAt = -1;
+        tpServerLightAt = -1;
+        if (LightProbe.ON) LightProbe.reset();
         tpClientAllAt = -1;
         tpIdleAt = -1;
         phase = Phase.TP_WAIT_DONE;

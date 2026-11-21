@@ -30,6 +30,7 @@ public final class SleepMixinPlugin implements IMixinConfigPlugin {
         // Operation object on every call even with the profile idle (NoiseChunk.selectCellYZ ~300 k calls a 1024-chunk
         // area: 9.3 % of the generation workers' allocation in JFR) - in every player's game since they were added
         if (simple.startsWith("GenProfile")) return Boolean.getBoolean("sleep.genProfile");
+        if (simple.startsWith("LightProbe")) return Boolean.getBoolean("lab.light.probe") || Boolean.getBoolean("lab.light.fixcheck");   // measurement only (notes/84)
         if (simple.startsWith("IoScout")) return Boolean.getBoolean("sleep.ioScout");
         if (simple.startsWith("GlTrace")) return Boolean.getBoolean("sleep.glTrace");
         if (simple.startsWith("MobQuiet")) return Boolean.getBoolean("sleep.mobQuiet");
