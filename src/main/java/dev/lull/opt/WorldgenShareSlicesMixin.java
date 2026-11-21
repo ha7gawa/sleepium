@@ -44,6 +44,7 @@ public abstract class WorldgenShareSlicesMixin {
     @Shadow @Final private Blender blender;
 
     @Unique private RandomState sleep$random;
+    @Unique private Object sleep$beardifier;
     /** 0 undecided, 1 share, 2 do not */
     @Unique private byte sleep$share;
     @Unique private SliceColumns sleep$table;
@@ -53,6 +54,7 @@ public abstract class WorldgenShareSlicesMixin {
                             DensityFunctions.BeardifierOrMarker beardifier, NoiseGeneratorSettings noiseGeneratorSettings,
                             Aquifer.FluidPicker fluidPicker, Blender blendifier, CallbackInfo ci) {
         sleep$random = random;
+        sleep$beardifier = beardifier;
     }
 
     @Unique
@@ -61,7 +63,8 @@ public abstract class WorldgenShareSlicesMixin {
             boolean ok = blender == Blender.empty() && sleep$random != null && !interpolators.isEmpty();
             if (ok) {
                 List<DensityFunction> roots = new ArrayList<>(interpolators);
-                ok = SliceColumns.cache2dAreFlat(roots);
+                ok = SliceColumns.WALK_EACH ? SliceColumns.cache2dAreFlat(roots)
+                        : SliceColumns.cache2dAreFlat(sleep$random, sleep$beardifier, roots);
             }
             if (ok) sleep$table = SliceColumns.forState(sleep$random, cellNoiseMinY, cellCountY, cellWidth, interpolators.size());
             sleep$share = (byte) (ok ? 1 : 2);

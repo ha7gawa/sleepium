@@ -39,6 +39,7 @@ public abstract class SpriteInterpolateMixin {
         // GpuAnim: the blend drawn on the GPU from the sprite's sheet (vanilla's rounding through a table), nothing uploaded
         if (dev.lull.optsupport.GpuAnim.on() && dev.lull.optsupport.GpuAnim.interpolate(c, x, y, anim.getFrameX(i) * width, anim.getFrameY(i) * height,
                 anim.getFrameX(j) * width, anim.getFrameY(j) * height, d)) {
+            if (dev.lull.optsupport.AtlasDouble.ON) dev.lull.optsupport.AtlasDouble.record(x, y, width, height);   // (drawn: a rect for the back copies)
             if (dev.lull.optsupport.GpuAnim.VERIFY_BLEND && SpriteMix.interpolate(c.byMipLevel, activeFrame, width, height, anim.getFrameX(i), anim.getFrameY(i), anim.getFrameX(j), anim.getFrameY(j), d))
                 dev.lull.optsupport.GpuAnim.verifyBlend(activeFrame[0], x, y, width, height);
             return;

@@ -286,6 +286,7 @@ final class GenBench {
             }
         }
         double secs = (System.nanoTime() - startNanos) / 1e9;
+        if (GenTimeline.ON) GenTimeline.sample(level, x0, z0, side, secs);
         if (done < total && secs < 600) {
             return;
         }
@@ -297,6 +298,7 @@ final class GenBench {
         String cpuLine = burstReport() + System.lineSeparator() + cpu.report(secs, 12) + System.lineSeparator() + GenProfile.reportAndReset(done)
                 + (Boolean.getBoolean("lab.genscout") ? System.lineSeparator() + dev.lull.optsupport.GenScout.reportAndReset() + System.lineSeparator() + dev.lull.optsupport.GenScout.perlinBench()
                         + System.lineSeparator() + dev.lull.optsupport.ColumnBound.report() : "");
+        if (GenTimeline.ON) cpuLine += System.lineSeparator() + GenTimeline.reportAndReset();
         String hashLine = writeChunkHashes(server) + "\n" + cpuLine;
         Path report = out(server).resolve("genbench-" + label + ".txt");
         try {

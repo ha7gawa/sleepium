@@ -217,5 +217,19 @@
   "sleepium.ui.decoupled.tip": "New in 1.3: the frame is drawn on its own thread and clock, smooth even while a long tick runs; mobs tick on worker threads and are drawn from tick-rate poses. Not exact (interpolated) - at your own risk. Needs a restart.",
   "sleepium.ui.decoupled.restart": "restart to apply",
   "sleepium.ui.decoupled.hint.title": "Sleepium 1.3: decoupled frames",
-  "sleepium.ui.decoupled.hint.body": "Smoother frames - try it: Options > Sleepium"
+  "sleepium.ui.decoupled.hint.body": "Smoother frames - try it: Options > Sleepium",
+  "sleepium.ui.mods.kind.blockTick": "Its blocks ticking (server)",
+  "sleepium.ui.mods.kind.blockTick.tip": "Time in its block entities' tick code per server tick (machines, furnaces, pipes...).",
+  "sleepium.ui.mods.kind.entityTick": "Its mobs and entities (server)",
+  "sleepium.ui.mods.kind.entityTick.tip": "Time in its entities' tick code on the server per server tick (AI, movement, projectiles...).",
+  "sleepium.ui.mods.kind.clientEntityTick": "Its mobs and entities (client)",
+  "sleepium.ui.mods.kind.clientEntityTick.tip": "Time in its entities' client-side tick per frame (animations, effects).",
+  "sleepium.ui.mods.kind.entityDraw": "Drawing its mobs and entities",
+  "sleepium.ui.mods.kind.entityDraw.tip": "Time drawing its entities per frame (models, animations).",
+  "sleepium.ui.mods.kind.serverEvent": "Its event handlers (server)",
+  "sleepium.ui.mods.kind.serverEvent.tip": "Time in its listeners of game events on the server per server tick.",
+  "sleepium.ui.mods.kind.clientEvent": "Its event handlers (client)",
+  "sleepium.ui.mods.kind.clientEvent.tip": "Time in its listeners of game events on the client per frame (HUD, rendering hooks...).",
+  "sleepium.ui.mods.kind.blockDraw": "Drawing its blocks",
+  "sleepium.ui.mods.kind.blockDraw.tip": "Time drawing its block entities per frame (animated machines, chests, signs...)."
 }

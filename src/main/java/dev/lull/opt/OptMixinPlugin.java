@@ -26,6 +26,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
     private boolean sleep$decide(String targetClassName, String mixinClassName) {
         String simple = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
         boolean on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt." + simple);
+        if (simple.startsWith("AtlasDouble") || simple.equals("AtlasIdAccessor")) on = Boolean.getBoolean("lab.atlasDouble");   // (lab, 11-20: the double atlas)
         // helpers that belong to a feature flag
         if (simple.equals("EntitySectionIterMixin") || simple.equals("ClassInstanceMultiMapAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.EntitySectionScanMixin")
@@ -165,10 +166,27 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenSkip") || Boolean.getBoolean("lab.opt.WorldgenShare");
         if (simple.startsWith("WorldgenShare"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenShare");
+        // 11-21 lab-fill: the interpolator half of the lazy interpolation flag
+        if (simple.equals("NoiseLazyInterpolatorMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseLazyInterpMixin");
+        if (simple.equals("NoiseMathWrapMixin"))   // part of the Perlin octave flag
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseMathMixin");
+        // the surface step's helpers belong to their feature's flag
+        if (simple.equals("SurfaceBiomeCellsContextMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SurfaceBiomeCellsMixin");
+        if (simple.equals("SurfaceConditionsContextMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SurfaceConditionsMixin");
+        if (simple.equals("SurfacePlanContextMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SurfacePlanMixin");
         if (simple.equals("WorldgenAllocPlacementMixin") || simple.equals("WorldgenAllocJointMixin"))   // FEATURES: not yet verified
             on = Boolean.getBoolean("lab.opt.WorldgenFeatureAlloc");
+        if (simple.equals("PlacementFilterInvoker") || simple.equals("RepeatingPlacementInvoker") || simple.equals("HeightRangePlacementAccessor")
+                || simple.equals("RandomOffsetPlacementAccessor") || simple.equals("HeightmapPlacementAccessor") || simple.equals("EnvironmentScanPlacementAccessor"))
+            on = Boolean.getBoolean("lab.opt.WorldgenFeatureAlloc");   // PlacementWalk's views of the modifiers
+        if (simple.equals("HeightmapsChunkAccessor") || simple.equals("HeightmapDataAccessor"))   // OreScan's views of the heightmaps
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenOreScanMixin");
+        if (simple.equals("ShapeFullMemoShapeMixin"))   // the slot of ShapeFullMemoMixin's answer
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ShapeFullMemoMixin");
         if (simple.equals("WorldgenReactorMixin") || simple.startsWith("Reactor"))
-            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenReactor");
+            // (11-21 lab-sched: -Dlab.opt.<part>=false leaves one part out - WorldgenReactorMixin (the mailbox),
+            // ReactorChunkLoadMixin (the load hops), ReactorFullMixin (FullRing) - to attribute the gain)
+            on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenReactor")) && !"false".equals(System.getProperty("lab.opt." + simple));
         if (simple.startsWith("MainReactor") || simple.equals("EventLoopQueueAccessor") || simple.equals("ChunkCacheExecutorAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.MainReactor");
         if (simple.startsWith("MainReactorScout")) on = Boolean.getBoolean("lab.reactor.scout");   // measurement only

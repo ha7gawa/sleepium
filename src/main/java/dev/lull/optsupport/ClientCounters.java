@@ -60,6 +60,7 @@ public final class ClientCounters {
                 + (StallProbe.ON ? "; " + StallProbe.report() : "")
                 + (ClientTickProfile.ON ? "; " + ClientTickProfile.report() : "")
                 + (UploadRing.ON || UploadRing.RECORDS || Integer.getInteger("lab.gpu.framesInFlight", 0) > 0 || Boolean.getBoolean("lab.gpu.framesInFlight.auto") ? "; " + UploadRing.report() : "")
+                + (GpuAnim.checkReport().isEmpty() ? "" : "; " + GpuAnim.checkReport())
                 + (Boolean.getBoolean("lab.opt.FrustumRegionMixin") ? "; " + FrustumRegions.report() : "")
                 + (Boolean.getBoolean("lab.opt.ShaderLightMixin") ? "; " + LightVolumes.report() : "")
                 + (Boolean.getBoolean("lab.opt.ChunkTickMemoMixin") ? "; chunk tick memo: hits " + ChunkTickMemo.hits + ", misses " + ChunkTickMemo.misses + ", epoch " + ChunkTickMemo.epoch : "")

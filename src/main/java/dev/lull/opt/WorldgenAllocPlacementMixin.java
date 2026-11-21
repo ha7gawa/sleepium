@@ -1,7 +1,7 @@
 package dev.lull.opt;
 
+import dev.lull.optsupport.PlacementWalk;
 import java.util.List;
-import java.util.stream.Stream;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.util.RandomSource;
@@ -13,14 +13,15 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.Unique;
 
 /**
  * WorldgenAlloc (placement): PlacedFeature.placeWithContext chains one flatMap per placement modifier over
  * Stream.of(origin) — a pipeline of stream objects per placed feature per chunk. A sequential flatMap calls the mapper
  * for an element and pushes each element of the returned stream downstream before taking the next one (depth first),
- * closing the returned stream afterwards. The same traversal written as recursion: the same getPositions calls, the
- * same random draws, the same place calls, in the same order; each modifier's stream is still consumed and closed.
+ * closing the returned stream afterwards. The same traversal written as recursion (PlacementWalk): the same
+ * getPositions work, the same random draws, the same place calls, in the same order; vanilla's own modifiers produce
+ * their positions without streams, any other modifier's stream is still consumed and closed.
+ * (11-21: the first version's forEach lambda per modifier and element was itself ~4.6 % of the workers' allocation.)
  */
 @Mixin(PlacedFeature.class)
 public abstract class WorldgenAllocPlacementMixin {
@@ -29,24 +30,10 @@ public abstract class WorldgenAllocPlacementMixin {
 
     /**
      * @author probe
-     * @reason flatMap chain replaced by the equivalent depth-first recursion
+     * @reason flatMap chain replaced by the equivalent depth-first walk
      */
     @Overwrite
     private boolean placeWithContext(PlacementContext context, RandomSource source, BlockPos pos) {
-        ConfiguredFeature<?, ?> configuredfeature = this.feature.value();
-        boolean[] placed = new boolean[1];
-        sleep$apply(0, pos, context, source, configuredfeature, placed);
-        return placed[0];
-    }
-
-    @Unique
-    private void sleep$apply(int i, BlockPos pos, PlacementContext context, RandomSource source, ConfiguredFeature<?, ?> feature, boolean[] placed) {
-        if (i == this.placement.size()) {
-            if (feature.place(context.getLevel(), context.generator(), source, pos)) placed[0] = true;
-            return;
-        }
-        try (Stream<BlockPos> s = this.placement.get(i).getPositions(context, source, pos)) {
-            if (s != null) s.sequential().forEach(p -> sleep$apply(i + 1, p, context, source, feature, placed));
-        }
+        return PlacementWalk.walk(this.placement, this.feature.value(), context, source, pos);
     }
 }

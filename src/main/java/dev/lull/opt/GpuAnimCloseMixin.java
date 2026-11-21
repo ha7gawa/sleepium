@@ -15,6 +15,10 @@ public abstract class GpuAnimCloseMixin {
     private void sleep$uploadIn(int x, int y, int frameX, int frameY, com.mojang.blaze3d.platform.NativeImage[] data, CallbackInfo ci) {
         if (!GpuAnim.on() || GpuAnim.atlas == 0) return;
         if (GpuAnim.ringUpload((SpriteContents) (Object) this, x, y, frameX, frameY, data)) {   // through the mapped ring
+            if (dev.lull.optsupport.AtlasDouble.ON) {   // (the double atlas's record may not have run: a rect for the back copies)
+                SpriteContents c = (SpriteContents) (Object) this;
+                dev.lull.optsupport.AtlasDouble.record(x, y, c.width(), c.height());
+            }
             ci.cancel();
             return;
         }

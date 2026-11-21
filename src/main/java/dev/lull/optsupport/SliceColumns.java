@@ -75,6 +75,36 @@ public final class SliceColumns {
         return Reflect.get(o, name);
     }
 
+    /** -Dlab.slices.walkEach: the walk for every NoiseChunk again (as before 11-21) */
+    public static final boolean WALK_EACH = Boolean.getBoolean("lab.slices.walkEach");
+    /** cache2dAreFlat's answers by RandomState and beardifier class (guarded by itself) */
+    private static final Map<RandomState, Map<Class<?>, Boolean>> FLAT = new WeakHashMap<>();
+
+    /**
+     * cache2dAreFlat for the interpolators of a NoiseChunk with an empty Blender, walked once per RandomState and
+     * beardifier class (11-21: the walk, by reflection over the whole router, ran for every NoiseChunk). The same answer
+     * by construction: the walk reads only the classes of the nodes and fields of the router's functions (noise yScale,
+     * holders, splines). A NoiseChunk's interpolator trees are the RandomState's router mapped by NoiseChunk.wrap, which
+     * puts a fresh wrapper of the marker's type (NoiseInterpolator, FlatCache, Cache2D, CacheOnce, CacheAllInCell) where
+     * the router has a marker - the same classes for every NoiseChunk -, replaces BlendAlpha / BlendOffset only when
+     * the Blender is not empty (excluded: the caller asks only then), unwraps holders (the router's own), and puts the
+     * NoiseChunk's beardifier where the router has the beardifier marker: the one input that can differ between
+     * NoiseChunks of a RandomState (Beardifier for chunks, the marker for column probes), hence the class in the key.
+     */
+    public static boolean cache2dAreFlat(RandomState state, Object beardifier, List<DensityFunction> roots) {
+        Class<?> kind = beardifier == null ? Void.class : beardifier.getClass();
+        synchronized (FLAT) {
+            Map<Class<?>, Boolean> m = FLAT.get(state);
+            Boolean b = m == null ? null : m.get(kind);
+            if (b != null) return b;
+        }
+        boolean ok = cache2dAreFlat(roots);
+        synchronized (FLAT) {
+            FLAT.computeIfAbsent(state, k -> new ConcurrentHashMap<>(2)).put(kind, ok);
+        }
+        return ok;
+    }
+
     /** true if every Cache2D reachable from these functions wraps a y-independent function; false if unsure */
     public static boolean cache2dAreFlat(List<DensityFunction> roots) {
         try {

@@ -3,7 +3,9 @@ package dev.lull.mixin;
 import dev.lull.GenProfile;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.util.thread.BlockableEventLoop;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -13,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(BlockableEventLoop.class)
 public abstract class GenProfileQueueMixin<R extends Runnable> {
     @Unique private static final ConcurrentHashMap<Object, Long> PROBE$ENQUEUED = new ConcurrentHashMap<>();
+    @Shadow @Final private java.util.Queue<R> pendingRunnables;
     @Unique private static final java.util.concurrent.atomic.AtomicInteger PROBE$TRACES = new java.util.concurrent.atomic.AtomicInteger();
 
     /** what a task is: a completion stage names its function's class, a plain task its own class */
@@ -36,6 +39,9 @@ public abstract class GenProfileQueueMixin<R extends Runnable> {
     private void sleep$in(R task, CallbackInfo ci) {
         if (GenProfile.active()) {
             PROBE$ENQUEUED.put(task, System.nanoTime());
+            // 11-21: the queue's length when a task arrives (us/call column = tasks ahead of it) and who told it
+            GenProfile.add("main: queue length at tell (us = tasks), " + ((BlockableEventLoop<?>) (Object) this).name(), this.pendingRunnables.size() * 1000L, 0);
+            GenProfile.add("main: told from " + (Thread.currentThread().getName().startsWith("Server thread") ? "the server thread" : "other threads") + ", " + ((BlockableEventLoop<?>) (Object) this).name() + " / " + sleep$kind(task), 0, 0);
             if (task.getClass().getName().endsWith("CompletableFuture$AsyncSupply") && PROBE$TRACES.incrementAndGet() <= 2) {
                 StringBuilder b = new StringBuilder("sleep: AsyncSupply to " + ((BlockableEventLoop<?>) (Object) this).name() + " from " + Thread.currentThread().getName());
                 StackTraceElement[] st = new Throwable().getStackTrace();
