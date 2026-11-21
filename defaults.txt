@@ -260,3 +260,4 @@
 -Dlab.opt.SurfaceBiomeMemoMixin=true
 -Dlab.opt.NoiseLazyInterpMixin=true
 -Dlab.chunkmd.uboWindows=auto
+-Dlab.opt.WorldgenReactor=true
