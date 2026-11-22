@@ -48,6 +48,10 @@ final class GenBench {
     private static final it.unimi.dsi.fastutil.ints.IntArrayList TICK_LOADS = new it.unimi.dsi.fastutil.ints.IntArrayList();
     private static final it.unimi.dsi.fastutil.longs.LongArrayList TICK_NANOS = new it.unimi.dsi.fastutil.longs.LongArrayList();
     private static long lastTickEnd;
+    /** when the area's last chunk became FULL (s since start, ticks); -1 before */
+    private static double doneSecs = -1;
+    private static int doneTicks;
+    private static String probeLine = "";
 
     static void onChunkLoad(net.minecraftforge.event.level.ChunkEvent.Load e) {
         if (active && e.getLevel() == level) loadsThisTick++;
@@ -187,6 +191,8 @@ final class GenBench {
         startTick = TickTimer.INSTANCE.ticks();
         startNanos = System.nanoTime();
         cpu = new CpuWindow();
+        if (LightProbe.ON) LightProbe.reset();
+        doneSecs = -1;
         if (ORDERED) {
             ORDER.clear();
             for (int z = z0 - ORDER_MARGIN; z < z0 + side + ORDER_MARGIN; z++)
@@ -286,19 +292,32 @@ final class GenBench {
             }
         }
         double secs = (System.nanoTime() - startNanos) / 1e9;
-        if (GenTimeline.ON) GenTimeline.sample(level, x0, z0, side, secs);
+        if (GenTimeline.ON && doneSecs < 0) GenTimeline.sample(level, x0, z0, side, secs);
         if (done < total && secs < 600) {
             return;
         }
+        if (doneSecs < 0) {   // the area's time and ticks: when its last chunk became FULL (the light check below may wait)
+            doneSecs = secs;
+            doneTicks = TickTimer.INSTANCE.ticks() - startTick;
+            probeLine = LightProbe.ON ? System.lineSeparator() + LightProbe.report(done) : "";
+        }
+        String lightLine = probeLine;
+        if (LightCheck.ON) {
+            if (!LightCheck.ready(level)) return;   // until the light actor is idle, then drained with the server thread held (LightCheck.drain)
+            lightLine += System.lineSeparator() + LightCheck.run(level, x0, z0, side,
+                    server.getServerDirectory().toPath().resolve(dev.lull.SleepOut.ROOT).resolve("genlight-" + label + ".txt"));
+        }
+        secs = doneSecs;
         active = false;
         GenBenchHooks.active = false;
-        int ticks = TickTimer.INSTANCE.ticks() - startTick;
+        int ticks = doneTicks;
         String line = String.format(Locale.ROOT, "genbench '%s': %d/%d chunks FULL in %.2f s (%d ticks) = %.1f chunks/s",
                 label, done, total, secs, ticks, done / secs);
         String cpuLine = burstReport() + System.lineSeparator() + cpu.report(secs, 12) + System.lineSeparator() + GenProfile.reportAndReset(done)
                 + (Boolean.getBoolean("lab.genscout") ? System.lineSeparator() + dev.lull.optsupport.GenScout.reportAndReset() + System.lineSeparator() + dev.lull.optsupport.GenScout.perlinBench()
                         + System.lineSeparator() + dev.lull.optsupport.ColumnBound.report() : "");
         if (GenTimeline.ON) cpuLine += System.lineSeparator() + GenTimeline.reportAndReset();
+        cpuLine += lightLine;
         String hashLine = writeChunkHashes(server) + "\n" + cpuLine;
         Path report = out(server).resolve("genbench-" + label + ".txt");
         try {
