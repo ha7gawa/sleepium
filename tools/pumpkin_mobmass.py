@@ -21,6 +21,7 @@ ap.add_argument('--warm', type=int, default=30)
 ap.add_argument('--secs', type=int, default=40)
 ap.add_argument('--label', default='pumpkin')
 ap.add_argument('--probe', action='store_true')
+ap.add_argument('--sample', type=int, default=0, help='after the window: N pigs positions, then again after 30 s (do they move?)')
 a = ap.parse_args()
 
 lines = []
@@ -141,6 +142,19 @@ try:
         cmd('execute positioned 4300 201 4300 run data get entity @e[type=minecraft:pig,limit=1,sort=nearest] Pos')
         time.sleep(3)
         say('checks: ' + ' | '.join(since(q))[:1500])
+        if a.sample:
+            pts = [(4150 + (i * 97) % 520, 4150 + (i * 53) % 520) for i in range(a.sample)]
+            def positions():
+                m0 = mark()
+                for (px, pz) in pts:
+                    cmd('execute positioned %d 201 %d run data get entity @e[type=minecraft:pig,limit=1,sort=nearest] Pos' % (px, pz))
+                time.sleep(4)
+                return [l.split('data: ')[-1] for l in since(m0) if 'entity data' in l]
+            first = positions()
+            time.sleep(30)
+            second = positions()
+            moved = sum(1 for x, y in zip(first, second) if x != y)
+            say('sample: %d of %d pigs moved in 30 s; first %s; second %s' % (moved, len(first), first[:4], second[:4]))
         # the process' CPU over 10 s (all its threads)
         try:
             ps = lambda: float(subprocess.run(['powershell', '-NoProfile', '-Command', '(Get-Process -Id %d).TotalProcessorTime.TotalSeconds' % p.pid],
