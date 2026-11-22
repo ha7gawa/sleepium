@@ -24,6 +24,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument('scenes', nargs='*')
 ap.add_argument('--workers', type=int, default=3)
 ap.add_argument('--ticks', type=int, default=2400)
+ap.add_argument('--port', type=int, default=25570, help='worker N listens on port + N')
 a = ap.parse_args()
 scenes = a.scenes or SCENES
 summary = os.path.join(ROOT, 'run', 'exactness-summary.txt')
@@ -63,7 +64,7 @@ def exact(copy, port, scene, extra):
 def worker(i, jobs):
     copy = os.path.join(os.path.dirname(ROOT), 'work-p%d' % i)
     sync(copy)
-    port = 25570 + i
+    port = a.port + i
     while True:
         try:
             scene = jobs.get_nowait()
