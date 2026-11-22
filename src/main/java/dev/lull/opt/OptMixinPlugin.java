@@ -229,6 +229,9 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.startsWith("GenScout")) on = Boolean.getBoolean("lab.genscout");   // measurement only
         if (simple.startsWith("PipeScout")) on = Boolean.getBoolean("lab.pipescout");   // measurement only (optsupport/PipeScout)
         if (simple.startsWith("ChunkSendPar")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkSendPar");   // optsupport/ChunkSendPar
+        if (simple.startsWith("TrackDeliver")) on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.TrackDeliver"))
+                && (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor"));   // optsupport/TrackDeliver (on NetReactor's batches)
+        if (simple.equals("PipeScoutNetMixin") && Boolean.getBoolean("lab.opt.TrackDeliver")) on = false;   // (its inject into the send TrackDeliver overwrites)
         if (simple.startsWith("TrackIndex")) on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.TrackFast")) && Boolean.getBoolean("lab.opt.TrackIndex");   // optsupport/TrackIndex
         if (simple.startsWith("TrackFast")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.TrackFast");   // optsupport/TrackFast
         if (simple.equals("LightTimingMixin")) on = Boolean.getBoolean("lab.lighttime");   // measurement only
