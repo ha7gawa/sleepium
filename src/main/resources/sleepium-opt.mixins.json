@@ -191,6 +191,7 @@
     "EagerSaveScanMixin",
     "EagerSaveScanHolderMixin",
     "EagerSaveScanPoiMixin",
+    "SavedDataNameMixin",
     "SaveDirectAccessor",
     "SaveDirectStrategyAccessor",
     "SaveWriteMixin",

@@ -1,6 +1,7 @@
 -Dlab.opt.AmbientParticleSkipMixin=true
 -Dlab.opt.AsyncChunkSaveMixin=true
 -Dlab.opt.AsyncChunkSaveStorageMixin=true
+-Dlab.asyncsave.listeners=true
 -Dlab.opt.BlockCollisionMemoMixin=true
 -Dlab.opt.BlockCollisionsFastMixin=true
 -Dlab.opt.BlockEntityCullNoAllocMixin=true
@@ -280,3 +281,5 @@
 -Dlab.light.ownThread=true
 # 1.3.5: density-function corner noise octave by octave down a column block, vectorised (NoiseBatch; notes/83, 84)
 -Dlab.dfc.batch=true
+-Dlab.opt.EagerSaveScan=true
+-Dlab.opt.SavedDataNameMixin=true

@@ -170,8 +170,36 @@ public final class AsyncChunkSave {
         }
     }
 
+    /** verifyChunk with SaveListeners: chunks equal to the vanilla write once the listeners' own top-level keys are set aside */
+    public static final AtomicLong chunkListenerKeysOnly = new AtomicLong();
+
+    /**
+     * With deferring Save listeners (SaveListeners) the stored tag also holds the keys they added after the write
+     * (Mekanism's mek_world_gen_version); the vanilla reference is made before the event. Such a chunk is compared with
+     * the reference plus exactly those added top-level keys (none of the chunk format's), content-wise (key-sorted).
+     */
+    private static boolean equalButListenerKeys(CompoundTag tag, byte[] reference) {
+        if (!SaveListeners.ON) return false;
+        try {
+            CompoundTag ref = NbtIo.read(new java.io.DataInputStream(new java.io.ByteArrayInputStream(reference)));
+            boolean added = false;
+            for (String k : tag.getAllKeys())
+                if (!ref.contains(k)) {
+                    ref.put(k, tag.get(k).copy());
+                    added = true;
+                }
+            return added && ChunkIo.canonical(ref).equals(ChunkIo.canonical(tag)) && ref.getAllKeys().equals(tag.getAllKeys());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private static void verifyChunk(ChunkPos pos, CompoundTag tag, byte[] reference) {
         chunkVerified.incrementAndGet();
+        if (!java.util.Arrays.equals(raw(tag), reference) && equalButListenerKeys(tag, reference)) {
+            chunkListenerKeysOnly.incrementAndGet();
+            return;
+        }
         if (!java.util.Arrays.equals(raw(tag), reference) && chunkMismatches.incrementAndGet() <= 5) {
             String where = "?";
             try {
@@ -313,6 +341,6 @@ public final class AsyncChunkSave {
         return "async chunk save: deferred " + deferred + " chunks (" + sections + " palettes on the pool), vanilla " + vanilla + ", reads that waited "
                 + waitedReads + ", deferred with only the engine's counting listeners " + countedOnly
                 + (SavePalettes.ON ? ", " + SavePalettes.report() : "") + (VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "")
-                + (VERIFY_CHUNK ? ", whole chunks verified " + chunkVerified + ", differing " + chunkMismatches + ", not compared (two vanilla writes differed) " + chunkUnstable : "");
+                + (VERIFY_CHUNK ? ", whole chunks verified " + chunkVerified + ", differing " + chunkMismatches + (SaveListeners.ON ? ", equal but the Save listeners' own keys " + chunkListenerKeysOnly : "") + ", not compared (two vanilla writes differed) " + chunkUnstable : "");
     }
 }
