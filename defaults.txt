@@ -275,3 +275,8 @@
 -Dlab.opt.DfcNoiseChunkMixin=true
 -Dlab.chunkmd.uboWindows=auto
 -Dlab.gpu.framesInFlight.atSwap=true
+# 1.3.5: light of new chunks without the sorter round trips (LightDirect, LightLanes order, its own thread; notes/84)
+-Dlab.opt.LightDirect=true
+-Dlab.light.ownThread=true
+# 1.3.5: density-function corner noise octave by octave down a column block, vectorised (NoiseBatch; notes/83, 84)
+-Dlab.dfc.batch=true
