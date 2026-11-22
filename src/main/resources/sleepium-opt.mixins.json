@@ -54,6 +54,8 @@
     "TicketNearFirstMixin",
     "TicketReleaseAtFullMixin",
     "TicketReleaseEagerMixin",
+    "MainDirectMixin",
+    "MainDirectMessageAccessor",
     "TicketReleaseEagerAccessor",
     "StallHeartbeatTickMixin",
     "LagFairMoveMixin",
