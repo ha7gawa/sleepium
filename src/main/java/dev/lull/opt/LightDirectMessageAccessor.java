@@ -16,4 +16,7 @@ public interface LightDirectMessageAccessor {
 
     @Accessor("level")
     IntSupplier sleep$level();
+
+    @Accessor("pos")
+    long sleep$pos();
 }

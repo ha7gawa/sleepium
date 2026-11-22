@@ -30,8 +30,24 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(ThreadedLevelLightEngine.class)
 public abstract class LightDirectMixin {
     @Shadow @Final private ProcessorMailbox<Runnable> taskMailbox;
+    @Shadow @Final private net.minecraft.server.level.ChunkMap chunkMap;
     @Unique private static final ProcessorHandle<Unit> sleep$NO_REPLY = ProcessorHandle.of("light direct (no reply)", u -> {});
-    @Unique private final dev.lull.optsupport.LightLanes sleep$lanes = new dev.lull.optsupport.LightLanes();
+    @Unique private volatile dev.lull.optsupport.LightLanes sleep$lanes;
+
+    @Unique
+    private dev.lull.optsupport.LightLanes sleep$lanes() {
+        dev.lull.optsupport.LightLanes l = sleep$lanes;
+        if (l == null) {
+            synchronized (this) {
+                l = sleep$lanes;
+                if (l == null) {
+                    LightDirectChunkMapAccessor cm = (LightDirectChunkMapAccessor) chunkMap;
+                    sleep$lanes = l = new dev.lull.optsupport.LightLanes(chunkMap, pos -> cm.sleep$visible(pos) != null, taskMailbox);
+                }
+            }
+        }
+        return l;
+    }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     @Redirect(method = "addTask(IILjava/util/function/IntSupplier;Lnet/minecraft/server/level/ThreadedLevelLightEngine$TaskType;Ljava/lang/Runnable;)V",
@@ -39,7 +55,7 @@ public abstract class LightDirectMixin {
     private void sleep$direct(ProcessorHandle sorter, Object message) {
         LightDirectMessageAccessor m = (LightDirectMessageAccessor) message;
         Runnable task = (Runnable) m.sleep$task().apply(sleep$NO_REPLY);
-        if (dev.lull.optsupport.LightLanes.PRIO) sleep$lanes.submit(m.sleep$level().getAsInt(), task, taskMailbox);
+        if (dev.lull.optsupport.LightLanes.PRIO) sleep$lanes().submit(m.sleep$level().getAsInt(), m.sleep$pos(), task);
         else taskMailbox.tell(task);
     }
 }

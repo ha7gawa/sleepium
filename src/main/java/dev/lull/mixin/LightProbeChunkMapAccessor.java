@@ -10,4 +10,10 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface LightProbeChunkMapAccessor {
     @Accessor("queueSorter")
     ChunkTaskPriorityQueueSorter sleep$sorter();
+
+    @org.spongepowered.asm.mixin.gen.Invoker("getVisibleChunkIfPresent")
+    net.minecraft.server.level.ChunkHolder sleep$visible(long pos);
+
+    @org.spongepowered.asm.mixin.gen.Invoker("getUpdatingChunkIfPresent")
+    net.minecraft.server.level.ChunkHolder sleep$updating(long pos);
 }

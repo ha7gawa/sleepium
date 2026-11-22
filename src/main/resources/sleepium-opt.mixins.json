@@ -169,6 +169,8 @@
     "LightDirectMixin",
     "LightDirectMessageAccessor",
     "LightDirectThreadMixin",
+    "LightDirectChunkMapAccessor",
+    "LightDirectPromoteMixin",
     "LightSnapshotBlockMixin",
     "LightSnapshotSkyMixin",
     "TicketWindowMixin",
