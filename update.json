@@ -1,6 +1,7 @@
 {
   "homepage": "https://modrinth.com/mod/sleepium",
   "1.21.1": {
+    "1.3.5": "Servers with many players (100 players: 9 -> 15 TPS), modded factories (-24 % a tick), much less disk load, world generation x1.38 with 16 threads, faster mobs and villagers - still exactly vanilla; experimental switches for busy servers; fix: no hung server after a failed stop.",
     "1.3.4": "Fixes: a crash with Bosses of Mass Destruction (#12; the crash screen's \"disable this one\" now switches off both sleep parts); Linux: no ~12 s freeze when the view area is rebuilt (GL errors from deleting buffer 0).",
     "1.3.3": "World generation up to 4.6x faster than vanilla (Chunky: 77 -> 359 chunks/s; 1.3.2: 228), exactly vanilla terrain; the Mods page shows where each mod's time goes; Intel UHD +5-12 % fps.",
     "1.3.2": "No quarter-second freezes on Intel integrated graphics (an N100's slowest frames: 257 -> 16 ms); fixes: the 1.3.1 machine cost check deciding too early, the render self-check now covers GeckoLib mobs and GPU-drawn items.",
@@ -31,12 +32,13 @@
     "1.0.0": "The first public release."
   },
   "promos": {
-    "1.21.1-latest": "1.3.4",
-    "1.21.1-recommended": "1.3.4",
-    "1.20.1-latest": "1.3.4",
-    "1.20.1-recommended": "1.3.4"
+    "1.21.1-latest": "1.3.5",
+    "1.21.1-recommended": "1.3.5",
+    "1.20.1-latest": "1.3.5",
+    "1.20.1-recommended": "1.3.5"
   },
   "1.20.1": {
+    "1.3.5": "Servers with many players (100 players: 9 -> 15 TPS), modded factories (-24 % a tick), much less disk load, world generation x1.38 with 16 threads, faster mobs and villagers - still exactly vanilla; experimental switches for busy servers; fix: no hung server after a failed stop.",
     "1.3.4": "Fixes: a crash with Bosses of Mass Destruction (#12; the crash screen's \"disable this one\" now switches off both sleep parts); Linux: no ~12 s freeze when the view area is rebuilt (GL errors from deleting buffer 0).",
     "1.3.3": "World generation up to 4.6x faster than vanilla (Chunky: 77 -> 359 chunks/s; 1.3.2: 228), exactly vanilla terrain; the Mods page shows where each mod's time goes; Intel UHD +5-12 % fps.",
     "1.3.2": "The same as 1.21.1 (Intel freezes gone, the cost check, the render self-check); no \"invalid dist\" errors on servers with the experimental mob sleep switches.",

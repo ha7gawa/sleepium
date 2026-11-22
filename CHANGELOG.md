@@ -4,6 +4,44 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.3.5 - 2026-11-22
+
+Servers with players, modded factories, chunk saving and world generation - and still exactly vanilla's game.
+
+- **Many players on one server.** Every movement packet a player sends makes the server check every tracked entity
+  against that player; Sleepium now checks the distance first (vanilla's answer for a pair out of range is known
+  without the rest). With 100 players flying in a normal world this hidden cost (it does not show in /perf) went from
+  33 to 10 ms a tick, 9 -> 15 TPS. Gives way to mods that change the same check (Moonrise, Sable, Steam 'n' Rails).
+- **Block actions answered sooner on a slow server.** The acknowledgement of a placed or broken block goes out between
+  ticks (with the block updates around it - the same packets in the same order) instead of a tick later: at 100 ms
+  ticks 162 -> 53 ms. During a long server stall players are kept connected instead of "Timed out" after 30 s.
+- **Modded factories.** Vanilla walks every loaded chunk every tick to see whether it is due for saving; Sleepium skips
+  the chunks for which that walk would do nothing. A world with 562 kinds of modded machines: 18.4 -> 14.0 ms a tick
+  (vanilla 17.9). Chunk saves with Immersive Engineering or Mekanism installed are prepared off the main thread again
+  (their save listeners only add their own keys): 314 -> 81 us of main-thread time per save.
+- **Far less disk load.** Region files are written through, as vanilla writes them, with neighbouring records in one
+  write instead of flushing the drive's whole cache twice per batch; chunks at the edge of generation stay in a small
+  memory ring instead of being written, read back and written again. Pregenerating with Chunky: the world disk 15 ->
+  6 % busy (NVMe), 13 -> 9 % (SATA SSD), 19 -> 15 % (a USB stick). The same files and the same safety as vanilla.
+- **World generation.** New chunks are lit without the round trips through vanilla's light task sorter, on a light
+  thread of its own: x1.38 chunks/s with 16 threads (Ryzen 7 5800X), x1.16 on a 4-core Xeon; Chunky 451 -> 494
+  chunks/s. 1.21.1: terrain noise computed octave by octave for blocks of columns, vectorised (+23 % on an Intel N100).
+  1.20.1: this also fixes a vanilla race where a chunk could be lit before the light engine could see it.
+- **Mobs.** A standing mob's movement is not computed again while nothing it reads has changed, and a villager's check
+  for a rival at its job site skips its walk over every nearby mob when nobody else holds the site (farm animals -6 %
+  on an N100, more on fast CPUs; villagers -10 %).
+- **Experimental switches** (off; Options -> Sleepium): chunks keep reaching players on a busy server (new chunks let
+  in by the server's own tick time - holes in view 80 -> 0 at 10 TPS, 3-4 ms a tick of cost); a tick's packets handed
+  to the network once at the tick's end (1.21.1, -4..-8 ms a tick with 100 players); movement after a server stall
+  judged by when the packets arrived (1.21.1, changes vanilla's check: no pull-backs after a lag spike).
+- **Fixes:** a dedicated server no longer stays running after a failed stop (a mod's saved data throwing at shutdown);
+  such a failure now names the saved data's class and file in the log (1.21.1).
+
+Exactly vanilla: each change is checked against vanilla's own code (hundreds of millions of comparisons, no
+difference) and by the exactness suite - 23 scenes identical to vanilla, now on production servers with the released
+jar, on both versions. Tested on: Ryzen 7 5800X + RTX 4070 SUPER, two Xeon E3 servers (RX 570, HD 7870), Intel N100,
+Raspberry Pi 4.
+
 ## 1.3.4 - 2026-11-21
 
 Fixes.
