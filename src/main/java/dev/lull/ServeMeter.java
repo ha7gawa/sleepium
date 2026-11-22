@@ -67,12 +67,22 @@ public final class ServeMeter {
     }
 
     private static long nextChunkLog;
+    /** the per-second census summed over a window (chunkCensus) */
+    private static long censusN, censusNotFull, censusAll, censusPending;
+
+    public static String chunkCensus() {
+        String s = String.format(Locale.ROOT, "census: %.1f of %.0f chunks in view not full, %.1f ready and unsent (%d samples)",
+                censusN == 0 ? 0 : (double) censusNotFull / censusN, censusN == 0 ? 0 : (double) censusAll / censusN,
+                censusN == 0 ? 0 : (double) censusPending / censusN, censusN);
+        censusN = censusNotFull = censusAll = censusPending = 0;
+        return s;
+    }
 
     /** ServerTickEvent.Post */
     public static void tickEnd(net.minecraft.server.MinecraftServer server) {
         long now = System.nanoTime();
         if (tickStart != 0 && tickN < TICKS.length) TICKS[tickN++] = now - tickStart;
-        if (windowStart != 0 && now >= nextChunkLog) {   // once a second: where the chunks around the first player wait
+        if ((windowStart != 0 || ChunkTimeline.ON) && now >= nextChunkLog) {   // once a second: where the chunks around the first player wait
             nextChunkLog = now + 1_000_000_000L;
             var players = server.getPlayerList().getPlayers();
             if (players.isEmpty()) return;
@@ -86,6 +96,10 @@ public final class ServeMeter {
                         if (cs.getChunkNow(cx + dx, cz + dz) == null) notFull++;
                     }
             var s = (dev.lull.mixin.ServeMeterSenderAccessor) p.connection.chunkSender;
+            censusN++;
+            censusNotFull += notFull;
+            censusAll += all;
+            censusPending += s.sleep$pending().size();
             SleepMod.LOGGER.info("sleep: serve chunks: {} of {} in view not full, {} full and waiting to be sent, {} batches unacknowledged, desired {} a tick",
                     notFull, all, s.sleep$pending().size(), s.sleep$unacked(), s.sleep$desired());
         }

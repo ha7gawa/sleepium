@@ -46,6 +46,15 @@ public final class SleepMod {
             gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Pre.class, e -> ServeMeter.tickStart());
             gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> ServeMeter.tickEnd(e.getServer()));
         }
+        if (ChunkTimeline.ON) dev.lull.bots.BotLoad.WINDOWS.add(new dev.lull.bots.BotLoad.Window() {   // with bots' measure windows too
+            public void start() {
+                ChunkTimeline.start();
+            }
+
+            public String end(long ticks) {
+                return ChunkTimeline.report() + " | " + ServeMeter.chunkCensus();
+            }
+        });
         if (ServeMeter.ON || ServeMeter.SLOW_TICK > 0)   // the test load: a slow overworld tick, /sleep stall
             gameBus.addListener(net.neoforged.neoforge.event.tick.LevelTickEvent.Post.class, e -> {
                 if (e.getLevel() instanceof net.minecraft.server.level.ServerLevel l && l.dimension() == net.minecraft.world.level.Level.OVERWORLD) ServeMeter.levelTick(l);
