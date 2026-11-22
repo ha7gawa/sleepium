@@ -199,6 +199,7 @@ public final class ClientAuto {
         if (DrawStats.ON) DrawStats.start();
         dev.lull.optsupport.RenderCache.timeReset();
         if (SERVER_PROBE) command(Minecraft.getInstance(), "sleep run 30 " + LABEL + "-srv");
+        if (SERVER != null && ServeFeel.ON) ServeFeel.start(Minecraft.getInstance());   // what a player feels of the server (notes/92)
         if (SERVER != null && !"false".equals(System.getProperty("sleep.clientAuto.netBench"))) command(Minecraft.getInstance(), "sleep net " + (STEADY ? Integer.getInteger("sleep.clientAuto.steadySeconds", 30) : 40) + " " + LABEL);
         if (JFR != null) {
             try {
@@ -493,7 +494,8 @@ public final class ClientAuto {
      * camera turns every frame too. Chunks load at the circle's far side, entities pass through the view.
      */
     private static final double[] ORBIT = parseOrbit(System.getProperty("sleep.clientAuto.orbit"));
-    private static int orbitTicks = -1;
+    private static int orbitTicks = -1, orbitCorrections;
+    private static double orbitLastX, orbitLastY, orbitLastZ, orbitOffX, orbitOffY, orbitOffZ, orbitPlanX, orbitPlanY, orbitPlanZ;
 
     private static double[] parseOrbit(String v) {
         if (v == null) return null;
@@ -524,7 +526,21 @@ public final class ClientAuto {
         // straight along +x on top of the circle - flying into new terrain)
         double yy = ORBIT[1] + (ORBIT[6] > 0 ? ORBIT[5] * Math.sin(2 * Math.PI * orbitTicks / (ORBIT[6] * 20.0)) : 0);
         double drift = ORBIT[7] * orbitTicks / 20.0;
-        mc.player.setPos(ORBIT[0] + drift + ORBIT[3] * Math.cos(a), yy, ORBIT[2] + ORBIT[3] * Math.sin(a));
+        // a server's correction (a teleport back) is obeyed as a player's flight would be: the path goes on from where
+        // the server put the player (ServeFeel counts them; without this every later position stays rejected)
+        if (ServeFeel.ON && ServeFeel.corrections() != orbitCorrections) {
+            orbitCorrections = ServeFeel.corrections();
+            orbitOffX = mc.player.getX() - orbitLastX;
+            orbitOffY = mc.player.getY() - orbitLastY;
+            orbitOffZ = mc.player.getZ() - orbitLastZ;
+            orbitPlanX += orbitOffX;
+            orbitPlanY += orbitOffY;
+            orbitPlanZ += orbitOffZ;
+        }
+        orbitLastX = ORBIT[0] + drift + ORBIT[3] * Math.cos(a) + orbitPlanX;
+        orbitLastY = yy + orbitPlanY;
+        orbitLastZ = ORBIT[2] + ORBIT[3] * Math.sin(a) + orbitPlanZ;
+        mc.player.setPos(orbitLastX, orbitLastY, orbitLastZ);
     }
 
     /**
@@ -582,7 +598,7 @@ public final class ClientAuto {
         }
     }
 
-    private static void log(String s) {
+    static void log(String s) {
         SleepMod.LOGGER.info("[sleep/auto] {}", s);
     }
 
@@ -719,6 +735,7 @@ public final class ClientAuto {
         }
         shotsTick(Minecraft.getInstance());
         orbitTick(Minecraft.getInstance());
+        if (ServeFeel.ON && dev.lull.ClientMeter.measuring()) ServeFeel.tick(Minecraft.getInstance());
         if (BURST != null && !burstAsked && shotsBase >= 0 && ticks >= shotsBase + (int) Math.round(Double.parseDouble(BURST.split(":")[0]) * 20)) {
             burstAsked = true;
             Minecraft bm = Minecraft.getInstance();
@@ -964,6 +981,10 @@ public final class ClientAuto {
                     for (java.util.function.Function<String, String> r : REPORTS) {   // other mods' reports (the label of the run given)
                         String x = r.apply(LABEL);
                         if (x != null) log(x);
+                    }
+                    if (ServeFeel.ON) {   // what a player felt of the server (notes/92)
+                        String sf = ServeFeel.report(LABEL);
+                        if (sf != null) log(sf);
                     }
                     log("thread census:\n" + census());
                     enter(Phase.DONE);

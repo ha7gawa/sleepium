@@ -25,6 +25,10 @@ final class NetBench {
         dev.lull.net.Bulk.report();
         dev.lull.net.Coalesce.report();
         tickNanos = ticks = maxTick = 0;
+        if (ServeMeter.ON) ServeMeter.start();
+        if (ChunkTimeline.ON) ChunkTimeline.start();
+        if (dev.lull.net.EarlyAnswers.ON) dev.lull.net.EarlyAnswers.report();
+        dev.lull.optsupport.ChunkHops.report();
         startNanos = System.nanoTime();
         endNanos = startNanos + seconds * 1_000_000_000L;
     }
@@ -51,7 +55,7 @@ final class NetBench {
         int players = server.getPlayerList().getPlayerCount();
         String line = "net '" + label + "': " + String.format(java.util.Locale.ROOT, "%.1f s, tick mean %.2f ms max %.2f ms; ", secs,
                 ticks == 0 ? 0 : tickNanos / 1e6 / ticks, maxTick / 1e6)
-                + NetStats.report(secs, players) + " | " + dev.lull.net.NetReactor.report() + " | " + dev.lull.net.Bulk.report() + " | " + dev.lull.net.Coalesce.report() + " | " + cpu.report(secs, 8);
+                + NetStats.report(secs, players) + " | " + dev.lull.net.NetReactor.report() + " | " + dev.lull.net.Bulk.report() + " | " + dev.lull.net.Coalesce.report() + " | " + cpu.report(secs, 8) + (ServeMeter.ON ? " | " + ServeMeter.report() : "") + (ChunkTimeline.ON ? " | " + ChunkTimeline.report() : "") + (dev.lull.net.EarlyAnswers.ON ? " | " + dev.lull.net.EarlyAnswers.report() : "") + (Boolean.getBoolean("lab.opt.ChunkHopsInTick") ? " | " + dev.lull.optsupport.ChunkHops.report() : "");
         SleepMod.LOGGER.info("sleep: {}", line);
         server.getPlayerList().broadcastSystemMessage(Component.literal("sleep: net '" + label + "' done"), false);
     }

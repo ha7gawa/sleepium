@@ -210,6 +210,14 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.startsWith("MainReactor") || simple.equals("EventLoopQueueAccessor") || simple.equals("ChunkCacheExecutorAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.MainReactor");
         if (simple.startsWith("MainReactorScout")) on = Boolean.getBoolean("lab.reactor.scout");   // measurement only
+        if (simple.startsWith("EarlyAnswers"))   // (lab, notes/92: the decoupled server's first exact part)
+            on = Boolean.getBoolean("lab.opt.EarlyAnswers");
+        if (simple.startsWith("StallHeartbeat"))   // (lab, notes/92: players kept through a long stall)
+            on = Boolean.getBoolean("lab.opt.StallHeartbeat");
+        if (simple.startsWith("LagFairMove"))   // (lab, notes/92: a declared non-exact option, never in the defaults)
+            on = Boolean.getBoolean("lab.opt.LagFairMove");
+        if (simple.startsWith("ChunkHopsInTick"))   // (lab, notes/92: chunk loading's main-thread steps inside a slow tick)
+            on = Boolean.getBoolean("lab.opt.ChunkHopsInTick");
         if (simple.startsWith("NetReactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor");
         if (simple.equals("NetReactorWaitMixin"))   // MainReactor's waitForTasks overwrite flushes by itself
