@@ -2,7 +2,6 @@ package dev.lull.opt;
 
 import dev.lull.optsupport.TrackFast;
 import java.util.Set;
-import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerPlayerConnection;
@@ -20,7 +19,6 @@ public abstract class TrackFastMixin {
     @Shadow @Final Entity entity;
     @Shadow @Final private int range;
     @Shadow @Final private Set<ServerPlayerConnection> seenBy;
-    @Shadow(remap = false) @Final ChunkMap this$0;
 
     @Shadow
     private int getEffectiveRange() {
@@ -39,7 +37,9 @@ public abstract class TrackFastMixin {
     @Overwrite
     public void updatePlayer(ServerPlayer player) {
         if (player == this.entity) return;
-        int view = ((TrackFastChunkMapAccessor) this$0).sleep$viewDistance();
+        // the tracker's own ChunkMap (vanilla's ChunkMap.this): its entity's level's - not the synthetic this$0, which the
+        // production (SRG) jar does not carry under that name (11-22: "@Shadow field this$0 was not located")
+        int view = ((TrackFastChunkMapAccessor) ((net.minecraft.server.level.ServerLevel) this.entity.level()).getChunkSource().chunkMap).sleep$viewDistance();
         if (!TrackFast.active) {   // vanilla's body (A/B windows)
             Vec3 vec3 = player.position().subtract(this.entity.position());
             double v0 = (double) Math.min(this.getEffectiveRange(), view * 16);

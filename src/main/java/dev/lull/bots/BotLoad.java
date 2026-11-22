@@ -248,9 +248,11 @@ public final class BotLoad {
         for (int i = 0; i < 1000 && conn.isConnecting(); i++) Thread.sleep(1);
         if (conn.isConnecting()) throw new IllegalStateException("the bot's channel did not become active");
         ch.attr(FML_NETVERSION).set(MODDED ? "FML3" : "NONE");   // Forge's connection type: a vanilla client (any non-FML marker)
-        conn.setProtocol(ConnectionProtocol.PLAY);
         int threshold = server.getCompressionThreshold();
         ch.eventLoop().submit(() -> {
+            // on the channel's loop, after its channelActive (which sets HANDSHAKING: from the server thread this could
+            // land before it - two bots of 100 dropped with a null protocol id in the encoder, 11-22)
+            conn.setProtocol(ConnectionProtocol.PLAY);
             if (ENCRYPT) {
                 byte[] key = new byte[16];
                 new SecureRandom().nextBytes(key);
@@ -266,6 +268,12 @@ public final class BotLoad {
         ServerPlayer player = server.getPlayerList().getPlayerForLogin(profile);
         server.getConnection().getConnections().add(conn);
         server.getPlayerList().placeNewPlayer(conn, player);
+        // its join packets encoded before the next bot joins: 1.20.1's login packet encodes the registries through a
+        // RegistryOps whose lookup memo is a plain HashMap shared between connections - 100 joins at once encoded it on
+        // several netty threads together (ConcurrentModificationException, the bot dropped; production run 11-22).
+        // Real players do not join 100 within a second; the bots wait for their own event loop instead.
+        if (conn instanceof dev.lull.net.NetReactor.Batched batched) batched.sleep$flush();   // (a batch held to the tick's end goes now)
+        ch.eventLoop().submit(() -> {}).syncUninterruptibly();
         Bot b = new Bot(index, name, conn, ch);
         b.player = player;
         player.setGameMode(GameType.CREATIVE);
