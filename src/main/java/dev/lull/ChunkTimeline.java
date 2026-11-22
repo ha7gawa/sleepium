@@ -83,12 +83,29 @@ public final class ChunkTimeline {
                 for (int s = REQ; s <= READY; s++) if (a[s] != 0) after.get(s).add(a[s] - a[VIEW]);
             }
         }
+        // every chunk with both stamps in the window: how long each hop of the pipeline takes
+        int[][] pairs = {{REQ, ADD}, {NOISE, LIT}, {LIT, FULL}, {FULL, READY}, {READY, SENT}};
+        ArrayList<ArrayList<Long>> gaps = new ArrayList<>();
+        for (int i = 0; i < pairs.length; i++) gaps.add(new ArrayList<>());
+        for (long[] a0 : T.values()) {
+            long[] a;
+            synchronized (a0) {
+                a = a0.clone();
+            }
+            for (int i = 0; i < pairs.length; i++) {
+                long x = a[pairs[i][0]], y = a[pairs[i][1]];
+                if (x >= w0 && y >= x && x != 0) gaps.get(i).add(y - x);
+            }
+        }
+        StringBuilder g = new StringBuilder(" | hops:");
+        for (int i = 0; i < pairs.length; i++)
+            g.append(' ').append(NAMES[pairs[i][0]]).append("->").append(NAMES[pairs[i][1]]).append(' ').append(stat(gaps.get(i))).append(" (n=").append(gaps.get(i).size()).append(')');
         StringBuilder b = new StringBuilder(String.format(Locale.ROOT,
                 "chunk timeline: %d entered a view and were sent, view -> sent %s ms (median/p90/max); %d of them not ready at view (view -> sent %s), %d in view not sent yet; last stage at view:",
                 sent, stat(felt), late, stat(feltLate), unsentInView));
         for (int s = REQ; s <= READY; s++) b.append(' ').append(NAMES[s]).append(' ').append(atView[s]);
         b.append(" none ").append(atView[VIEW]).append("; for the late ones, stage - view:");
         for (int s = REQ; s <= READY; s++) b.append(' ').append(NAMES[s]).append(' ').append(stat(after.get(s))).append(" (n=").append(after.get(s).size()).append(')');
-        return b.toString();
+        return b.append(g).toString();
     }
 }

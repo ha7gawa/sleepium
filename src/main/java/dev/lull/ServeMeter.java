@@ -68,13 +68,13 @@ public final class ServeMeter {
 
     private static long nextChunkLog;
     /** the per-second census summed over a window (chunkCensus) */
-    private static long censusN, censusNotFull, censusAll, censusPending;
+    private static long censusN, censusNotFull, censusAll, censusPending, censusMailbox, censusMailboxMax;
 
     public static String chunkCensus() {
-        String s = String.format(Locale.ROOT, "census: %.1f of %.0f chunks in view not full, %.1f ready and unsent (%d samples)",
+        String s = String.format(Locale.ROOT, "census: %.1f of %.0f chunks in view not full, %.1f ready and unsent, chunk mailbox at tick end %.1f (max %d) (%d samples)",
                 censusN == 0 ? 0 : (double) censusNotFull / censusN, censusN == 0 ? 0 : (double) censusAll / censusN,
-                censusN == 0 ? 0 : (double) censusPending / censusN, censusN);
-        censusN = censusNotFull = censusAll = censusPending = 0;
+                censusN == 0 ? 0 : (double) censusPending / censusN, censusN == 0 ? 0 : (double) censusMailbox / censusN, censusMailboxMax, censusN);
+        censusN = censusNotFull = censusAll = censusPending = censusMailbox = censusMailboxMax = 0;
         return s;
     }
 
@@ -100,6 +100,9 @@ public final class ServeMeter {
             censusNotFull += notFull;
             censusAll += all;
             censusPending += s.sleep$pending().size();
+            int mb = cs.getPendingTasksCount();   // the chunk source's main-thread mailbox, as the tick ends
+            censusMailbox += mb;
+            censusMailboxMax = Math.max(censusMailboxMax, mb);
             SleepMod.LOGGER.info("sleep: serve chunks: {} of {} in view not full, {} full and waiting to be sent, {} batches unacknowledged, desired {} a tick",
                     notFull, all, s.sleep$pending().size(), s.sleep$unacked(), s.sleep$desired());
         }
