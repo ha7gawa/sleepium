@@ -14,6 +14,7 @@ public abstract class FrameThreadPumpMixin {
     private void sleep$pump(net.minecraft.world.entity.Entity entity, CallbackInfo ci) {
         FrameThread.ticking(entity);   // (before its tick: from now on a frame draws it at the last tick's end)
         FrameThread.pumpMotion();
+        dev.lull.optsupport.FrameCoop.safepoint();   // (cooperative mode: a frame waiting is drawn between entity ticks)
     }
 
     @Inject(method = "tickPassenger", at = @At("HEAD"))

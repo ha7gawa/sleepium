@@ -332,6 +332,8 @@
     "FrameThreadCameraMixin",
     "FrameThreadMouseAccessor",
     "FrameThreadPumpMixin",
+    "FrameThreadTaskSafepointMixin",
+    "FrameThreadImageCloseMixin",
     "FrameThreadPumpQueueMixin",
     "FrameThreadTimerMixin",
     "FrameThreadModelDataLockMixin",
