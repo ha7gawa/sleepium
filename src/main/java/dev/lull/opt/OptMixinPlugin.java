@@ -235,6 +235,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.TicketReleaseAtFull");
         if (simple.startsWith("NetReactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor");
+        if (simple.equals("NetOrderVerifyMixin"))   // measurement only (optsupport/NetOrderVerify), on NetReactor's batches
+            on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor")) && Boolean.getBoolean("lab.opt.NetOrderVerify");
         if (simple.equals("NetReactorWaitMixin"))   // MainReactor's waitForTasks overwrite flushes by itself
             on = on && !(Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.MainReactor"));
         if (simple.equals("StructurePlaceLockMixin"))

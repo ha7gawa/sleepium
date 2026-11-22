@@ -37,6 +37,7 @@ public final class SleepMod {
         if (Boolean.getBoolean("lab.opt.ChunkSendPar")) dev.lull.optsupport.ChunkSendPar.register();   // A/B switch and counters with /sleep bots
         if (dev.lull.optsupport.TrackIndex.ON) dev.lull.optsupport.TrackIndex.register();   // A/B switch and counters with /sleep bots
         if (dev.lull.optsupport.TrackDeliver.ON) dev.lull.optsupport.TrackDeliver.register();   // A/B switch and counters with /sleep bots
+        if (dev.lull.optsupport.NetOrderVerify.ON) dev.lull.optsupport.NetOrderVerify.register();   // measurement only: the order check with /sleep bots measure
         // classes the game loads only while played, learned and preloaded in the background (lab.opt.ClassPreload)
         gameBus.addListener(net.neoforged.neoforge.event.server.ServerAboutToStartEvent.class, e -> dev.lull.optsupport.ClassPreload.preload());
         gameBus.addListener(net.neoforged.neoforge.event.server.ServerStartedEvent.class, e -> dev.lull.optsupport.ClassPreload.started());

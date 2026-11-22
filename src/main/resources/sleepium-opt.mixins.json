@@ -68,6 +68,7 @@
     "ReactorReadJournalMixin",
     "MainReactorServerMixin",
     "NetReactorConnectionMixin",
+    "NetOrderVerifyMixin",
     "NetLagMixin",
     "EarlyAnswersServerMixin",
     "TicketNearFirstMixin",
