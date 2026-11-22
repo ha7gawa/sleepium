@@ -896,6 +896,11 @@ public final class EntitySleep {
      * the deadline poll of the tick is done here first). tickCount + 1: tickNonPassenger counts before the tick.
      */
     public static boolean plainNext(Entity e) {
+        return plainAt(e, e.tickCount + 1);
+    }
+
+    /** plainNext for the tick numbered tc (inside the tick: tickCount, already counted) */
+    static boolean plainAt(Entity e, int tc) {
         if (!ON) return true;
         if (TIMING || TRACE >= 0 || DIAG != null || e.level().isClientSide) return false;
         long now = e.level().getGameTime();
@@ -903,7 +908,6 @@ public final class EntitySleep {
         ES s = es(e);
         if (s == null || s.st == St.ASLEEP) return false;
         if (s.st == St.NEVER) return s.c.retryAt <= 0 || s.c.retryAt == Long.MAX_VALUE;
-        int tc = e.tickCount + 1;
         if (tc < s.observeFrom) return true;
         return PROBE && s.c.comp != null && s.k < 0 && !s.probeOk && tc < s.probeFrom;
     }
@@ -1040,6 +1044,10 @@ public final class EntitySleep {
             e.tick();
             return;
         }
+        // a speculative tick (SpecTicks) is taken only for a plain next tick, decided at the walk's start; an earlier
+        // tick of the walk can change that (a class analysed again from another entity): the observation's state is
+        // the server thread's alone - the tick stops and runs again in the commit, on the server thread
+        if (dev.lull.optsupport.SpecTicks.running() && !plainAt(e, e.tickCount)) dev.lull.optsupport.SpecTicks.abortIfSpeculative("entity sleep: not a plain tick");
         Level level = e.level();
         long now = level.getGameTime();
         if (now != S().lastPoll) poll(now);

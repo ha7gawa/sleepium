@@ -227,8 +227,12 @@ public final class SpecTx {
             return;   // (the other's copy holds the state from before both)
             }
         }
-        if (w != null) conflict("write into a watched object");
-        else if (o instanceof Entity en && en != entity && !serial) {
+        if (w != null) {
+            conflict("write into a watched object");
+            // (a sleeping mob's part, watched by entity sleep: never claimed, so two ticks could copy it at once and
+            // their undos put back each other's values - a speculative tick stops before the write; a re-run writes)
+            if (!serial) throw SpecAbort.INSTANCE;
+        } else if (o instanceof Entity en && en != entity && !serial) {
             java.util.function.ToIntFunction<Entity> g = GROUP;
             if (group < 0 || g == null || g.applyAsInt(en) != group) {
                 conflict("writes another entity");
