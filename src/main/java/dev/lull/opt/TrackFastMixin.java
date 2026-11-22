@@ -62,7 +62,7 @@ public abstract class TrackFastMixin {
             flag = false;
             TrackFast.FAR.increment();
         } else {
-            int eff = this.entity.getPassengers().isEmpty() ? this.scaledRange(this.range) : this.getEffectiveRange();
+            int eff = TrackFast.noPassengers(this.entity, ((TrackFastEntityAccessor) this.entity).sleep$passengers()) ? this.scaledRange(this.range) : this.getEffectiveRange();
             double d0 = (double) Math.min(eff, i * 16);
             flag = d1 <= d0 * d0 && this.entity.broadcastToPlayer(player)
                     && map.sleep$chunkTracked(player, this.entity.chunkPosition().x, this.entity.chunkPosition().z);

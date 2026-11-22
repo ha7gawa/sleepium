@@ -10,6 +10,7 @@
     "ChunkSendParServerMixin",
     "TrackFastMixin",
     "TrackFastChunkMapInvoker",
+    "TrackFastEntityAccessor",
     "PipeScoutChunkMapMixin",
     "PipeScoutTrackedMixin",
     "PipeScoutServerEntityMixin",
