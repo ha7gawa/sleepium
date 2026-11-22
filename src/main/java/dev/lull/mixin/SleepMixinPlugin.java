@@ -20,6 +20,7 @@ public final class SleepMixinPlugin implements IMixinConfigPlugin {
     private boolean sleep$decide(String targetClassName, String mixinClassName) {
         String simple = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
         boolean sleep = Boolean.getBoolean("lab.opt.SleepMixin") || Boolean.getBoolean("lab.opt.EntitySleep");
+        if (simple.startsWith("LightProbe")) return Boolean.getBoolean("lab.light.probe") || Boolean.getBoolean("lab.light.fixcheck");   // measurement only (notes/84)
         if (simple.startsWith("SleepProbeUnobserved")) return sleep && !Boolean.getBoolean("lab.sleep.noUnobserved");   // off only for measurements
         if (simple.startsWith("SleepProbe")) return sleep;
         if (simple.startsWith("FrameHash")) return Boolean.getBoolean("sleep.clientAuto.framehash");

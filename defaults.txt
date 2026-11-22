@@ -97,6 +97,10 @@
 -Dlab.opt.NeighborReactMixin=true
 -Dlab.opt.NeighborReactStateMixin=true
 -Dlab.opt.ForgeBusMixin=true
+# the decoupled server's exact parts (notes/92): a block action answered at the hand-over after its handler instead of
+# one tick later, players pinged from a timer through a stall of the server thread longer than 10 s
+-Dlab.opt.EarlyAnswers=true
+-Dlab.opt.StallHeartbeat=true
 -Dlab.opt.NetBulk=true
 -Dlab.opt.NetCoalesce=true
 -Dlab.opt.NetLagMixin=true
@@ -197,6 +201,12 @@
 -Dlab.opt.LightSnapshotMixin=true
 -Dlab.opt.AllocTrim=true
 -Dlab.opt.ChunkIo=true
+# region files written through to the drive (vanilla's DSYNC, contiguous records in one write) instead of two
+# FlushFileBuffers per batch: vanilla's durability and world size; world NVMe 42 -> 11 % busy while generating (notes/87)
+-Dlab.chunkio.writeThrough=true
+# early proto chunks (before carvers: regenerated identically from the seed) held as their region records in a small
+# ring instead of written and re-written at the generation edge: -42 % chunk records, Pi stick 19 -> 14 % busy (notes/85, 87)
+-Dlab.opt.StoredRingMixin=true
 -Dlab.opt.ParallelWorldgenMixin=true
 -Dlab.opt.RenderCacheBlockEntityMixin=true
 -Dlab.opt.RenderCacheClockMixin=true
@@ -263,3 +273,12 @@
 -Dlab.chunkmd.uboWindows=auto
 -Dlab.opt.WorldgenReactor=true
 -Dlab.gpu.framesInFlight.atSwap=true
+-Dlab.opt.EagerSaveScan=true
+# 1.3.5: the tracker's per-pair check with the distance first (TrackFast, exact; notes/91)
+-Dlab.opt.TrackFast=true
+# 1.3.5: light of new chunks without the sorter round trips, own light thread, a chunk lit only once visible (notes/84)
+-Dlab.opt.LightDirect=true
+-Dlab.light.ownThread=true
+# 1.3.5 (the user 11-22): villagers' job-site rival check by a count, standing mobs' moves remembered (exact)
+-Dlab.opt.JobSiteIndex=true
+-Dlab.opt.MoveMemo=true

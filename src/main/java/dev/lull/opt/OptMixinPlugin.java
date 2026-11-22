@@ -55,6 +55,10 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.AllocTrim");
         if (simple.startsWith("LightSnapshot"))   // one feature: light snapshots as base + delta (LightSnapshot)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.LightSnapshotMixin");
+        if (simple.startsWith("LightDirect")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.LightDirect");   // light tasks past the sorter (notes/84)
+        if (simple.equals("StoredRingMixin"))   // early proto chunks held as records: released into ChunkIo's pending entries (notes/85)
+            on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.StoredRingMixin"))
+                    && (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkIo"));
         if (simple.startsWith("ChunkIo"))   // one feature: encode on the pool, batched region writes (notes/38)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkIo");
         if (simple.startsWith("JobSite"))   // one feature: brains' job sites counted, PoiCompetitorScan's walk skipped when alone
@@ -192,6 +196,10 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.startsWith("MainReactorScout")) on = Boolean.getBoolean("lab.reactor.scout");   // measurement only
         if (simple.equals("BulkDataArraysBlocksMixin"))   // 1.20.1: the block half of BulkDataArraysMixin (SRG names differ)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.BulkDataArraysMixin");
+        if (simple.startsWith("EarlyAnswers"))   // (notes/92: a block action answered at the hand-over after its handler)
+            on = Boolean.getBoolean("lab.opt.EarlyAnswers");
+        if (simple.startsWith("StallHeartbeat"))   // (notes/92: players pinged through a long stall)
+            on = Boolean.getBoolean("lab.opt.StallHeartbeat");
         if (simple.startsWith("NetReactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor");
         // (1.21.1 turned NetReactorWaitMixin off with MainReactor, whose waitForTasks overwrite flushed; 1.20.1's MainReactor
@@ -201,9 +209,13 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.equals("LightRecipeVerifyMixin")) on = Boolean.getBoolean("lab.lightrecipe.verify");   // measurement only
         if (simple.startsWith("LightScout")) on = Boolean.getBoolean("lab.lightscout");   // measurement only
         if (simple.startsWith("GenScout")) on = Boolean.getBoolean("lab.genscout");   // measurement only
+        if (simple.startsWith("TrackFast")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.TrackFast");   // optsupport/TrackFast
         if (simple.equals("LightTimingMixin")) on = Boolean.getBoolean("lab.lighttime");   // measurement only
         if (simple.startsWith("Scout") && simple.endsWith("Mixin"))   // measurement only, never with lab.opt.all
             on = Boolean.getBoolean("lab.scout");
+        if (simple.startsWith("EagerSaveScan"))   // the eager-save walk over the holders whose call can do something (EagerSaveScan, notes/88)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.EagerSaveScan");
+        if (simple.equals("LabPoolsExitMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.LabPoolsMixin");   // (notes/88)
         if (simple.equals("AsyncChunkSaveEncodeMixin") || simple.equals("AsyncChunkSaveStorageMixin"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.AsyncChunkSaveMixin");
         if (simple.equals("ChunkTickMemoChunkMixin") || simple.equals("ChunkTickMemoEpochMixin"))
