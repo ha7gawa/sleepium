@@ -44,6 +44,43 @@ public final class GenReactor {
         return Util.backgroundExecutor();
     }
 
+    /** a task that knows its chunk (ChunkOrder: within a level the chunk nearest a player's way first) */
+    private record AtChunk(long pos, Runnable task) implements Runnable {
+        public void run() {
+            task.run();
+        }
+    }
+
+    /** as post(ticketLevel, task), for one chunk's work: with -Dlab.opt.GenNearFirst it is picked by where that chunk is */
+    public static void post(int ticketLevel, long chunkPos, Runnable task) {
+        post(ticketLevel, ChunkOrder.GEN ? new AtChunk(chunkPos, task) : task);
+    }
+
+    /** the queued task of a level nearest a player's way (the first {@code SCAN} looked at), or the oldest */
+    private static final int SCAN = 512;
+
+    private static Runnable pollNear(ConcurrentLinkedQueue<Runnable> q) {
+        while (true) {
+            Runnable best = null, first = null;
+            double bestScore = Double.MAX_VALUE;
+            int n = 0;
+            for (Runnable r : q) {
+                if (first == null) first = r;
+                if (r instanceof AtChunk c) {
+                    double s = ChunkOrder.score(c.pos());
+                    if (s < bestScore) {
+                        bestScore = s;
+                        best = r;
+                    }
+                }
+                if (++n >= SCAN) break;
+            }
+            Runnable pick = best != null ? best : first;
+            if (pick == null) return null;
+            if (q.remove(pick)) return pick;   // another drain job took it first: look again
+        }
+    }
+
     /** From any thread: run `task` on the pool, ordered by ticket level (lower = more urgent). */
     public static void post(int ticketLevel, Runnable task) {
         int lvl = Math.max(0, Math.min(LEVELS - 1, ticketLevel));
@@ -60,7 +97,7 @@ public final class GenReactor {
             long m = NONEMPTY.get();
             if (m == 0) return;   // another drain job took it
             int lvl = Long.numberOfTrailingZeros(m);
-            Runnable r = QUEUES[lvl].poll();
+            Runnable r = ChunkOrder.GEN ? pollNear(QUEUES[lvl]) : QUEUES[lvl].poll();
             if (r == null) {
                 // empty now: clear the bit, then re-check (a post between poll and clear re-sets it)
                 NONEMPTY.compareAndSet(m, m & ~(1L << lvl));

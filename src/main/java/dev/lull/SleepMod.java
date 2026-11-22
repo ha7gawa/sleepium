@@ -36,6 +36,7 @@ public final class SleepMod {
         if (Boolean.getBoolean("lab.opt.TrackFast")) dev.lull.optsupport.TrackFast.register();   // A/B switch and counters with /sleep bots
         if (Boolean.getBoolean("lab.opt.ChunkSendPar")) dev.lull.optsupport.ChunkSendPar.register();   // A/B switch and counters with /sleep bots
         if (dev.lull.optsupport.TrackIndex.ON) dev.lull.optsupport.TrackIndex.register();   // A/B switch and counters with /sleep bots
+        if (dev.lull.optsupport.TrackDeliver.ON) dev.lull.optsupport.TrackDeliver.register();   // A/B switch and counters with /sleep bots
         // classes the game loads only while played, learned and preloaded in the background (lab.opt.ClassPreload)
         gameBus.addListener(net.neoforged.neoforge.event.server.ServerAboutToStartEvent.class, e -> dev.lull.optsupport.ClassPreload.preload());
         gameBus.addListener(net.neoforged.neoforge.event.server.ServerStartedEvent.class, e -> dev.lull.optsupport.ClassPreload.started());
@@ -59,6 +60,8 @@ public final class SleepMod {
                 return ChunkTimeline.report() + " | " + ServeMeter.chunkCensus();
             }
         });
+        if (dev.lull.optsupport.ChunkOrder.ON)   // where the players are heading, for the chunk queues (notes/93)
+            gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.optsupport.ChunkOrder.update(e.getServer()));
         if (ServeMeter.ON || ServeMeter.SLOW_TICK > 0)   // the test load: a slow overworld tick, /sleep stall
             gameBus.addListener(net.neoforged.neoforge.event.tick.LevelTickEvent.Post.class, e -> {
                 if (e.getLevel() instanceof net.minecraft.server.level.ServerLevel l && l.dimension() == net.minecraft.world.level.Level.OVERWORLD) ServeMeter.levelTick(l);

@@ -26,8 +26,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class ChunkTimeline {
     public static final boolean ON = Boolean.getBoolean("sleep.serveMeter") && Boolean.getBoolean("sleep.serveMeter.timeline");
-    public static final int REQ = 0, ADD = 1, NOISE = 2, LIT = 3, FULL = 4, READY = 5, VIEW = 6, SENT = 7;
-    private static final String[] NAMES = {"req", "ticket", "noise", "lit", "full", "ready", "view", "sent"};
+    public static final int REQ = 0, ADD = 1, NOISE = 2, LIT = 3, FULL = 4, READY = 5, VIEW = 6, SENT = 7, SPAWN = 8, FULLRUN = 9;
+    private static final String[] NAMES = {"req", "ticket", "noise", "lit", "full", "ready", "view", "sent", "spawn", "fullrun"};
     private static final ConcurrentHashMap<Long, long[]> T = new ConcurrentHashMap<>();
     private static volatile long windowStart;
 
@@ -36,7 +36,7 @@ public final class ChunkTimeline {
     public static void stamp(long pos, int stage) {
         if (!ON) return;
         long now = System.nanoTime();
-        long[] a = T.computeIfAbsent(pos, k -> new long[8]);
+        long[] a = T.computeIfAbsent(pos, k -> new long[10]);
         synchronized (a) {
             if (a[SENT] != 0 && (stage == VIEW || stage == REQ)) Arrays.fill(a, 0);   // a new trip after it was sent
             if (a[stage] == 0) a[stage] = now;
@@ -84,7 +84,7 @@ public final class ChunkTimeline {
             }
         }
         // every chunk with both stamps in the window: how long each hop of the pipeline takes
-        int[][] pairs = {{REQ, ADD}, {NOISE, LIT}, {LIT, FULL}, {FULL, READY}, {READY, SENT}};
+        int[][] pairs = {{REQ, ADD}, {NOISE, LIT}, {LIT, SPAWN}, {SPAWN, FULLRUN}, {FULLRUN, FULL}, {LIT, FULL}, {FULL, READY}, {READY, SENT}};
         ArrayList<ArrayList<Long>> gaps = new ArrayList<>();
         for (int i = 0; i < pairs.length; i++) gaps.add(new ArrayList<>());
         for (long[] a0 : T.values()) {

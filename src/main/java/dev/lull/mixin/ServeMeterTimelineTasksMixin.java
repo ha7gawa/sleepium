@@ -22,6 +22,18 @@ public abstract class ServeMeterTimelineTasksMixin {
         ChunkTimeline.stamp(chunk.getPos().toLong(), ChunkTimeline.NOISE);
     }
 
+    @Inject(method = "generateSpawn", at = @At("HEAD"))
+    private static void sleep$spawn(WorldGenContext ctx, ChunkStep step, StaticCache2D<GenerationChunkHolder> cache, ChunkAccess chunk,
+                                    CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
+        ChunkTimeline.stamp(chunk.getPos().toLong(), ChunkTimeline.SPAWN);
+    }
+
+    @Inject(method = "full", at = @At("HEAD"))
+    private static void sleep$fullRun(WorldGenContext ctx, ChunkStep step, StaticCache2D<GenerationChunkHolder> cache, ChunkAccess chunk,
+                                      CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {
+        ChunkTimeline.stamp(chunk.getPos().toLong(), ChunkTimeline.FULLRUN);
+    }
+
     @Inject(method = "light", at = @At("RETURN"))
     private static void sleep$lit(WorldGenContext ctx, ChunkStep step, StaticCache2D<GenerationChunkHolder> cache, ChunkAccess chunk,
                                   CallbackInfoReturnable<CompletableFuture<ChunkAccess>> cir) {

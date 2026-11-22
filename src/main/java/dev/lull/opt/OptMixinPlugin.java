@@ -220,6 +220,14 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.LagFairMove");
         if (simple.startsWith("ChunkHopsInTick"))   // (lab, notes/92: chunk loading's main-thread steps inside a slow tick)
             on = Boolean.getBoolean("lab.opt.ChunkHopsInTick");
+        if (simple.startsWith("TicketNearFirst"))   // (lab, notes/93: the player-ticket throttler near a player's way first)
+            on = Boolean.getBoolean("lab.opt.TicketNearFirst");
+        if (simple.startsWith("MainDirect"))   // (lab, notes/93: main-thread chunk tasks without the sorter round trips)
+            on = Boolean.getBoolean("lab.opt.MainDirect");
+        if (simple.startsWith("TicketReleaseEager"))   // (lab, notes/93: throttler releases set up in every pass)
+            on = Boolean.getBoolean("lab.opt.TicketReleaseEager");
+        if (simple.startsWith("TicketReleaseAtFull"))   // (lab, notes/93: a throttler slot freed at FULL)
+            on = Boolean.getBoolean("lab.opt.TicketReleaseAtFull");
         if (simple.startsWith("NetReactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor");
         if (simple.equals("NetReactorWaitMixin"))   // MainReactor's waitForTasks overwrite flushes by itself
@@ -231,6 +239,9 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.startsWith("GenScout")) on = Boolean.getBoolean("lab.genscout");   // measurement only
         if (simple.startsWith("PipeScout")) on = Boolean.getBoolean("lab.pipescout");   // measurement only (optsupport/PipeScout)
         if (simple.startsWith("ChunkSendPar")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkSendPar");   // optsupport/ChunkSendPar
+        if (simple.startsWith("TrackDeliver")) on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.TrackDeliver"))
+                && (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor"));   // optsupport/TrackDeliver (on NetReactor's batches)
+        if (simple.equals("PipeScoutNetMixin") && Boolean.getBoolean("lab.opt.TrackDeliver")) on = false;   // (its inject into the send TrackDeliver overwrites)
         if (simple.startsWith("TrackIndex")) on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.TrackFast")) && Boolean.getBoolean("lab.opt.TrackIndex");   // optsupport/TrackIndex
         if (simple.startsWith("TrackFast")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.TrackFast");   // optsupport/TrackFast
         if (simple.equals("LightTimingMixin")) on = Boolean.getBoolean("lab.lighttime");   // measurement only

@@ -36,6 +36,58 @@ public abstract class NetReactorConnectionMixin implements NetReactor.Batched {
     @Shadow
     public abstract PacketFlow getSending();
 
+    @Shadow
+    public abstract boolean isConnected();
+
+    @Shadow
+    public abstract void send(Packet<?> packet, @Nullable PacketSendListener listener, boolean flush);
+
+    @Shadow
+    private void flushQueue() {
+        throw new AssertionError();
+    }
+
+    @Override
+    public boolean sleep$sendAsServer(Packet<?> packet, @Nullable PacketSendListener sendListener, boolean flush) {
+        // Connection.send + this mixin's sendPacket as the server thread inside the tick runs them (batching() true,
+        // not the event loop); every other case is the plain send, the same from any thread
+        if (!this.isConnected() || !this.sleep$play || this.channel.eventLoop().inEventLoop()) {
+            this.send(packet, sendListener, flush);
+            return false;
+        }
+        this.flushQueue();
+        this.sentPackets++;
+        Object entry = sendListener == null ? packet : new NetReactor.WithListener(packet, sendListener);
+        boolean full, mark;
+        synchronized (this.sleep$lock) {
+            this.sleep$filling.add(entry);
+            full = !NetReactor.flushLater && this.sleep$filling.size() >= NetReactor.MAX_BATCH && !this.sleep$scheduled;
+            mark = !this.sleep$dirty;
+            this.sleep$dirty = true;
+        }
+        NetReactor.BATCHED.increment();
+        if (full) {
+            NetReactor.EARLY.increment();
+            this.sleep$flush();
+            return false;
+        }
+        return mark;
+    }
+
+    @Override
+    public Object[] sleep$batchTail(int n) {
+        synchronized (this.sleep$lock) {
+            int size = this.sleep$filling.size();
+            if (size < n) return null;
+            Object[] out = new Object[n];
+            for (int i = 0; i < n; i++) {
+                Object o = this.sleep$filling.get(size - n + i);
+                out[i] = o instanceof NetReactor.WithListener w ? w.packet() : o;
+            }
+            return out;
+        }
+    }
+
     @Unique private final Object sleep$lock = new Object();
     @Unique private ArrayList<Object> sleep$filling = new ArrayList<>(64);
     @Unique private ArrayList<Object> sleep$draining = new ArrayList<>(64);
@@ -62,7 +114,7 @@ public abstract class NetReactorConnectionMixin implements NetReactor.Batched {
                 boolean full, mark;
                 synchronized (this.sleep$lock) {
                     this.sleep$filling.add(entry);
-                    full = this.sleep$filling.size() >= NetReactor.MAX_BATCH && !this.sleep$scheduled;
+                    full = !NetReactor.flushLater && this.sleep$filling.size() >= NetReactor.MAX_BATCH && !this.sleep$scheduled;
                     mark = !this.sleep$dirty;
                     this.sleep$dirty = true;
                 }
@@ -130,6 +182,7 @@ public abstract class NetReactorConnectionMixin implements NetReactor.Batched {
 
     @Inject(method = {"tick", "flushChannel"}, at = @At("HEAD"))
     private void sleep$tick(CallbackInfo ci) {
+        if (NetReactor.flushLater && NetReactor.batching()) return;   // inside the tick: the tick's end flushes (NetReactor.flushLater)
         this.sleep$flush();
     }
 
