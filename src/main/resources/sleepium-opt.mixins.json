@@ -36,6 +36,8 @@
     "ServerParallelItemsQueryMixin",
     "ServerParallelItemsAbortMixin",
     "ServerParallelItemsEntitySlotMixin",
+    "ServerParallelItemsPoiMixin",
+    "ServerParallelItemsSectionStorageMixin",
     "TrackParEntityAccessor",
     "TrackParChunkMapMixin",
     "TrackParSendMixin",
