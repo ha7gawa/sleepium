@@ -325,15 +325,24 @@ public final class SpecTicks {
     }
 
     /** the block's groups: union of slots whose start boxes, inflated by MARGIN, meet (grid of 4-block cells) */
+    static long nsgInit, nsgGrid, nsgPairs, nsgOrder, nsgSlots;
+
     private static void groups(int b0, int m) {
-        for (int i = 0; i < m; i++) {
+        long ga = System.nanoTime();
+        long ep = ++slotEpoch;
+        // the start boxes and the entities' slots, in parallel (per slot, nothing shared)
+        ServerReactor.pool().forRange(m, 128, ServerReactor.pool().workerCount(), i -> {
             parent[i] = i;
-            net.minecraft.world.phys.AABB bb = all[b0 + i].getBoundingBox();
+            Entity en = all[b0 + i];
+            net.minecraft.world.phys.AABB bb = en.getBoundingBox();
             int o = i * 6;
             sweep[o] = bb.minX - MARGIN; sweep[o + 1] = bb.minY - MARGIN; sweep[o + 2] = bb.minZ - MARGIN;
             sweep[o + 3] = bb.maxX + MARGIN; sweep[o + 4] = bb.maxY + MARGIN; sweep[o + 5] = bb.maxZ + MARGIN;
-        }
+            ((SpecSlot) en).sleep$setSpecSlot(i, ep);
+        });
+        long gb = System.nanoTime();
         buildGrid(m);
+        long gc = System.nanoTime();
         double[] s = sweep;
         for (int ub = 0; ub < nUsed; ub++) {
             int b = used[ub];
@@ -350,6 +359,7 @@ public final class SpecTicks {
                 }
             }
         }
+        long gd = System.nanoTime();
         // group ids by first slot; slots ordered by group, walk order inside
         int[] count = groupIx;   // (reused: count per root, then the group index per slot)
         java.util.Arrays.fill(count, 0, m, 0);
@@ -376,9 +386,10 @@ public final class SpecTicks {
         }
         for (int i = 0; i < m; i++) groupIx[i] = startOfRoot[groupOf[i]];
         for (int i = 0; i < g; i++) if (groupStart[i + 1] - groupStart[i] > 1) { groupsMulti++; groupedTicks += groupStart[i + 1] - groupStart[i]; }
-        long ep = ++slotEpoch;
-        for (int i = 0; i < m; i++) ((SpecSlot) all[b0 + i]).sleep$setSpecSlot(i, ep);
+        long ge = System.nanoTime();
         groupB0 = b0;
+        long gf = System.nanoTime();
+        nsgInit += gb - ga; nsgGrid += gc - gb; nsgPairs += gd - gc; nsgOrder += ge - gd; nsgSlots += gf - ge;
     }
 
     private static int groupB0;
@@ -1123,9 +1134,10 @@ public final class SpecTicks {
 
     static void report() {
         if (EXACT && blocks > 0) System.out.println(String.format(java.util.Locale.ROOT,
-                "[sleep/spec] exact: blocks %d, ticks %d (in groups of 2+: %d in %d), invalid %d (%.2f %%: transaction %d, spatial %d, cascade %d, path cache %d), re-runs %d; ms a walk: groups %.2f (path replay %.2f, deferred work %.2f), grid %.2f, validate %.2f, undo %.2f, re-runs %.2f, commit rest %.2f; copies %d, contents %d, restores %d; why %s",
+                "[sleep/spec] exact: blocks %d, ticks %d (in groups of 2+: %d in %d), invalid %d (%.2f %%: transaction %d, spatial %d, cascade %d, path cache %d), re-runs %d; ms a walk: groups %.2f [init %.2f grid %.2f pairs %.2f order %.2f slots %.2f] (path replay %.2f, deferred work %.2f), grid %.2f, validate %.2f, undo %.2f, re-runs %.2f, commit rest %.2f; copies %d, contents %d, restores %d; why %s",
                 blocks, specTicks, groupedTicks, groupsMulti, invalidTicks, specTicks == 0 ? 0 : 100.0 * invalidTicks / specTicks, txInvalid, spatialInvalid, cascadeTicks, pathInvalid, reruns,
-                nsGroups / 1e6 / Math.max(1, walks), nsReplay / 1e6 / Math.max(1, walks), nsDeferredWork / 1e6 / Math.max(1, walks), nsGrid / 1e6 / Math.max(1, walks), nsValidate / 1e6 / Math.max(1, walks), nsUndo / 1e6 / Math.max(1, walks), nsRerun / 1e6 / Math.max(1, walks), nsCommitRest / 1e6 / Math.max(1, walks),
+                nsGroups / 1e6 / Math.max(1, walks), nsgInit / 1e6 / Math.max(1, walks), nsgGrid / 1e6 / Math.max(1, walks), nsgPairs / 1e6 / Math.max(1, walks),
+                nsgOrder / 1e6 / Math.max(1, walks), nsgSlots / 1e6 / Math.max(1, walks), nsReplay / 1e6 / Math.max(1, walks), nsDeferredWork / 1e6 / Math.max(1, walks), nsGrid / 1e6 / Math.max(1, walks), nsValidate / 1e6 / Math.max(1, walks), nsUndo / 1e6 / Math.max(1, walks), nsRerun / 1e6 / Math.max(1, walks), nsCommitRest / 1e6 / Math.max(1, walks),
                 txSum(true), txSum(false), dev.lull.optsupport.sleep.SpecTx.restores, WHY));
         if (TX_TEST && txTicks > 0) System.out.println(String.format(java.util.Locale.ROOT,
                 "[sleep/spec] tx test: %d ticks, undone %d, NOT UNDONE %d; %.1f objects copied, %.1f contents a tick; tick in a transaction %.0f ns vs plain %.0f ns; writes %d, conflicts %d; mutation sites %d (missed %d); not undone: %s",
