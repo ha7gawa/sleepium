@@ -120,6 +120,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
                     || Boolean.getBoolean("lab.opt.ParticleGpuMixin");
         else if (simple.equals("EntityShapeMemoMixin"))   // part of the tick shape memo (its measurement, the entity tick)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParticleShapeMemoMixin");
+        if (simple.startsWith("TrackPar"))   // the tracker's sendChanges on the pool (TrackPar, lab)
+            on = Boolean.getBoolean("lab.opt.TrackParMixin");
         if (simple.startsWith("ServerParallelItems") && !simple.equals("ServerParallelItemsMixin"))   // parts of the server's parallel item runs (lab)
             on = Boolean.getBoolean("lab.opt.ServerParallelItemsMixin");
         if (simple.startsWith("ParallelEntityTicks") && !simple.equals("ParallelEntityTicksMixin"))   // parts of the parallel entity runs
