@@ -270,3 +270,5 @@
 -Dlab.opt.WorldgenReactor=true
 -Dlab.gpu.framesInFlight.atSwap=true
 -Dlab.opt.EagerSaveScan=true
+# 1.3.5: the tracker's per-pair check with the distance first (TrackFast, exact; notes/91)
+-Dlab.opt.TrackFast=true

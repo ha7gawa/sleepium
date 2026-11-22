@@ -215,3 +215,4 @@ lab.chunkmd.parallelLists	chunks	true	Terrain draw lists built in parts on the c
 lab.tintBlend	chunks	true	Biome blending by running sums (exact, the same colours): chunk meshing with a large Biome Blend several times cheaper.	
 lab.viewAreaStrips	chunks	true	The chunk grid follows the camera by the columns that move only (exact): no hitch at each chunk border crossed.	
 lab.decoupled	threads	false	Decoupled frames (experimental, at your own risk): the frame on its own thread and clock, mobs ticked on worker threads and drawn from tick-rate poses - smooth frames even during long ticks; not exact (interpolated). Needs a restart.	
+lab.opt.TrackFast	ticks	true	The entity tracker's per-pair check with the distance first (TrackedEntity.updatePlayer, run for every tracked entity on every movement packet a player sends): same decisions, a fraction of the cost with many players.	
