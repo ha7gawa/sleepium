@@ -54,19 +54,20 @@ public abstract class TrackFastMixin {
             }
             return;
         }
+        long t0 = TrackFast.TIME && (++TrackFast.sampleTick & 63) == 0 ? System.nanoTime() : 0;
         double dx = player.getX() - this.entity.getX(), dz = player.getZ() - this.entity.getZ();   // vanilla's Vec3 subtract, x and z
         double d1 = dx * dx + dz * dz;
         double cap = (double) (i * 16);
         boolean flag;
         if (d1 > cap * cap) {   // beyond min(range, i * 16) whatever the range: vanilla's d1 <= d2 is false
             flag = false;
-            TrackFast.FAR.increment();
+            TrackFast.far++;
         } else {
             int eff = TrackFast.noPassengers(this.entity, ((TrackFastEntityAccessor) this.entity).sleep$passengers()) ? this.scaledRange(this.range) : this.getEffectiveRange();
             double d0 = (double) Math.min(eff, i * 16);
             flag = d1 <= d0 * d0 && this.entity.broadcastToPlayer(player)
                     && map.sleep$chunkTracked(player, this.entity.chunkPosition().x, this.entity.chunkPosition().z);
-            TrackFast.NEAR.increment();
+            TrackFast.near++;
         }
         if (TrackFast.VERIFY) {   // vanilla's expression as written
             Vec3 vec3 = player.position().subtract(this.entity.position());
@@ -81,6 +82,16 @@ public abstract class TrackFastMixin {
             if (this.seenBy.add(player.connection)) this.serverEntity.addPairing(player);
         } else if (this.seenBy.remove(player.connection)) {
             this.serverEntity.removePairing(player);
+        }
+        if (t0 != 0) {
+            long d = System.nanoTime() - t0;
+            if (d1 > cap * cap) {
+                TrackFast.farNs += d;
+                TrackFast.farN++;
+            } else {
+                TrackFast.nearNs += d;
+                TrackFast.nearN++;
+            }
         }
     }
 }

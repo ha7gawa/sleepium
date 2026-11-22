@@ -16,7 +16,12 @@ import java.util.concurrent.atomic.LongAdder;
  */
 public final class TrackFast {
     public static final boolean VERIFY = Boolean.getBoolean("lab.opt.TrackFastVerify");
-    public static final LongAdder FAR = new LongAdder(), NEAR = new LongAdder(), CHECKED = new LongAdder(), MISMATCH = new LongAdder();
+    /** server thread only (updatePlayer runs there): plain counters, a LongAdder's CAS per pair cost ~0.5 ms a tick at 100 players */
+    public static long far, near;
+    public static final LongAdder CHECKED = new LongAdder(), MISMATCH = new LongAdder();
+    /** -Dlab.pipescout=true: 1 pair in 64 timed, far and near apart (ns, nanoTime's own cost included) */
+    public static final boolean TIME = Boolean.getBoolean("lab.pipescout");
+    public static long sampleTick, farNs, farN, nearNs, nearN;
 
     /** the fast path in use (on with the flag; /sleep bots ab trackfast on|off flips it for interleaved A/B) */
     public static volatile boolean active = true;
@@ -50,6 +55,9 @@ public final class TrackFast {
     }
 
     public static String report() {
-        return "trackfast: far " + FAR.sum() + ", near " + NEAR.sum() + (VERIFY ? ", verified " + CHECKED.sum() + ", mismatches " + MISMATCH.sum() : "");
+        String t = TIME && farN + nearN > 0 ? String.format(java.util.Locale.ROOT, ", sampled far %.0f ns (%d), near %.0f ns (%d)",
+                farN == 0 ? 0.0 : farNs / (double) farN, farN, nearN == 0 ? 0.0 : nearNs / (double) nearN, nearN) : "";
+        farNs = farN = nearNs = nearN = 0;
+        return "trackfast: far " + far + ", near " + near + t + (VERIFY ? ", verified " + CHECKED.sum() + ", mismatches " + MISMATCH.sum() : "");
     }
 }
