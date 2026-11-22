@@ -149,6 +149,8 @@ public abstract class NetReactorConnectionMixin implements NetReactor.Batched {
     /** vanilla's doSendPacket for a packet of the channel's own protocol (no switch), without the flush */
     @Unique
     private void sleep$write(Packet<?> packet, @Nullable PacketSendListener sendListener) {
+        if (dev.lull.optsupport.NetOrderVerify.ON && (Object) this instanceof dev.lull.optsupport.NetOrderVerify.Holder h)
+            h.sleep$orderState().out(packet);   // (the batch drain writes without doSendPacket)
         ChannelFuture f = this.channel.write(packet);
         if (sendListener != null) {
             f.addListener(r -> {

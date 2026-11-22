@@ -18,8 +18,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * writes them in (doSendPacket). See optsupport/NetOrderVerify.
  */
 @Mixin(Connection.class)
-public abstract class NetOrderVerifyMixin {
+public abstract class NetOrderVerifyMixin implements NetOrderVerify.Holder {
     @Unique private final NetOrderVerify.State sleep$order = new NetOrderVerify.State();
+
+    @Override
+    public NetOrderVerify.State sleep$orderState() {
+        return this.sleep$order;
+    }
 
     @Inject(method = "sendPacket", at = @At("HEAD"))
     private void sleep$orderIn(Packet<?> packet, @Nullable PacketSendListener listener, CallbackInfo ci) {

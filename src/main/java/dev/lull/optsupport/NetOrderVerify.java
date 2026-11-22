@@ -19,6 +19,11 @@ public final class NetOrderVerify {
 
     private NetOrderVerify() {}
 
+    /** the connection mixin's state (NetOrderVerifyMixin) - for writes that bypass doSendPacket (1.20.1's batch drain) */
+    public interface Holder {
+        State sleep$orderState();
+    }
+
     /** one connection's packets in flight, a FIFO per sending thread */
     public static final class State {
         private Thread[] threads = new Thread[4];
