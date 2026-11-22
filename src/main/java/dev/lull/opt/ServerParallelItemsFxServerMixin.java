@@ -35,6 +35,8 @@ public abstract class ServerParallelItemsFxServerMixin {
 
     @WrapMethod(method = "gameEvent(Lnet/minecraft/core/Holder;Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/level/gameevent/GameEvent$Context;)V")
     private void sleep$specGameEvent(Holder<GameEvent> ev, Vec3 pos, GameEvent.Context ctx, Operation<Void> original) {
+        // (a run tick's step / sound event with no listener in reach and none on the bus: vanilla's dispatch does nothing)
+        if (dev.lull.optsupport.SpecTicks.running() && dev.lull.optsupport.SpecTicks.quietGameEvent((ServerLevel) (Object) this, ev, pos)) return;
         if (!dev.lull.optsupport.SpecTicks.deferFx(() -> original.call(ev, pos, ctx))) original.call(ev, pos, ctx);
     }
 

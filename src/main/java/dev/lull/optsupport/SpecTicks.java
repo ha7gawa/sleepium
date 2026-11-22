@@ -306,7 +306,7 @@ public final class SpecTicks {
     static long blocks, specTicks, invalidTicks, cascadeTicks, reruns, pathInvalid, refInvalid, spatialInvalid, txInvalid;
     static final java.util.Map<String, Long> WHY = new java.util.concurrent.ConcurrentHashMap<>();
 
-    static long nsGroups;
+    static long nsGroups, nsReplay, nsDeferredWork;
     /** bisecting switches (default on): undo groups in parallel; committed ticks released after the commit loop */
     static final boolean PAR_UNDO = !"false".equals(System.getProperty("lab.spec.parUndo"));
     static final boolean LATE_RELEASE = !"false".equals(System.getProperty("lab.spec.lateRelease"));
@@ -497,7 +497,10 @@ public final class SpecTicks {
             for (int i = 0; i < m; i++) {
                 int k = b0 + i;
                 commitCursor = i;
-                if (!invalid[i] && hasPaths[i] && !replayPaths(txs[i])) {
+                long tp0 = System.nanoTime();
+                boolean pathOk = invalid[i] || !hasPaths[i] || replayPaths(txs[i]);
+                nsReplay += System.nanoTime() - tp0;
+                if (!pathOk) {
                     pathInvalid++;
                     why("path type cache");
                     int g = groupIx[i];   // (it and the rest of its group, latest first)
@@ -513,7 +516,11 @@ public final class SpecTicks {
                     rerun(b0, m, i, consumer);
                     rr += System.nanoTime() - r0;
                 } else {
-                    if (deferredN[k] > 0) commitDeferred(k, k + 1);
+                    if (deferredN[k] > 0) {
+                        long td0 = System.nanoTime();
+                        commitDeferred(k, k + 1);
+                        nsDeferredWork += System.nanoTime() - td0;
+                    }
                     if (!LATE_RELEASE) txs[i].release();
                 }
                 done[i] = true;
@@ -844,6 +851,31 @@ public final class SpecTicks {
         return false;
     }
 
+    public static long quietEvents;
+
+    /**
+     * vanilla's ServerLevel.gameEvent would do nothing: no listener of NeoForge's VanillaGameEvent (our bus says so) and
+     * no game event listener registered in a section within the event's radius (GameEventDispatcher.post's own walk:
+     * the registries do not change while a run ticks - their owners are not run entities, block entities do not move)
+     */
+    public static boolean quietGameEvent(ServerLevel level, net.minecraft.core.Holder<net.minecraft.world.level.gameevent.GameEvent> ev, net.minecraft.world.phys.Vec3 pos) {
+        if (!(net.neoforged.neoforge.common.NeoForge.EVENT_BUS instanceof CompositeEventBus cb)
+                || cb.mayHaveListeners(net.neoforged.neoforge.event.VanillaGameEvent.class)) return false;
+        int r = ev.value().notificationRadius();
+        BlockPos p = BlockPos.containing(pos);
+        int x0 = net.minecraft.core.SectionPos.blockToSectionCoord(p.getX() - r), y0 = net.minecraft.core.SectionPos.blockToSectionCoord(p.getY() - r);
+        int z0 = net.minecraft.core.SectionPos.blockToSectionCoord(p.getZ() - r), x1 = net.minecraft.core.SectionPos.blockToSectionCoord(p.getX() + r);
+        int y1 = net.minecraft.core.SectionPos.blockToSectionCoord(p.getY() + r), z1 = net.minecraft.core.SectionPos.blockToSectionCoord(p.getZ() + r);
+        for (int x = x0; x <= x1; x++)
+            for (int z = z0; z <= z1; z++) {
+                LevelChunk c = level.getChunkSource().getChunkNow(x, z);
+                if (c == null) continue;
+                for (int y = y0; y <= y1; y++) if (!c.getListenerRegistry(y).isEmpty()) return false;
+            }
+        quietEvents++;
+        return true;
+    }
+
     /** a world write or spawn during a speculative tick: a conflict, the tick stops there (SpecAbort) */
     public static void abortIfSpeculative(String what) {
         dev.lull.optsupport.sleep.SpecTx tx = dev.lull.optsupport.sleep.SpecTx.current();
@@ -1070,9 +1102,9 @@ public final class SpecTicks {
 
     static void report() {
         if (EXACT && blocks > 0) System.out.println(String.format(java.util.Locale.ROOT,
-                "[sleep/spec] exact: blocks %d, ticks %d (in groups of 2+: %d in %d), invalid %d (%.2f %%: transaction %d, spatial %d, cascade %d, path cache %d), re-runs %d; ms a walk: groups %.2f, grid %.2f, validate %.2f, undo %.2f, re-runs %.2f, commit rest %.2f; copies %d, contents %d, restores %d; why %s",
+                "[sleep/spec] exact: blocks %d, ticks %d (in groups of 2+: %d in %d), invalid %d (%.2f %%: transaction %d, spatial %d, cascade %d, path cache %d), re-runs %d; ms a walk: groups %.2f (path replay %.2f, deferred work %.2f), grid %.2f, validate %.2f, undo %.2f, re-runs %.2f, commit rest %.2f; copies %d, contents %d, restores %d; why %s",
                 blocks, specTicks, groupedTicks, groupsMulti, invalidTicks, specTicks == 0 ? 0 : 100.0 * invalidTicks / specTicks, txInvalid, spatialInvalid, cascadeTicks, pathInvalid, reruns,
-                nsGroups / 1e6 / Math.max(1, walks), nsGrid / 1e6 / Math.max(1, walks), nsValidate / 1e6 / Math.max(1, walks), nsUndo / 1e6 / Math.max(1, walks), nsRerun / 1e6 / Math.max(1, walks), nsCommitRest / 1e6 / Math.max(1, walks),
+                nsGroups / 1e6 / Math.max(1, walks), nsReplay / 1e6 / Math.max(1, walks), nsDeferredWork / 1e6 / Math.max(1, walks), nsGrid / 1e6 / Math.max(1, walks), nsValidate / 1e6 / Math.max(1, walks), nsUndo / 1e6 / Math.max(1, walks), nsRerun / 1e6 / Math.max(1, walks), nsCommitRest / 1e6 / Math.max(1, walks),
                 txSum(true), txSum(false), dev.lull.optsupport.sleep.SpecTx.restores, WHY));
         if (TX_TEST && txTicks > 0) System.out.println(String.format(java.util.Locale.ROOT,
                 "[sleep/spec] tx test: %d ticks, undone %d, NOT UNDONE %d; %.1f objects copied, %.1f contents a tick; tick in a transaction %.0f ns vs plain %.0f ns; writes %d, conflicts %d; mutation sites %d (missed %d); not undone: %s",
