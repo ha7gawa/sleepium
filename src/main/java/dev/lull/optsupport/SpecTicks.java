@@ -254,7 +254,7 @@ public final class SpecTicks {
      * writes into a later tick's objects, it is undone with those later ticks and runs again. Exact by construction: a
      * committed tick read nothing another tick of the block changed, an invalid one runs in vanilla's order.
      */
-    static final boolean EXACT = !Boolean.getBoolean("lab.spec.unsafe");
+    public static final boolean EXACT = !Boolean.getBoolean("lab.spec.unsafe");
     static final int BLOCK = Integer.getInteger("lab.spec.block", 2048);
     private static dev.lull.optsupport.sleep.SpecTx[] txs = new dev.lull.optsupport.sleep.SpecTx[0];
     private static double[] sweep = new double[0];   // per slot: the swept box (6)
