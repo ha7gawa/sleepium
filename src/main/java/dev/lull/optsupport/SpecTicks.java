@@ -276,7 +276,8 @@ public final class SpecTicks {
     private static int[] groupOf = new int[0], parent = new int[0], order = new int[0], groupStart = new int[0], groupIx = new int[0];
     private static boolean[] sectionMoved = new boolean[0];
     private static int nGroups;
-    private static final it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap SLOT_OF = new it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap();
+    /** a new value per block: the entities' slots (SpecSlot) of earlier blocks read as none */
+    private static volatile long slotEpoch;
     static long groupedTicks, groupsMulti;
     static long blocks, specTicks, invalidTicks, cascadeTicks, reruns, pathInvalid, refInvalid, spatialInvalid, txInvalid;
     static final java.util.Map<String, Long> WHY = new java.util.concurrent.ConcurrentHashMap<>();
@@ -347,8 +348,8 @@ public final class SpecTicks {
         }
         for (int i = 0; i < m; i++) groupIx[i] = startOfRoot[groupOf[i]];
         for (int i = 0; i < g; i++) if (groupStart[i + 1] - groupStart[i] > 1) { groupsMulti++; groupedTicks += groupStart[i + 1] - groupStart[i]; }
-        SLOT_OF.clear();
-        for (int i = 0; i < m; i++) SLOT_OF.put(all[b0 + i].getId(), i);
+        long ep = ++slotEpoch;
+        for (int i = 0; i < m; i++) ((SpecSlot) all[b0 + i]).sleep$setSpecSlot(i, ep);
         groupB0 = b0;
     }
 
@@ -357,13 +358,13 @@ public final class SpecTicks {
     private static volatile boolean[] hitBy = new boolean[0];
 
     static void victim(Entity e) {
-        int slot = SLOT_OF.getOrDefault(e.getId(), -1);
+        int slot = ((SpecSlot) e).sleep$specSlot(slotEpoch);
         if (slot >= 0 && all[groupB0 + slot] == e) hitBy[slot] = true;
     }
 
     /** an entity's group in the current block (-1: not one of its ticks) */
     static int groupOfEntity(Entity e) {
-        int slot = SLOT_OF.getOrDefault(e.getId(), -1);
+        int slot = ((SpecSlot) e).sleep$specSlot(slotEpoch);
         return slot < 0 || all[groupB0 + slot] != e ? -1 : groupOf[slot];
     }
 
