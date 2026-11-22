@@ -168,6 +168,9 @@
 -Dlab.opt.TickMemoMixin=true
 -Dlab.opt.AmbientChunksMixin=true
 -Dlab.opt.TickSchedulerMixin=true
+# the tracker's per-pair check with the distance first (1.3.5, notes/91): ChunkMap.move visits every tracked entity
+# for every movement packet - 100 players in real terrain 30-36 -> ~10 ms a tick of the server thread; same decisions
+-Dlab.opt.TrackFast=true
 -Dlab.opt.UniformDedupeMixin=true
 -Dlab.opt.UtilMemoizeMixin=true
 -Dlab.opt.Vec3FromRgbMixin=true
