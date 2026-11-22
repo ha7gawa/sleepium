@@ -93,6 +93,12 @@ public final class BotLoad {
     private static final Integer FLY_Y = Integer.getInteger("sleep.bots.y");
     private static final Logger LOGGER = LogUtils.getLogger();
 
+    /**
+     * -Dsleep.bots.blocks=N: every N ticks each bot places a stone 2 blocks east of itself, or breaks it (creative): a
+     * UseItemOn / PlayerAction with a sequence number, as a client's; the time to the acknowledgement's write is counted
+     */
+    static final int BLOCKS = Integer.getInteger("sleep.bots.blocks", 0);
+    static final LongAdder ACKS = new LongAdder(), ACK_NANOS = new LongAdder(), ACTIONS = new LongAdder();
     static final LongAdder CHUNKS = new LongAdder(), BATCHES = new LongAdder(), TELEPORTS = new LongAdder(), MOVES = new LongAdder(),
             PACKETS = new LongAdder();
     private static final List<Bot> BOTS = new ArrayList<>();
@@ -112,6 +118,8 @@ public final class BotLoad {
         double hx, hy, hz;   // home: where circle and line start, where tp landed
         long t;   // ticks in the current mode
         float yaw;
+        int seq;   // block actions' sequence numbers (-Dsleep.bots.blocks)
+        final long[] sentAt = new long[64];
 
         Bot(int index, String name, Connection conn, SinkChannel ch) {
             this.index = index;
@@ -127,9 +135,22 @@ public final class BotLoad {
 
     /** sees the server's packets as objects, before the encoder; answers on the channel's event loop like a client would */
     private static final class Tap extends ChannelOutboundHandlerAdapter {
+        Bot bot;
+
         @Override
         public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
             Packet<?> answer = null;
+            if (msg instanceof net.minecraft.network.protocol.game.ClientboundBlockChangedAckPacket a && bot != null) {   // written: on its way to the client
+                long now = System.nanoTime();
+                for (int s = Math.max(1, a.sequence() - 63); s <= a.sequence(); s++) {
+                    long t0 = bot.sentAt[s & 63];
+                    if (t0 != 0) {
+                        bot.sentAt[s & 63] = 0;
+                        ACKS.increment();
+                        ACK_NANOS.add(now - t0);
+                    }
+                }
+            }
             if (msg instanceof ClientboundKeepAlivePacket k) answer = new ServerboundKeepAlivePacket(k.getId());
             else if (msg instanceof ClientboundPingPacket p) answer = new ServerboundPongPacket(p.getId());
             else if (msg instanceof ClientboundPlayerPositionPacket p) {
@@ -242,7 +263,8 @@ public final class BotLoad {
         SinkChannel ch = new SinkChannel(new InetSocketAddress("127.0.0.1", 25565),
                 new InetSocketAddress("127.1." + (index >> 8 & 255) + "." + (index & 255), 40000 + (index & 8191)));
         Connection.configureSerialization(ch.pipeline(), PacketFlow.SERVERBOUND);
-        ch.pipeline().addLast("bot_tap", new Tap());
+        Tap tap = new Tap();
+        ch.pipeline().addLast("bot_tap", tap);
         ch.pipeline().addLast("packet_handler", conn);
         ServerConnectionListener.SERVER_EVENT_GROUP.get().register(ch).syncUninterruptibly();   // channelActive: conn.channel set
         for (int i = 0; i < 1000 && conn.isConnecting(); i++) Thread.sleep(1);
@@ -275,7 +297,9 @@ public final class BotLoad {
         if (conn instanceof dev.lull.net.NetReactor.Batched batched) batched.sleep$flush();   // (a batch held to the tick's end goes now)
         ch.eventLoop().submit(() -> {}).syncUninterruptibly();
         Bot b = new Bot(index, name, conn, ch);
+        tap.bot = b;
         b.player = player;
+        if (BLOCKS > 0) player.getInventory().setItem(player.getInventory().selected, new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.STONE, 64));
         player.setGameMode(GameType.CREATIVE);
         player.getAbilities().flying = true;
         player.onUpdateAbilities();
@@ -368,6 +392,18 @@ public final class BotLoad {
         ServerPlayer p = b.player;
         if (p == null || p.isRemoved() || !b.conn.isConnected()) return;
         long t = b.t++;
+        if (BLOCKS > 0 && (t + b.index) % BLOCKS == 0) {
+            net.minecraft.core.BlockPos at = net.minecraft.core.BlockPos.containing(p.getX() + 2, p.getY(), p.getZ());
+            int seq = ++b.seq;
+            b.sentAt[seq & 63] = System.nanoTime();
+            ACTIONS.increment();
+            if ((t / BLOCKS & 1) == 0)
+                inject(b, new net.minecraft.network.protocol.game.ServerboundUseItemOnPacket(net.minecraft.world.InteractionHand.MAIN_HAND,
+                        new net.minecraft.world.phys.BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(at), net.minecraft.core.Direction.UP, at, false), seq));
+            else
+                inject(b, new net.minecraft.network.protocol.game.ServerboundPlayerActionPacket(
+                        net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, at, net.minecraft.core.Direction.UP, seq));
+        }
         double x, z;
         switch (b.mode) {
             case CIRCLE -> {
@@ -430,6 +466,7 @@ public final class BotLoad {
     /** runtime switches for interleaved A/B windows in one server: /sleep bots ab &lt;name&gt; on|off (a lab feature registers its own) */
     public static final Map<String, java.util.function.Consumer<Boolean>> AB = new java.util.concurrent.ConcurrentHashMap<>();
 
+    private static long mActions0, mAcks0, mAckNanos0;
     private static long mStart = -1, mEnd, tickStart, mBytes0, mFrames0, mChunks0, mPackets0, mProc0, mRBytes0, mRFrames0, mRPackets0, mRChunks0;
     private static String mLabel;
     private static long[] mTicks = new long[4096];
@@ -481,6 +518,9 @@ public final class BotLoad {
         mRChunks0 = R_CHUNKS.sum();
         mN = 0;
         tickStart = 0;
+        mActions0 = ACTIONS.sum();
+        mAcks0 = ACKS.sum();
+        mAckNanos0 = ACK_NANOS.sum();
         for (Window w : WINDOWS) w.start();
         mStart = System.nanoTime();
         mEnd = mStart + secs * 1_000_000_000L;
@@ -510,6 +550,11 @@ public final class BotLoad {
         if (TAP_REAL) line += String.format(Locale.ROOT, " | real players out %.3f MB/s %.0f frames/s %.0f packets/s %.1f chunks/s, chunk rate asked %.1f (%d acks)",
                 (R_BYTES.sum() - mRBytes0) / 1e6 / secs, (R_FRAMES.sum() - mRFrames0) / secs, (R_PACKETS.sum() - mRPackets0) / secs,
                 (R_CHUNKS.sum() - mRChunks0) / secs, rRate, R_ACKS.sum());
+        if (BLOCKS > 0) {
+            long acks = ACKS.sum() - mAcks0;
+            line += String.format(Locale.ROOT, " | block actions %.1f/s, acks %.1f/s, action -> ack written %.1f ms mean",
+                    (ACTIONS.sum() - mActions0) / secs, acks / secs, acks == 0 ? 0 : (ACK_NANOS.sum() - mAckNanos0) / 1e6 / acks);
+        }
         for (Window w : WINDOWS) {
             String x = w.end(t.length);
             if (x != null && !x.isEmpty()) line += " | " + x;

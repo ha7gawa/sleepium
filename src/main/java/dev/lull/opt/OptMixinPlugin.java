@@ -195,6 +195,10 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.startsWith("MainReactorScout")) on = Boolean.getBoolean("lab.reactor.scout");   // measurement only
         if (simple.equals("BulkDataArraysBlocksMixin"))   // 1.20.1: the block half of BulkDataArraysMixin (SRG names differ)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.BulkDataArraysMixin");
+        if (simple.startsWith("EarlyAnswers"))   // (notes/92: a block action answered at the hand-over after its handler)
+            on = Boolean.getBoolean("lab.opt.EarlyAnswers");
+        if (simple.startsWith("StallHeartbeat"))   // (notes/92: players pinged through a long stall)
+            on = Boolean.getBoolean("lab.opt.StallHeartbeat");
         if (simple.startsWith("NetReactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor");
         // (1.21.1 turned NetReactorWaitMixin off with MainReactor, whose waitForTasks overwrite flushed; 1.20.1's MainReactor
