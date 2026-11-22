@@ -208,7 +208,7 @@ public final class SpecTx {
         Object seen = w;   // (the word as read: the claim swaps exactly it - null or a released transaction's stale token)
         if (w == tok) return;
         if (w instanceof Token t) {
-            if (!t.live) w = null;   // (stale: a released transaction's word)
+            if (!t.live || serial && COMMITTED != null && COMMITTED.test(t.tx)) w = null;   // (stale: released, or a tick already committed - its release comes after the commit loop)
             else if (group >= 0 && t.tx.group == group && !serial) {
                 // an earlier tick of this group wrote it (a push): ours on top - copied as it is now, the word stays
                 copy(o, root, false, null);
@@ -241,6 +241,8 @@ public final class SpecTx {
 
     /** a run entity another tick wrote into (SpecTicks marks its tick invalid) */
     public static volatile java.util.function.Consumer<Entity> VICTIM;
+    /** a transaction whose tick is committed (SpecTicks: released in one parallel pass after the commit loop) */
+    public static volatile java.util.function.Predicate<SpecTx> COMMITTED;
     static final boolean YOUNG_REFS = !"false".equals(System.getProperty("lab.spec.youngRefs"));
 
     /** o's fields into the log; with mark, the object claimed for this tick (atomically: false when another tick won it) */
@@ -321,6 +323,16 @@ public final class SpecTx {
 
     /** everything this tick changed put back as it was before it (watch words cleared) */
     public void restore() {
+        restoreFields();
+        restoreContentsAndRelease();
+    }
+
+    /**
+     * the copied objects' fields put back (an object is in one transaction's log only - a claim is atomic - so groups
+     * may do this in parallel); then, in walk order from the latest, restoreContentsAndRelease (a collection has no
+     * claim: two ticks of different groups may both hold a copy of one)
+     */
+    public void restoreFields() {
         restores++;
         for (int i = n - 1; i >= 0; i--) {
             Object o = objs[i];
@@ -329,6 +341,9 @@ public final class SpecTx {
             Object[] r = refs[i];
             if (sh.f.length > 0 && !sh.sn.same(o, p, r)) for (int k = 0; k < sh.f.length; k++) sh.sn.put(o, k, p[k], r[k]);
         }
+    }
+
+    public void restoreContentsAndRelease() {
         cs.nc = nc;
         SpecUndo.restoreContents(cs);
         release();

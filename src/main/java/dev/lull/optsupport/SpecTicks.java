@@ -290,6 +290,15 @@ public final class SpecTicks {
     static final double MARGIN = Double.parseDouble(System.getProperty("lab.spec.margin", "1.0"));
     private static int[] groupOf = new int[0], parent = new int[0], order = new int[0], groupStart = new int[0], groupIx = new int[0];
     private static boolean[] sectionMoved = new boolean[0];
+    /** per slot: its tick looked up path types (only those are replayed) */
+    private static boolean[] hasPaths = new boolean[0];
+    /** the block being committed: a slot below commitCursor is committed (SpecTx.COMMITTED) */
+    private static int commitB0, commitCursor;
+
+    static boolean committed(dev.lull.optsupport.sleep.SpecTx tx) {
+        int slot = tx.index - commitB0;
+        return slot >= 0 && slot < commitCursor && !invalid[slot];
+    }
     private static int nGroups;
     /** a new value per block: the entities' slots (SpecSlot) of earlier blocks read as none */
     private static volatile long slotEpoch;
@@ -298,6 +307,9 @@ public final class SpecTicks {
     static final java.util.Map<String, Long> WHY = new java.util.concurrent.ConcurrentHashMap<>();
 
     static long nsGroups;
+    /** bisecting switches (default on): undo groups in parallel; committed ticks released after the commit loop */
+    static final boolean PAR_UNDO = !"false".equals(System.getProperty("lab.spec.parUndo"));
+    static final boolean LATE_RELEASE = !"false".equals(System.getProperty("lab.spec.lateRelease"));
     /**
      * an invalid tick undoes its whole group (default). -Dlab.spec.suffix=true: only the group's ticks after it - NOT exact
      * yet (pig pens differ, 11-22; the hole is not found), kept for the search.
@@ -434,6 +446,7 @@ public final class SpecTicks {
             groupStart = new int[m + 1];
             groupIx = new int[m];
             sectionMoved = new boolean[m];
+            hasPaths = new boolean[m];
         }
         java.util.Arrays.fill(invalid, 0, m, false);
         java.util.Arrays.fill(done, 0, m, false);
@@ -444,6 +457,9 @@ public final class SpecTicks {
         nsGroups += t0 - tg;
         dev.lull.optsupport.sleep.SpecTx.GROUP = SpecTicks::groupOfEntity;
         dev.lull.optsupport.sleep.SpecTx.VICTIM = SpecTicks::victim;
+        dev.lull.optsupport.sleep.SpecTx.COMMITTED = SpecTicks::committed;
+        commitB0 = b0;
+        commitCursor = 0;
         if (hitBy.length < m) hitBy = new boolean[m];
         java.util.Arrays.fill(hitBy, 0, m, false);
         dev.lull.optsupport.sleep.WB.TX = true;
@@ -460,8 +476,19 @@ public final class SpecTicks {
         nsPhase += t1 - t0;
         validate(b0, m);
         long t2 = System.nanoTime();
-        // undo every invalid tick, the latest first
-        for (int i = m - 1; i >= 0; i--) if (invalid[i]) undo(b0, i);
+        // undo every invalid tick, each group's latest first - groups in parallel (no object is in the logs of two
+        // groups: a write into another group's claimed object is a conflict that copies nothing; the section indexes
+        // were marked for rebuilding during the run, so the box re-set off the owner thread changes nothing there)
+        if (!PAR_UNDO) for (int i = m - 1; i >= 0; i--) { if (invalid[i]) undo(b0, i); }
+        else {
+            ServerReactor.pool().forRange(nGroups, 8, ServerReactor.pool().workerCount(), g -> {
+                for (int a = groupStart[g + 1] - 1; a >= groupStart[g]; a--) {
+                    int i = order[a];
+                    if (invalid[i]) txs[i].restoreFields();
+                }
+            });
+            for (int i = m - 1; i >= 0; i--) if (invalid[i]) undoRest(b0, i);   // (contents in walk order, then the rest)
+        }
         long t3 = System.nanoTime();
         nsUndo += t3 - t2;
         long rr = 0;
@@ -469,7 +496,8 @@ public final class SpecTicks {
         try {
             for (int i = 0; i < m; i++) {
                 int k = b0 + i;
-                if (!invalid[i] && !replayPaths(txs[i])) {
+                commitCursor = i;
+                if (!invalid[i] && hasPaths[i] && !replayPaths(txs[i])) {
                     pathInvalid++;
                     why("path type cache");
                     int g = groupIx[i];   // (it and the rest of its group, latest first)
@@ -485,14 +513,23 @@ public final class SpecTicks {
                     rerun(b0, m, i, consumer);
                     rr += System.nanoTime() - r0;
                 } else {
-                    commitDeferred(k, k + 1);
-                    txs[i].release();
+                    if (deferredN[k] > 0) commitDeferred(k, k + 1);
+                    if (!LATE_RELEASE) txs[i].release();
                 }
                 done[i] = true;
             }
+            commitCursor = m;
         } finally {
             dev.lull.optsupport.sleep.WB.TX = false;
         }
+        // the committed ticks' transactions released together (a re-run reads their words as stale: COMMITTED)
+        if (LATE_RELEASE) {
+            var rpool = ServerReactor.pool();
+            rpool.forRange(m, 64, rpool.workerCount(), i -> {
+                if (!invalid[i]) txs[i].release();
+            });
+        }
+        commitCursor = 0;
         nsRerun += rr;
         nsCommitRest += System.nanoTime() - t3 - rr;
         nsCommit += System.nanoTime() - t1;
@@ -520,6 +557,7 @@ public final class SpecTicks {
         }
         net.minecraft.world.phys.AABB eb = e.getBoundingBox();
         sectionMoved[q] = net.minecraft.core.SectionPos.asLong(e.blockPosition()) != sec;
+        hasPaths[q] = tx.np > 0;
         double[] s = sweep;
         int o = q * 6;
         s[o] = Math.min(bb.minX, eb.minX); s[o + 1] = Math.min(bb.minY, eb.minY); s[o + 2] = Math.min(bb.minZ, eb.minZ);
@@ -670,6 +708,16 @@ public final class SpecTicks {
     /** slot i's speculative result undone (its transaction restored, its deferred work dropped) */
     private static void undo(int b0, int i) {
         txs[i].restore();
+        undoTail(b0, i);
+    }
+
+    /** the parallel undo's serial part: contents, release, then the rest of undo */
+    private static void undoRest(int b0, int i) {
+        txs[i].restoreContentsAndRelease();
+        undoTail(b0, i);
+    }
+
+    private static void undoTail(int b0, int i) {
         int k = b0 + i;
         // the box came back past setBoundingBox: set it again the usual way (the same value) so that what follows a box
         // change on the owner thread runs - the entity section indexes' update (no game state changes)
