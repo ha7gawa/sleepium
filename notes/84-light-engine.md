@@ -394,3 +394,69 @@ noise-bound at 4 threads. Exact: carvers hashes of all 7 runs equal (r1 3d3701ca
 light run of notes/84); sv1 (batch + -Dlab.dfc.verify=true, every compiled value compared with vanilla's fillArray)
 104 857 636 values, 0 differ. -> NoiseBatch can be a 1.3.5 default from the AVX2 side (host 16-thread number and the
 1.20.1 port still to do; JIT: C2's superword is on by default in every JDK 17 / 21 build players use).
+
+## 11-22 morning: host 16 threads (LightDirect + ownThread, NoiseBatch)
+Production server F:/release-test/server (NeoForge 21.1.251, JDK 21, heap 4 G - the host's commit charge was 39.7 of
+47.4 GB), genbench 32 x 32, interleaved, 8 pairs each (3 at ~03:35, 5 from 04:20). The host was NOT quiet: other
+agents' work kept it at 75-98 % CPU (Get-Counter) through both rounds, so chunks/s swung 70 .. 284 for one jar.
+| pair | base / LightDirect + ownThread (chunks/s, mean r1 r2) | SIMD off / batch |
+|---|---|---|
+| 1 | 109.8 / 283.8 | 95.8 / 123.3 |
+| 2 | 95.8 / 199.1 | 171.4 / 141.6 |
+| 3 | 223.9 / 97.8 | 254.5 / 249.3 |
+| 4 | 133.2 / 108.4 | 105.7 / 159.8 |
+| 5 | 70.8 / 118.0 | 164.4 / 93.7 |
+| 6 | 203.5 / 171.2 | 91.1 / 234.0 |
+| 7 | 83.9 / 165.2 | 147.4 / 93.9 |
+| 8 | 211.0 / 226.6 | 159.5 / 110.9 |
+Throughput: not measurable on this host now - LightDirect + ownThread geometric mean of the pair ratios x1.24 (median
+121 -> 168 chunks/s), SIMD x1.0; the spread is the other load. What the noise does not hide: lightChunk latency
+270-1240 ms (base) -> 6-28 ms (LightDirect + ownThread) in every pair; noise.corners per call (r2) batch / off
+0.53, 0.83, 0.67, 0.51, 0.92, 0.31, 0.77, 1.21 (median -28 %). Exact: fixcheck 0 in every area of all 16 light runs,
+carvers hashes equal in all 29 host runs (r1 3d3701ca..., r2 0880a251...), batch + dfc.verify 118 489 104 values, 0
+differ. A clean 16-thread throughput number needs a quiet host window.
+
+## 11-22: LightDirect on 1.20.1 (lab-light-1.20.1 from night-1.20.1)
+Port (752e4f1f): LightDirect + LightLanes + ownThread + the MixinYield rule, the light probe / fixcheck tools. 1.20.1
+has no /tick freeze: its fixcheck holds the server thread instead and drains the light (sorter idle, LightLanes and
+the light mailbox empty, no queued batch, no light work, 50 ms in a row; main-thread chunk tasks keep being polled).
+Dependency argument for 1.20.1's scheduling (per (chunk, status) futures, no GenGraph): the same radii - LIGHT range 1
+on INITIALIZE_LIGHT, FEATURES writes radius 1 (WorldGenRegion(..., 1)), ProtoChunk.setBlockState sends checkBlock /
+updateSectionStatus from INITIALIZE_LIGHT on, the status set after the step's future (ChunkStatus.generate).
+**But one dependency is timing in 1.20.1**: the light engine reads chunks through the VISIBLE chunk map
+(ServerChunkCache.getChunkForLighting), and 1.20.1 starts a holder's generation inside the distance-manager update
+(ChunkHolder.updateFutures), before runDistanceManagerUpdates promotes the map. A chunk that goes fast (loaded back from
+the stored ring) reaches initializeLight / lightChunk while not visible: propagateLightSources finds no chunk - its block
+sources stay unlit, its sky is set as if the column were empty (fixcheck: block lower, sky higher, 4-27 chunks a
+1024-chunk area). Probe line (each hit): "sources of [4058, 4011] asked with no chunk for lighting: visible holder
+false, updating holder true, level 31, futures ... initialize_light=chunk light=pending". With LightDirect + ownThread on
+.103 it hit 6 of 7 full genbench runs (r1 mostly; without ownThread 0 / 1, with the stored ring off 0 / 1; the N100's
+1.20.1 runs 0 / 3 - its slower generation leaves the window shut); with vanilla's sorter path it is rarer but
+**vanilla 1.20.1 does it too** (base
+x4b1: 8 chunks differ, the same probe line). 1.21.1 runs generation tasks after the promotion
+(runDistanceManagerUpdates: runAllUpdates, promoteChunkMap, runGenerationTasks) - no such window there.
+Fix (eb9f3f15): LightLanes holds a task while its chunk is not visible and no promotion of that chunk map happened since
+the task came (LightDirectPromoteMixin counts promotions and drains again); a holder that existed at submission is
+visible after one promotion, one still absent is really absent (an unloaded chunk's last tasks run as before). This
+makes 1.20.1's light deterministic (always the lit outcome, the one vanilla gets when its timing is kind).
+-Dlab.light.waitVisible=false = without it (x4w1: 6 probe hits, this time no difference).
+After the fix on .103 (l1201c jar, full genbench): LightDirect + ownThread 0 / 4, LightDirect 0 / 4 differences, 0
+probe hits; base 1 / 4 runs differed (x4b1) this morning.
+
+Validation, the built SRG jar (l1201c = eb9f3f15) on the production Forge 1.20.1-47.4.9 servers (C:\mcbench\forge1201 on
+both boxes, JDK 17), fixcheck with the drained server thread:
+| | Xeon .103 | N100 |
+|---|---|---|
+| genbench 32 x 32, mean of r1 / r2, 5 interleaved triples: base | 74.6 / 76.1 / 74.9 / 74.4 / 77.2 = **75.4** | 50.1 / 50.0 / 50.1 / 50.5 / 47.9 = **49.7** |
+| LightDirect + ownThread | 78.1 / 77.2 / 78.0 / 80.7 / 86.2 = **80.0 (+6 %)** | 51.0 / 52.7 / 49.2 / 52.7 / 51.5 = **51.4 (+3 %)** |
+| LightDirect | 76.8 / 79.1 / 72.5 / 77.2 / 78.2 = 76.8 (+2 %) | 51.0 / 51.0 / 53.5 / 44.0 / 56.5 = 51.2 (+3 %) |
+| fixcheck, every area of the 15 runs | 0 | 0 |
+| Nether LightDirect / + ownThread (chunks/s, fixcheck) | 145.8 / 140.0, 0 | 87.7 / 93.7, 0 |
+| End LightDirect / + ownThread | 270.1 / 264.6, 0 | 168.6 / 158.2, 0 |
+| warm-ups (fresh server, warm-up area): LightDirect + ownThread | 20 / 20 clean | 20 / 20 clean |
+| LightDirect | 20 / 20 clean | 20 / 20 clean |
+Carvers hashes equal in all 58 1.20.1 overworld genbench runs of both boxes and all jars of the day (r1 d05c7f4a...,
+r2 10797483...). 1.20.1 gains little: its generation (no GenGraph, no reactor) is the bottleneck at 4 cores, light
+is not - the same picture as the N100 on 1.21.1. Recommendation for 1.20.1: LightDirect + ownThread may follow 1.21.1
+into the defaults with the visibility wait (it is what makes it exact there); it is a correctness fix of a vanilla
+1.20.1 race as much as a speed-up.
