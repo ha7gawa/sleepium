@@ -207,6 +207,9 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.equals("LightTimingMixin")) on = Boolean.getBoolean("lab.lighttime");   // measurement only
         if (simple.startsWith("Scout") && simple.endsWith("Mixin"))   // measurement only, never with lab.opt.all
             on = Boolean.getBoolean("lab.scout");
+        if (simple.startsWith("EagerSaveScan"))   // the eager-save walk over the holders whose call can do something (EagerSaveScan, notes/88)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.EagerSaveScan");
+        if (simple.equals("LabPoolsExitMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.LabPoolsMixin");   // (notes/88)
         if (simple.equals("AsyncChunkSaveEncodeMixin") || simple.equals("AsyncChunkSaveStorageMixin"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.AsyncChunkSaveMixin");
         if (simple.equals("ChunkTickMemoChunkMixin") || simple.equals("ChunkTickMemoEpochMixin"))

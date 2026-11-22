@@ -195,6 +195,10 @@
     "AsyncChunkSaveMixin",
     "AsyncChunkSaveEncodeMixin",
     "AsyncChunkSaveStorageMixin",
+    "EagerSaveScanMixin",
+    "EagerSaveScanHolderMixin",
+    "EagerSaveScanPoiMixin",
+    "LabPoolsExitMixin",
     "EntityDataNoLockMixin",
     "EntityFluidLoopMixin"
   ],
