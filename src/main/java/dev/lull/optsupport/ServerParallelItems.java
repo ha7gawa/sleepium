@@ -73,6 +73,10 @@ public final class ServerParallelItems {
     static final Map<String, Long> NOT = new ConcurrentHashMap<>();
 
     public static void forEach(net.minecraft.world.level.entity.EntityTickList list, Consumer<Entity> consumer, ServerLevel lvl) {
+        if (SpecTicks.ON) {
+            SpecTicks.forEach(list, consumer, lvl);
+            return;
+        }
         if (!enabled || lvl.getProfiler() != net.minecraft.util.profiling.InactiveProfiler.INSTANCE || ParallelEntities.tickListenersActing()) {
             list.forEach(consumer);
             return;

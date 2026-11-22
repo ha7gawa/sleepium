@@ -24,7 +24,8 @@ ap = argparse.ArgumentParser()
 ap.add_argument('--machines', default='x92,x103,n100,pi')
 ap.add_argument('--jar', required=True)
 ap.add_argument('--scenes', default='pigs5k,pigs10k')
-ap.add_argument('--variants', default='vanilla,jar')
+ap.add_argument('--variants', default='vanilla,jar', help='vanilla, jar, or jar:NAME=-Dx=y;-Dz=w (the jar with those flags, label suffix NAME)')
+ap.add_argument('--rounds', type=int, default=1, help='the scene x variants list this many times (interleaved A/B)')
 ap.add_argument('--warm', type=int, default=30)
 ap.add_argument('--secs', type=int, default=40)
 ap.add_argument('--flags', default='')
@@ -68,11 +69,17 @@ def machine(name):
     jar = j(os.path.basename(a.jar))
     m.put(a.jar, jar)
     heap = m.cfg['heap']
-    for sc in scenes:
+    for rnd in range(a.rounds):
+      for sc in scenes:
         for v in a.variants.split(','):
-            label = '%s-%s-%s' % (name, sc, 'vanilla' if v == 'vanilla' else os.path.basename(a.jar).split('+')[0])
+            vflags, suffix = a.flags, ''
+            if v.startswith('jar:'):
+                suffix, _, extra = v[4:].partition('=')
+                vflags = (vflags + ' ' + extra.replace(';', ' ')).strip()
+                suffix = '-' + suffix
+            label = '%s-%s-%s%s%s' % (name, sc, 'vanilla' if v == 'vanilla' else os.path.basename(a.jar).split('+')[0], suffix, '-r%d' % rnd if a.rounds > 1 else '')
             var = '--vanilla' if v == 'vanilla' else '--jar "%s"' % jar
-            flags = (' "--flags=%s"' % a.flags) if a.flags and v != 'vanilla' else ''
+            flags = (' "--flags=%s"' % vflags) if vflags and v != 'vanilla' else ''
             cmd = '%s -u "%s" %s --prod %s --server "%s" --java "%s" --heap %s --warm %d --secs %d --label %s%s' % (
                 m.cfg['python'], j('tools', 'mobmass.py'), sc, var, srv, java, heap, a.warm, a.secs, label, flags)
             if not m.win:

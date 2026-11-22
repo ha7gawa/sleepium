@@ -18,6 +18,10 @@ public abstract class ServerParallelItemsChunkMixin {
 
     @Inject(method = "getChunk(IILnet/minecraft/world/level/chunk/status/ChunkStatus;Z)Lnet/minecraft/world/level/chunk/ChunkAccess;", at = @At("HEAD"), cancellable = true)
     private void sleep$chunk(int x, int z, ChunkStatus status, boolean require, CallbackInfoReturnable<ChunkAccess> cir) {
+        if (dev.lull.optsupport.SpecTicks.running() && Thread.currentThread() != mainThread) {
+            cir.setReturnValue(dev.lull.optsupport.SpecTicks.chunk((ServerChunkCache) (Object) this, x, z, require));
+            return;
+        }
         if (dev.lull.optsupport.ServerParallelItems.inRun() && Thread.currentThread() != mainThread) {
             LevelChunk c = dev.lull.optsupport.ServerParallelItems.chunk(x, z);
             if (c != null) cir.setReturnValue(c);
@@ -26,6 +30,10 @@ public abstract class ServerParallelItemsChunkMixin {
 
     @Inject(method = "getChunkNow", at = @At("HEAD"), cancellable = true)
     private void sleep$chunkNow(int x, int z, CallbackInfoReturnable<LevelChunk> cir) {
+        if (dev.lull.optsupport.SpecTicks.running() && Thread.currentThread() != mainThread) {
+            cir.setReturnValue(dev.lull.optsupport.SpecTicks.chunk((ServerChunkCache) (Object) this, x, z, false));
+            return;
+        }
         if (dev.lull.optsupport.ServerParallelItems.inRun() && Thread.currentThread() != mainThread)
             cir.setReturnValue(dev.lull.optsupport.ServerParallelItems.chunk(x, z));
     }

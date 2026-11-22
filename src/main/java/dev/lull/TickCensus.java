@@ -88,6 +88,7 @@ public final class TickCensus {
     public static void end(Entity e) {
         if (cur != e) return;
         long ns = System.nanoTime() - t0;
+        boolean holds = holdsOthers(e);   // (sameUnit needs cur)
         cur = null;
         // the shared random's draw count: the same as this unit's last tick? (prediction by last tick)
         Integer last = LAST_DRAWS.put(e.getId(), tickDraws);
@@ -101,7 +102,7 @@ public final class TickCensus {
             DRAW_COUNTS.merge(tickDraws, 1L, Long::sum);
         }
         if (net.minecraft.core.SectionPos.asLong(e.blockPosition()) != startSection) f[MOVE] = true;
-        if (holdsOthers(e)) f[REF] = true;
+        if (holds) f[REF] = true;
         Rec rec = new Rec();
         rec.row = ROWS.computeIfAbsent(e.getType().toShortString(), k -> new Row());
         rec.ns = ns;
