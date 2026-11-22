@@ -7,6 +7,9 @@
   "overwrites": { "conformVisibility": true },
   "refmap": "sleepium.refmap.json",
   "mixins": [
+    "TrackFastMixin",
+    "TrackFastChunkMapAccessor",
+    "TrackFastEntityAccessor",
     "FrameProfileServerMixin",
     "ParallelEntityTicksMoveMixin",
     "ParallelEntityTicksGuardMixin",
