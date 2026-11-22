@@ -54,6 +54,7 @@
     "IoScoutWorkerMixin",
     "TickCensusServerLevelMixin",
     "TickCensusLevelMixin",
+    "TickCensusPathMixin",
     "IoScoutRegionMixin",
     "IoScoutStorageMixin",
     "IoScoutSaveMixin",

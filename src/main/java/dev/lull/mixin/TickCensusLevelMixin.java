@@ -25,11 +25,11 @@ public abstract class TickCensusLevelMixin {
 
     @Inject(method = "getEntities(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;)Ljava/util/List;", at = @At("RETURN"))
     private void sleep$censusQuery(Entity except, AABB box, Predicate<? super Entity> p, CallbackInfoReturnable<List<Entity>> cir) {
-        TickCensus.queried((Level) (Object) this, cir.getReturnValue());
+        TickCensus.queried((Level) (Object) this, box, cir.getReturnValue());
     }
 
     @Inject(method = "getEntities(Lnet/minecraft/world/level/entity/EntityTypeTest;Lnet/minecraft/world/phys/AABB;Ljava/util/function/Predicate;Ljava/util/List;I)V", at = @At("RETURN"))
     private <T extends Entity> void sleep$censusQueryTyped(EntityTypeTest<Entity, T> test, AABB box, Predicate<? super T> p, List<? super T> out, int max, CallbackInfo ci) {
-        TickCensus.queried((Level) (Object) this, out);
+        TickCensus.queried((Level) (Object) this, box, out);
     }
 }
