@@ -15,6 +15,13 @@ A scene that failed on a box (no hash) runs again elsewhere; a scene that differ
 (is the scene deterministic there at all). Summary lines (tools/suite.py's format) go to run/box-summary.txt; at the
 end a table per scene with the off hash next to the dev suite's off hash (--ref, the tree's run/exactness-summary.txt):
 the released jar's "off" against the dev server's plain run, and the hashes across machines.
+
+Expected differences from the dev hashes (11-22, notes/90): the mob scenes (cramming, mobs, villagers, jobclash, zoo,
+calmzoo) differ from the DEV off hash on every machine - the dev server runs a decompiled and recompiled Minecraft whose
+float arithmetic is not always Mojang's (LookControl.getYRotD: `* 180.0 / 3.1415927` in two steps where Mojang's
+bytecode multiplies once by 57.2957763671875), one-ulp turns that change the mobs' paths. Production runs Mojang's own
+bytecode: there the off hash is vanilla's. For a production reference give --ref an earlier box summary
+(run/box-summary.txt): production hashes are the same on every machine (host, Xeon, Pi aarch64 checked 11-22).
 """
 import argparse
 import os
@@ -413,7 +420,8 @@ def ref_hashes():
     out = {}
     if not os.path.exists(path):
         return out, path
-    blocks = [b for b in open(path, encoding='utf-8').read().split('\n=== ') if 'suite:' in b.split('\n', 1)[0]]
+    # the last suite block: a dev suite ("suite: 21 scenes") or an earlier box suite ("box suite 1.21.1: ...")
+    blocks = [b for b in open(path, encoding='utf-8').read().split('\n=== ') if re.search(r'suite( [\d.]+)?:', b.split('\n', 1)[0])]
     text = blocks[-1] if blocks else ''
     for l in text.splitlines():
         m = re.match(r'(\w+) (defaults(?:\+mob sleep)?) \| off\s+region hash (\w+)', l)

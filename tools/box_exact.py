@@ -127,7 +127,7 @@ if a.detach:
     if WIN:
         # a process made by WMI is outside the ssh session's job: it lives on when the session ends
         cl = subprocess.list2cmdline(args)
-        ps = ("$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='%s'; CurrentDirectory='%s'};"
+        ps = ("$ProgressPreference = 'SilentlyContinue'; $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='%s'; CurrentDirectory='%s'};"
               " Write-Output ('detached pid ' + $r.ProcessId + ' rc ' + $r.ReturnValue)") % (cl.replace("'", "''"), os.getcwd().replace("'", "''"))
         r = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand',
                             base64.b64encode(ps.encode('utf-16-le')).decode()], capture_output=True, text=True)
