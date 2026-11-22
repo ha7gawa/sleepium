@@ -20,7 +20,7 @@ GROUPS = [
     ('entities_render', r'^(EntityBatch|ItemGpu|QuadGpu|Part|ParallelParticles|ModelPart|PoseStack|EntityCull|EntityLight|BlockEntityCull|Vec3FromRgb)'),
     ('animation', r'^(Geo|Molang|Keyframe|AnimStream)'),
     ('threads', r'^(MainReactor|Reactor|ParallelEntities|ParallelEntityTicks|LabPools|PersistentPools|MailboxBatch|NeoForgeBus|RenderPriority)'),
-    ('network', r'^Net'),
+    ('network', r'^(Net|EarlyAnswers|StallHeartbeat)'),
     ('worldgen', r'^(Worldgen|GenScout|CubicSampler|ParallelWorldgen|StructurePlace|OffThreadEntity)'),
     ('saving', r'^(AsyncChunkSave|ChunkIo|ChunkCache|UnloadRecheck|AllocTrim|PoiColumn|SectionStorage)'),
     ('ticks', r'.'),   # the rest: server ticks, mobs, collisions, redstone, fluids, events
@@ -41,6 +41,8 @@ DESCRIPTIONS = {
     'FrameGarbageMixin': 'The per-frame garbage fixes in one switch: fog colour, frustum and light checks of entities and block entities, item frames, memoized lookups - without allocating every frame.',
     'GeoParallelMixin': 'GeckoLib models rendered on Sleepium\'s render workers (with ParallelEntities): their model and Molang work off the render thread.',
     'GeoPartsMixin': 'GeckoLib bones drawn from GPU memory (with PartBatch): only bone poses are uploaded per frame, not their vertices.',
+    'EarlyAnswers': 'Placing and breaking blocks on a busy server: the server answers right after it handled the action, not one tick later (at 10 ticks a second 160 -> 55 ms; at 20 ticks 14 -> 2 ms). The same packets in the same order; nothing in the world changes.',
+    'StallHeartbeat': 'Players stay connected through a long stall of the server (a huge command, a slow save): while one tick lasts longer than 10 s they are pinged, so their clients do not time out after 30 s. The world is not touched.',
     'NetBulk': 'Large server data sent once by content hash: cached on the client\'s disk, resumed, deltas only, paced to the connection.',
     'NetCoalesce': 'A flush\'s packets sent as one frame of a per-connection compressed stream (clients with Sleepium only): 45-52 % fewer bytes on movement traffic.',
     'OffThreadEntity': 'Entities that a mod adds to the world from another thread (a mob spawn handler during world generation) go where they belong: into the chunk being generated, or onto the server thread. Mods that add entities the normal way are not affected.',

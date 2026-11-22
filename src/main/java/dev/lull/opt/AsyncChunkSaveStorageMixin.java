@@ -46,6 +46,8 @@ public abstract class AsyncChunkSaveStorageMixin implements AsyncChunkSave.Stora
     private void sleep$close(CallbackInfo ci) {
         AsyncChunkSave.drain();
         System.out.println("[sleep/opt] " + AsyncChunkSave.report());
+        if (dev.lull.optsupport.EagerSaveScan.walks.get() > 0) System.out.println("[sleep/opt] " + dev.lull.optsupport.EagerSaveScan.report());
+        if (dev.lull.optsupport.ParallelBeSave.forks.get() > 0) System.out.println("[sleep/opt] " + dev.lull.optsupport.ParallelBeSave.report());
         if (dev.lull.optsupport.SaveStats.ON) System.out.println("[sleep/opt] " + dev.lull.optsupport.SaveStats.report());
         if (dev.lull.optsupport.SavePalettes.ON) dev.lull.optsupport.SavePalettes.clear();   // the next server's holders are other objects
     }

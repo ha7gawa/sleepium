@@ -199,6 +199,7 @@ public final class ClientAuto {
         if (DrawStats.ON) DrawStats.start();
         dev.lull.optsupport.RenderCache.timeReset();
         if (SERVER_PROBE) command(Minecraft.getInstance(), "sleep run 30 " + LABEL + "-srv");
+        if (SERVER != null && ServeFeel.ON) ServeFeel.start(Minecraft.getInstance());   // what a player feels of the server (notes/92)
         if (SERVER != null && !"false".equals(System.getProperty("sleep.clientAuto.netBench"))) command(Minecraft.getInstance(), "sleep net " + (STEADY ? Integer.getInteger("sleep.clientAuto.steadySeconds", 30) : 40) + " " + LABEL);
         if (JFR != null) {
             try {
@@ -251,6 +252,7 @@ public final class ClientAuto {
         }
         if (STEADY) {
             if (dev.lull.optsupport.LightTiming.ON) dev.lull.optsupport.LightTiming.reset();
+            if (LightProbe.ON) LightProbe.reset();   // a flight's light (notes/84): the window's own numbers
             ClientMeter.start(Integer.getInteger("sleep.clientAuto.steadySeconds", 30), LABEL);   // stationary: rendering only, no loading in the window
             flipStart();
             enter(Phase.FINISH);
@@ -493,7 +495,8 @@ public final class ClientAuto {
      * camera turns every frame too. Chunks load at the circle's far side, entities pass through the view.
      */
     private static final double[] ORBIT = parseOrbit(System.getProperty("sleep.clientAuto.orbit"));
-    private static int orbitTicks = -1;
+    private static int orbitTicks = -1, orbitCorrections;
+    private static double orbitLastX, orbitLastY, orbitLastZ, orbitOffX, orbitOffY, orbitOffZ, orbitPlanX, orbitPlanY, orbitPlanZ;
 
     private static double[] parseOrbit(String v) {
         if (v == null) return null;
@@ -524,7 +527,21 @@ public final class ClientAuto {
         // straight along +x on top of the circle - flying into new terrain)
         double yy = ORBIT[1] + (ORBIT[6] > 0 ? ORBIT[5] * Math.sin(2 * Math.PI * orbitTicks / (ORBIT[6] * 20.0)) : 0);
         double drift = ORBIT[7] * orbitTicks / 20.0;
-        mc.player.setPos(ORBIT[0] + drift + ORBIT[3] * Math.cos(a), yy, ORBIT[2] + ORBIT[3] * Math.sin(a));
+        // a server's correction (a teleport back) is obeyed as a player's flight would be: the path goes on from where
+        // the server put the player (ServeFeel counts them; without this every later position stays rejected)
+        if (ServeFeel.ON && ServeFeel.corrections() != orbitCorrections) {
+            orbitCorrections = ServeFeel.corrections();
+            orbitOffX = mc.player.getX() - orbitLastX;
+            orbitOffY = mc.player.getY() - orbitLastY;
+            orbitOffZ = mc.player.getZ() - orbitLastZ;
+            orbitPlanX += orbitOffX;
+            orbitPlanY += orbitOffY;
+            orbitPlanZ += orbitOffZ;
+        }
+        orbitLastX = ORBIT[0] + drift + ORBIT[3] * Math.cos(a) + orbitPlanX;
+        orbitLastY = yy + orbitPlanY;
+        orbitLastZ = ORBIT[2] + ORBIT[3] * Math.sin(a) + orbitPlanZ;
+        mc.player.setPos(orbitLastX, orbitLastY, orbitLastZ);
     }
 
     /**
@@ -582,7 +599,7 @@ public final class ClientAuto {
         }
     }
 
-    private static void log(String s) {
+    static void log(String s) {
         SleepMod.LOGGER.info("[sleep/auto] {}", s);
     }
 
@@ -613,8 +630,11 @@ public final class ClientAuto {
         boolean idle = d != null && mc.levelRenderer.hasRenderedAllSections() && d.getToUpload() == 0 && d.getToBatchCount() == 0
                 && (!ALL_CHUNKS || allChunksIn(mc));
         stableTicks = idle ? stableTicks + 1 : 0;
-        if (phase == Phase.TP_WAIT_DONE) {   // the teleport's client side: all chunks received; first idle mesher (before the 2 s of stability)
+        // (only once the client's player is at the target: the old place's chunks counted as received when the check ran
+        // before the teleport reached the client - "received at -1.9 s", 11-21 light runs)
+        if (phase == Phase.TP_WAIT_DONE && mc.player != null && Math.abs(mc.player.getX() - TP[tpIndex][0]) < 64 && Math.abs(mc.player.getZ() - TP[tpIndex][1]) < 64) {   // the teleport's client side: all chunks received; first idle mesher (before the 2 s of stability)
             if (tpClientAllAt < 0 && allChunksIn(mc)) tpClientAllAt = since(tpStart);
+            if (tpClientNearAt < 0 && nearChunksIn(mc, 4)) tpClientNearAt = since(tpStart);
             if (tpIdleAt < 0 && idle) tpIdleAt = since(tpStart);
         }
         return stableTicks >= 40;
@@ -631,6 +651,17 @@ public final class ClientAuto {
     private static boolean allChunksIn(Minecraft mc) {
         if (mc.level == null || mc.player == null) return false;
         int r = Math.max(1, mc.options.getEffectiveRenderDistance() - 1);
+        int cx = mc.player.chunkPosition().x, cz = mc.player.chunkPosition().z;
+        var src = mc.level.getChunkSource();
+        for (int dx = -r; dx <= r; dx++)
+            for (int dz = -r; dz <= r; dz++)
+                if (dx * dx + dz * dz <= r * r && !src.hasChunk(cx + dx, cz + dz)) return false;
+        return true;
+    }
+
+    /** every chunk within r chunks of the player on the client (the ground a player lands on: what LightDirect must not delay, notes/84) */
+    private static boolean nearChunksIn(Minecraft mc, int r) {
+        if (mc.level == null || mc.player == null) return false;
         int cx = mc.player.chunkPosition().x, cz = mc.player.chunkPosition().z;
         var src = mc.level.getChunkSource();
         for (int dx = -r; dx <= r; dx++)
@@ -669,25 +700,38 @@ public final class ClientAuto {
      * client does not have (a missing chunk is a hole in the ground) - summed and the worst second.
      */
     private static final boolean HOLES = Boolean.getBoolean("sleep.clientAuto.holes");
-    static long holeSum, holeSamples;
-    static int holeMax;
+    static long holeSum, holeSamples, holeNear4, holeNear8;
+    static int holeMax, holeNear4Max, holeNear8Max, holeNear4Secs;
 
     private static void holes() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
-        int r = mc.options.getEffectiveRenderDistance() - 1, cx = mc.player.chunkPosition().x, cz = mc.player.chunkPosition().z, n = 0;
+        int r = mc.options.getEffectiveRenderDistance() - 1, cx = mc.player.chunkPosition().x, cz = mc.player.chunkPosition().z, n = 0, n4 = 0, n8 = 0;
         var cs = mc.level.getChunkSource();
         for (int dx = -r; dx <= r; dx++)
-            for (int dz = -r; dz <= r; dz++)
-                if (dx * dx + dz * dz <= r * r && !cs.hasChunk(cx + dx, cz + dz)) n++;
+            for (int dz = -r; dz <= r; dz++) {
+                int d2 = dx * dx + dz * dz;
+                if (d2 <= r * r && !cs.hasChunk(cx + dx, cz + dz)) {
+                    n++;
+                    if (d2 <= 16) n4++;   // the nearest ground (notes/84: does FIFO light delay the player's nearest chunks?)
+                    if (d2 <= 64) n8++;
+                }
+            }
         holeSum += n;
         holeSamples++;
         holeMax = Math.max(holeMax, n);
-        log("holes " + holeSamples + ": " + n);
+        holeNear4 += n4;
+        holeNear8 += n8;
+        holeNear4Max = Math.max(holeNear4Max, n4);
+        holeNear8Max = Math.max(holeNear8Max, n8);
+        if (n4 > 0) holeNear4Secs++;
+        log("holes " + holeSamples + ": " + n + " (r<=8 " + n8 + ", r<=4 " + n4 + ")");
     }
 
     public static String holesReport() {
-        return HOLES ? String.format(java.util.Locale.ROOT, "holes: %.1f a second (worst %d) over %d s", holeSamples == 0 ? 0.0 : (double) holeSum / holeSamples, holeMax, holeSamples) : "";
+        double s = Math.max(1, holeSamples);
+        return HOLES ? String.format(java.util.Locale.ROOT, "holes: %.1f a second (worst %d) over %d s; within 8 chunks %.2f (worst %d); within 4 chunks %.2f (worst %d, %d s with any)",
+                holeSum / s, holeMax, holeSamples, holeNear8 / s, holeNear8Max, holeNear4 / s, holeNear4Max, holeNear4Secs) : "";
     }
 
     private static void tick() {
@@ -719,6 +763,7 @@ public final class ClientAuto {
         }
         shotsTick(Minecraft.getInstance());
         orbitTick(Minecraft.getInstance());
+        if (ServeFeel.ON && dev.lull.ClientMeter.measuring()) ServeFeel.tick(Minecraft.getInstance());
         if (BURST != null && !burstAsked && shotsBase >= 0 && ticks >= shotsBase + (int) Math.round(Double.parseDouble(BURST.split(":")[0]) * 20)) {
             burstAsked = true;
             Minecraft bm = Minecraft.getInstance();
@@ -917,7 +962,7 @@ public final class ClientAuto {
                 // the integrated server's side: when every chunk within the render distance of the target is FULL there
                 // (asked on the server thread every 10 ticks; the time is when the asking tick ran) - generation vs meshing
                 var srv = mc.getSingleplayerServer();
-                if (srv != null && tpServerFullAt < 0 && ticks % 10 == 0) {
+                if (srv != null && (tpServerFullAt < 0 || LightProbe.ON && tpServerLightAt < 0) && ticks % 10 == 0) {
                     int[] tp = TP[tpIndex];
                     int r = mc.options.getEffectiveRenderDistance();
                     double t = since(tpStart);
@@ -932,15 +977,19 @@ public final class ClientAuto {
                                     if (cs.getChunkNow((tp[0] >> 4) + dx, (tp[1] >> 4) + dz) != null) n++;
                                 }
                         if (n == want && tpServerFullAt < 0) tpServerFullAt = t;
+                        // -Dlab.light.probe: and when the light actor has nothing left (the light of those chunks done, sendable)
+                        if (n == want && LightProbe.ON && tpServerLightAt < 0 && !cs.getLightEngine().hasLightWork()
+                                && cs.getLightEngine() instanceof LightProbe.Engine e && e.sleep$pendingTasks() == 0) tpServerLightAt = t;
                     });
                 }
                 if (meshedStable(mc) || since(phaseStart) > 60) {
                     int[] p = TP[tpIndex];
                     log(String.format(Locale.ROOT, "teleport %d to (%d, %d): terrain generated + meshed in %.1f s (%s)%s", tpIndex + 1, p[0], p[1],
                             since(tpStart) - 2.0, sectionStats(mc), since(phaseStart) > 60 ? " TIMEOUT" : "")
-                            + String.format(Locale.ROOT, "; server: all chunks in the render distance FULL at %.1f s; client: all chunks received at %.1f s, meshing idle at %.1f s",
-                                    tpServerFullAt - 2.0, tpClientAllAt - 2.0, tpIdleAt - 2.0));
-                    tpIndex++;
+                            + String.format(Locale.ROOT, "; server: all chunks in the render distance FULL at %.1f s; client: all chunks received at %.1f s, meshing idle at %.1f s; near (r 4) chunks received at %.1f s",
+                                    tpServerFullAt - 2.0, tpClientAllAt - 2.0, tpIdleAt - 2.0, tpClientNearAt - 2.0)
+                            + (LightProbe.ON ? String.format(Locale.ROOT, "; server light idle at %.1f s%n%s", tpServerLightAt - 2.0, LightProbe.report(1)) : ""));
+                    if (LightProbe.ON) LightProbe.reset();                    tpIndex++;
                     if (tpIndex < TP.length) enter(Phase.RECORD);
                     else enter(Phase.FINISH);
                 }
@@ -955,6 +1004,7 @@ public final class ClientAuto {
                     log(dev.lull.optsupport.ClientCounters.report());
                     if (dev.lull.optsupport.sleep.EntitySleep.CLIENT_ON) log("client " + dev.lull.optsupport.sleep.EntitySleep.report());   // the render thread: the client's side
                     if (dev.lull.optsupport.LightTiming.ON) log(dev.lull.optsupport.LightTiming.report());
+                    if (LightProbe.ON && STEADY) log("light probe over the window:%n".formatted() + LightProbe.report(1));
                     if (dev.lull.optsupport.LightScout.ON) log(dev.lull.optsupport.LightScout.report());
                     if (dev.lull.optsupport.LightRecipe.VERIFY) log(dev.lull.optsupport.LightRecipe.report());
                     if (Boolean.getBoolean("lab.shaderlight.diag")) log(dev.lull.optsupport.LightVolumes.diagReport());
@@ -964,6 +1014,10 @@ public final class ClientAuto {
                     for (java.util.function.Function<String, String> r : REPORTS) {   // other mods' reports (the label of the run given)
                         String x = r.apply(LABEL);
                         if (x != null) log(x);
+                    }
+                    if (ServeFeel.ON) {   // what a player felt of the server (notes/92)
+                        String sf = ServeFeel.report(LABEL);
+                        if (sf != null) log(sf);
                     }
                     log("thread census:\n" + census());
                     enter(Phase.DONE);
@@ -984,13 +1038,16 @@ public final class ClientAuto {
     }
 
     private static long tpStart;
-    private static volatile double tpServerFullAt = -1;
-    private static double tpClientAllAt = -1, tpIdleAt = -1;
+    private static volatile double tpServerFullAt = -1, tpServerLightAt = -1;
+    private static double tpClientAllAt = -1, tpIdleAt = -1, tpClientNearAt = -1;
 
     private static void enter2Done() {
         tpStart = phaseStart;   // measured from the teleport command
         tpServerFullAt = -1;
+        tpServerLightAt = -1;
+        if (LightProbe.ON) LightProbe.reset();
         tpClientAllAt = -1;
+        tpClientNearAt = -1;
         tpIdleAt = -1;
         phase = Phase.TP_WAIT_DONE;
         stableTicks = 0;

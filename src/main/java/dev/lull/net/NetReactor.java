@@ -29,7 +29,19 @@ import net.minecraft.network.protocol.Packet;
  */
 public final class NetReactor {
     public static final boolean ENABLED = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor");
-    public static final int MAX_BATCH = Integer.getInteger("lab.net.maxBatch", 256);
+    /** (not final: a lab A/B switches it at run time - /sleep bots ab maxbatch) */
+    public static int MAX_BATCH = Integer.getInteger("lab.net.maxBatch", 256);
+
+    /**
+     * -Dlab.opt.NetFlushLater=true (lab, 11-22, notes/91): inside the server tick a batch is not handed to netty at 256
+     * packets nor at its connection's tick - all of them at the tick's end, as vanilla's suspended flushing does (vanilla
+     * writes during the tick and flushes at "send chunks") - and the hand-over itself (one netty task per connection:
+     * an event loop wake-up, ~25-40 us each on Windows) runs on a server pool thread, not the server thread. Same packets
+     * in the same order per connection; only the moment the drains are scheduled moves (the tick's end, a pool thread).
+     * Flushes outside the tick, before a protocol switch, a disconnect and sends from other threads are as before.
+     */
+    public static volatile boolean flushLater = Boolean.getBoolean("lab.opt.NetFlushLater");
+    public static final LongAdder HANDOFFS = new LongAdder();
     public static final LongAdder BATCHED = new LongAdder(), OTHER_THREAD = new LongAdder(), DRAINS = new LongAdder(), EARLY = new LongAdder();
 
     /** a batched packet with a send listener (rare: most sends have none) */
@@ -39,6 +51,13 @@ public final class NetReactor {
     public interface Batched {
         /** schedule the pending batch, if any (any thread) */
         void sleep$flush();
+
+        /** TrackDeliver: a send exactly as the server thread makes it inside the tick (Connection.send, then the batch); any
+         * thread, one per connection at a time. True: its first packet since the last flush (the caller marks it dirty) */
+        boolean sleep$sendAsServer(net.minecraft.network.protocol.Packet<?> packet, net.minecraft.network.PacketSendListener listener, boolean flush);
+
+        /** TrackDeliver's verify: the batch's last n packets, null when it holds fewer */
+        Object[] sleep$batchTail(int n);
     }
 
     private static volatile Thread serverThread;
@@ -71,6 +90,15 @@ public final class NetReactor {
 
     /** server thread, a flush point: every pending batch goes to netty */
     public static void flushAll() {
+        if (flushLater && DIRTY.size() > 1) {   // the wake-ups on a pool thread (dev.lull.optsupport.ServerReactor)
+            Batched[] all = DIRTY.toArray(new Batched[0]);
+            DIRTY.clear();
+            HANDOFFS.increment();
+            dev.lull.optsupport.ServerReactor.pool().execute(() -> {
+                for (Batched b : all) b.sleep$flush();
+            });
+            return;
+        }
         for (int i = 0; i < DIRTY.size(); i++) DIRTY.get(i).sleep$flush();
         DIRTY.clear();
     }

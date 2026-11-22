@@ -25,11 +25,14 @@ public final class SleepMixinPlugin implements IMixinConfigPlugin {
         if (simple.startsWith("FrameHash")) return Boolean.getBoolean("sleep.clientAuto.framehash");
         if (simple.startsWith("DrawStats")) return Boolean.getBoolean("sleep.drawStats");
         if (simple.startsWith("NetStats")) return Boolean.getBoolean("sleep.net.stats");
+        if (simple.startsWith("ServeMeter")) return Boolean.getBoolean("sleep.serveMeter");
+        if (simple.startsWith("ServeFeel")) return Boolean.getBoolean("sleep.serveFeel");
         if (simple.startsWith("GenTrace") || simple.equals("DataLayerMapAccessor")) return Boolean.getBoolean("lab.pgen.trace");
         // genbench's phase profile (11-21): measurement only, now off unless asked - its @WrapMethod hooks built an
         // Operation object on every call even with the profile idle (NoiseChunk.selectCellYZ ~300 k calls a 1024-chunk
         // area: 9.3 % of the generation workers' allocation in JFR) - in every player's game since they were added
         if (simple.startsWith("GenProfile")) return Boolean.getBoolean("sleep.genProfile");
+        if (simple.startsWith("LightProbe")) return Boolean.getBoolean("lab.light.probe") || Boolean.getBoolean("lab.light.fixcheck");   // measurement only (notes/84)
         if (simple.startsWith("IoScout")) return Boolean.getBoolean("sleep.ioScout");
         if (simple.startsWith("GlTrace")) return Boolean.getBoolean("sleep.glTrace");
         if (simple.startsWith("MobQuiet")) return Boolean.getBoolean("sleep.mobQuiet");

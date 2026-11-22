@@ -53,6 +53,10 @@ import org.objectweb.asm.MethodVisitor;
  * proved zero over the cell's box (WorldgenSkip's CellProof.ZeroOver) is the constant +0.0 its compute would return.
  * -Dlab.dfc.verify: every compiled cell / column is compared bit for bit with vanilla's fillArray on the same
  * NoiseChunk.
+ *
+ * <p>-Dlab.dfc.batch (lab): in corner trees a Noise node with a NormalNoise (BNOISE) and a BlendedNoise (BBLEND) are
+ * NoiseBatch objects made by the generated constructor from the node objects (so plans and extractors are unchanged):
+ * their values for a block of the column are computed octave by octave (see NoiseBatch).
  */
 public final class Dfc {
     private Dfc() {}
@@ -125,7 +129,7 @@ public final class Dfc {
     // ---------------------------------------------------------------- IR
 
     private static final int CONST = 0, YGRAD = 1, NOISE = 2, SHIFTED = 3, AP2 = 4, MULADD = 5, MAPPED = 6, CLAMP = 7, RANGE = 8,
-            TRANSFORM = 9, INTERP = 10, ONCE = 11, LEAF = 12, BEARD = 13;
+            TRANSFORM = 9, INTERP = 10, ONCE = 11, LEAF = 12, BEARD = 13, BNOISE = 14, BBLEND = 15;
 
     private static final class N {
         final int kind;
@@ -136,6 +140,7 @@ public final class Dfc {
         int once = -1;     // ONCE id
         int size;          // nodes in the subtree (ONCE counts 1)
         int method = -1;   // outlined into this method
+        int batch = -1;    // BNOISE / BBLEND: its NoiseBatch field
 
         N(int kind) {
             this.kind = kind;
@@ -199,6 +204,10 @@ public final class Dfc {
         final List<N> onces = new ArrayList<>();
         int[] islots;
         final List<Integer> beards = new ArrayList<>();
+        /** corners: NoiseBatch nodes, the column's points (count, cell height, top block y) */
+        final List<N> batches = new ArrayList<>();
+        int count, step, yTop;
+        boolean batch;
         final Walk w = this;
         String why;
         Ex cur;
@@ -298,6 +307,16 @@ public final class Dfc {
                     n.p = new double[] {(double) (Integer) get(o, "fromY"), (double) (Integer) get(o, "toY"), d(o, "fromValue"), d(o, "toValue")};
                 }
                 case "DensityFunctions$Noise" -> {
+                    if (!cell && batch && NoiseBatch.Normal.usable(((DensityFunction.NoiseHolder) get(o, "noise")).noise(), count)) {
+                        // corners: the noise for a block of the column at once, octave by octave (NoiseBatch)
+                        n = new N(BNOISE);
+                        n.slot = viaSlot(o, "noise", NH);
+                        n.p = new double[] {d(o, "xzScale"), d(o, "yScale")};
+                        n.batch = batches.size();
+                        batches.add(n);
+                        n.size = 1;
+                        return n;
+                    }
                     n = new N(NOISE);
                     n.slot = viaSlot(o, "noise", NH);
                     n.p = new double[] {d(o, "xzScale"), d(o, "yScale")};
@@ -404,8 +423,19 @@ public final class Dfc {
                     }
                     return l;
                 }
+                case "synth.BlendedNoise" -> {
+                    N l = leaf(o);
+                    if (!cell && batch && NoiseBatch.Blended.usable(o, count)) {
+                        l = new N(BBLEND);
+                        l.slot = w.slotOf.get(o);
+                        l.batch = batches.size();
+                        batches.add(l);
+                        l.size = 1;
+                    }
+                    return l;
+                }
                 case "NoiseChunk$FlatCache", "NoiseChunk$BlendAlpha", "NoiseChunk$BlendOffset", "DensityFunctions$Spline", "DensityFunctions$Shift",
-                     "DensityFunctions$ShiftA", "DensityFunctions$ShiftB", "synth.BlendedNoise",
+                     "DensityFunctions$ShiftA", "DensityFunctions$ShiftB",
                      "DensityFunctions$EndIslandDensityFunction", "dev.lull.optsupport.ColumnMemo$Memo" -> {
                     // vanilla's fillArray for these is fillAllDirectly: compute per point
                     return leaf(o);
@@ -429,6 +459,7 @@ public final class Dfc {
     private static final String DF = "net/minecraft/world/level/levelgen/DensityFunction";
     private static final String FC = "net/minecraft/world/level/levelgen/DensityFunction$FunctionContext";
     private static final String MTH = "net/minecraft/util/Mth";
+    private static final String NBN = "dev/lull/optsupport/NoiseBatch$Normal", NBB = "dev/lull/optsupport/NoiseBatch$Blended";
     private static final String CODE = "dev/lull/optsupport/Dfc$Code";
     private static final String EVAL = "(L" + NC + ";IIIDDD)D";
 
@@ -583,16 +614,20 @@ public final class Dfc {
 
     /** compiled corner columns for these interpolators (in order), or null (vanilla) */
     public static Code corners(MethodHandles.Lookup lookup, Object state, List<?> interpolators, int cellHeight, int cellNoiseMinY, int cellCountY,
-                               Object beardifier) {
+                               Object beardifier, boolean batch) {
         if (!CORNERS) return null;
         try {
-            String kind = "K" + cellHeight + "_" + cellNoiseMinY + "_" + cellCountY + "_" + interpolators.size()
+            String kind = (batch ? "B" : "") + "K" + cellHeight + "_" + cellNoiseMinY + "_" + cellCountY + "_" + interpolators.size()
                     + (beardifier == null ? "" : beardifier.getClass().getName());
             Object[] rootObjs = interpolators.toArray();
             Code fast = fromPlan(plan(state, kind), rootObjs);
             if (fast != null) return fast;
             SLOW.incrementAndGet();
             Walk w = new Walk(false);
+            w.count = cellCountY + 1;
+            w.batch = batch;
+            w.step = cellHeight;
+            w.yTop = (cellCountY + cellNoiseMinY) * cellHeight;
             List<N> roots = new ArrayList<>();
             List<Ex> exs = new ArrayList<>();
             int[] islots = new int[interpolators.size()];
@@ -613,7 +648,7 @@ public final class Dfc {
                 }
                 roots.add(r);
             }
-            StringBuilder head = new StringBuilder("K" + cellHeight + "_" + cellNoiseMinY + "_" + cellCountY + ":");
+            StringBuilder head = new StringBuilder((batch ? "B" : "") + "K" + cellHeight + "_" + cellNoiseMinY + "_" + cellCountY + ":");
             for (int s : islots) head.append(s).append(',');
             StringBuilder sig = new StringBuilder();
             for (Ex e : exs) e.sig(sig);
@@ -676,6 +711,7 @@ public final class Dfc {
             }
             cw.visitField(ACC_PRIVATE, "stamp", "I", null, null).visitEnd();
             for (int b : w.beards) cw.visitField(ACC_PRIVATE, "zb" + b, "Z", null, null).visitEnd();
+            for (N b : w.batches) cw.visitField(ACC_PRIVATE | ACC_FINAL, "b" + b.batch, "L" + (b.kind == BNOISE ? NBN : NBB) + ";", null, null).visitEnd();
             // constructor
             MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "<init>", "([Ljava/lang/Object;)V", null, null);
             mv.visitCode();
@@ -688,6 +724,26 @@ public final class Dfc {
                 mv.visitInsn(AALOAD);
                 mv.visitTypeInsn(CHECKCAST, w.slotTypes.get(i));
                 mv.visitFieldInsn(PUTFIELD, name, "f" + i, "L" + w.slotTypes.get(i) + ";");
+            }
+            for (N b : w.batches) {   // b<k> = new NoiseBatch.Normal(holder.noise(), xzScale, yScale, step, yTop) / new NoiseBatch.Blended(noise, step, yTop)
+                String t = b.kind == BNOISE ? NBN : NBB;
+                mv.visitVarInsn(ALOAD, 0);
+                mv.visitTypeInsn(NEW, t);
+                mv.visitInsn(DUP);
+                slotRef(mv, b.slot);
+                if (b.kind == BNOISE) {
+                    mv.visitTypeInsn(CHECKCAST, NH);
+                    mv.visitMethodInsn(INVOKEVIRTUAL, NH, "noise", "()Lnet/minecraft/world/level/levelgen/synth/NormalNoise;", false);
+                    mv.visitLdcInsn(b.p[0]);
+                    mv.visitLdcInsn(b.p[1]);
+                } else {
+                    mv.visitTypeInsn(CHECKCAST, "net/minecraft/world/level/levelgen/synth/BlendedNoise");
+                }
+                push(mv, w.step);
+                push(mv, w.yTop);
+                mv.visitMethodInsn(INVOKESPECIAL, t, "<init>", b.kind == BNOISE ? "(Lnet/minecraft/world/level/levelgen/synth/NormalNoise;DDII)V"
+                        : "(Lnet/minecraft/world/level/levelgen/synth/BlendedNoise;II)V", false);
+                mv.visitFieldInsn(PUTFIELD, name, "b" + b.batch, "L" + t + ";");
             }
             mv.visitInsn(RETURN);
             mv.visitMaxs(0, 0);
@@ -1001,6 +1057,15 @@ public final class Dfc {
                             mv.visitFieldInsn(GETFIELD, NI, f, "D");
                         }
                         mv.visitMethodInsn(INVOKESTATIC, MTH, "lerp3", "(DDDDDDDDDDD)D", false);
+                    }
+                    case BNOISE, BBLEND -> {
+                        String t = n.kind == BNOISE ? NBN : NBB;
+                        mv.visitVarInsn(ALOAD, 0);
+                        mv.visitFieldInsn(GETFIELD, name, "b" + n.batch, "L" + t + ";");
+                        mv.visitVarInsn(ILOAD, 2);
+                        mv.visitVarInsn(ILOAD, 3);
+                        mv.visitVarInsn(ILOAD, 4);
+                        mv.visitMethodInsn(INVOKEVIRTUAL, t, "at", "(III)D", false);
                     }
                     case BEARD -> {
                         Label call = new Label(), end = new Label();

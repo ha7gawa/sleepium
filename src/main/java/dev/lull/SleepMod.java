@@ -32,6 +32,11 @@ public final class SleepMod {
                 gameBus.getClass().getModule(), gameBus.getClass().getClassLoader(),
                 net.minecraft.server.MinecraftServer.class.getClassLoader());
         if (Boolean.getBoolean("lab.opt.HeapReturn")) LOGGER.info("sleep: {}", dev.lull.optsupport.HeapReturn.apply());   // memory back to the OS after bursts
+        if (dev.lull.optsupport.PipeScout.ON) dev.lull.optsupport.PipeScout.register();   // measurement only: per-player tick work with /sleep bots measure
+        if (Boolean.getBoolean("lab.opt.TrackFast")) dev.lull.optsupport.TrackFast.register();   // A/B switch and counters with /sleep bots
+        if (Boolean.getBoolean("lab.opt.ChunkSendPar")) dev.lull.optsupport.ChunkSendPar.register();   // A/B switch and counters with /sleep bots
+        if (dev.lull.optsupport.TrackIndex.ON) dev.lull.optsupport.TrackIndex.register();   // A/B switch and counters with /sleep bots
+        if (dev.lull.optsupport.TrackDeliver.ON) dev.lull.optsupport.TrackDeliver.register();   // A/B switch and counters with /sleep bots
         // classes the game loads only while played, learned and preloaded in the background (lab.opt.ClassPreload)
         gameBus.addListener(net.neoforged.neoforge.event.server.ServerAboutToStartEvent.class, e -> dev.lull.optsupport.ClassPreload.preload());
         gameBus.addListener(net.neoforged.neoforge.event.server.ServerStartedEvent.class, e -> dev.lull.optsupport.ClassPreload.started());
@@ -42,6 +47,25 @@ public final class SleepMod {
         dev.lull.optsupport.DuplicateJars.find();   // two Sleepium jars in mods: said in the log (and in the chat on the client)
         gameBus.addListener(SleepCommand::register);
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Pre.class, e -> NetBench.onTickStart());
+        if (ServeMeter.ON) {   // what a slow tick does to the players (notes/92): measurement only
+            gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Pre.class, e -> ServeMeter.tickStart());
+            gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> ServeMeter.tickEnd(e.getServer()));
+        }
+        if (ChunkTimeline.ON) dev.lull.bots.BotLoad.WINDOWS.add(new dev.lull.bots.BotLoad.Window() {   // with bots' measure windows too
+            public void start() {
+                ChunkTimeline.start();
+            }
+
+            public String end(long ticks) {
+                return ChunkTimeline.report() + " | " + ServeMeter.chunkCensus();
+            }
+        });
+        if (dev.lull.optsupport.ChunkOrder.ON)   // where the players are heading, for the chunk queues (notes/93)
+            gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.optsupport.ChunkOrder.update(e.getServer()));
+        if (ServeMeter.ON || ServeMeter.SLOW_TICK > 0)   // the test load: a slow overworld tick, /sleep stall
+            gameBus.addListener(net.neoforged.neoforge.event.tick.LevelTickEvent.Post.class, e -> {
+                if (e.getLevel() instanceof net.minecraft.server.level.ServerLevel l && l.dimension() == net.minecraft.world.level.Level.OVERWORLD) ServeMeter.levelTick(l);
+            });
         modBus.addListener(net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent.class, dev.lull.net.BulkPayloads::register);
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.net.Bulk.pump(e.getServer()));
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.api.Travel.tick());

@@ -16,6 +16,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument('--jar', required=True)
 ap.add_argument('--mods', required=True)
 ap.add_argument('--ns', default='')
+ap.add_argument('--perf', action='store_true', help='after the windows: /perf start (10 s); the tick tree from its profiling.txt printed in ms per tick')
 ap.add_argument('--per', type=int, default=512, help='block entities a chunk (a multiple of 256)')
 ap.add_argument('--warm', type=int, default=30)
 ap.add_argument('--secs', type=int, default=40)
@@ -38,7 +39,7 @@ PROPS = os.path.join(D, 'server.properties')
 FLAT = ('{"layers":[{"block":"minecraft:bedrock","height":1},{"block":"minecraft:dirt","height":2},'
         '{"block":"minecraft:grass_block","height":1}],"biome":"minecraft:plains","structure_overrides":[],"lakes":false,"features":false}')
 props = {'online-mode': 'false', 'level-type': 'minecraft\\:flat', 'level-seed': '20260924', 'view-distance': '6',
-         'level-name': 'bedense-world', 'simulation-distance': '6', 'server-port': '25604', 'spawn-protection': '0',
+         'level-name': 'bedense-world', 'simulation-distance': '6', 'server-port': os.environ.get('MC_PORT', '25604'), 'spawn-protection': '0',
          'max-tick-time': '-1', 'generator-settings': FLAT}
 AVG = re.compile(r'Average time per tick: ([\d.,]+) ?ms')
 PCT = re.compile(r'P50: ([\d.,]+) ?ms,? P95: ([\d.,]+) ?ms,? P99: ([\d.,]+) ?ms')
@@ -160,6 +161,30 @@ try:
                     wins.append((v, v, v, v))
         cmd('tick query')
         time.sleep(1)
+        if a.perf:   # vanilla's profiler over 10 s of this factory: which phase holds the tick (1.3.4 server-tick graph)
+            import glob, zipfile
+            before = set(glob.glob(os.path.join(D, 'debug', 'profiling', '*.zip')))
+            n0 = len(lines)
+            cmd('perf start')
+            t0 = time.time()
+            while time.time() - t0 < 60 and not any('Created debug report' in l for l in lines[n0:]):
+                time.sleep(1)
+            after = sorted(set(glob.glob(os.path.join(D, 'debug', 'profiling', '*.zip'))) - before)
+            if after:
+                z = zipfile.ZipFile(after[-1])
+                txt = z.read([n for n in z.namelist() if n.endswith('profiling.txt')][0]).decode('utf-8', 'replace')
+                span = int(re.search(r'Time span: (\d+) ms', txt).group(1)); ticks = int(re.search(r'Tick span: (\d+) ticks', txt).group(1))
+                rows = []
+                stack = []
+                for l in txt.splitlines():
+                    mm = re.match(r'^\[(\d+)\]\s*[| ]*(\S.*?)\((\d+)/(\d+)\)\s*-\s*([\d.]+)%/([\d.]+)%', l)
+                    if mm:
+                        d = int(mm.group(1)); stack = stack[:d] + [mm.group(2).strip()]
+                        if d <= 6: rows.append((float(mm.group(6)), '/'.join(stack)))
+                rows.sort(reverse=True)
+                print('perf %s: %d ticks in %d ms' % (a.label or 'run', ticks, span))
+                for pct, path in rows[:16]:
+                    print('  %6.2f ms/tick  %5.1f%%  %s' % (pct / 100 * span / ticks, pct, path.replace('ServerLevel[world] ', '')))
         cmd('stop')
         try:
             p.wait(timeout=600)

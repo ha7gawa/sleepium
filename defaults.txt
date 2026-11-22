@@ -97,6 +97,11 @@
 -Dlab.opt.NeighborReactMixin=true
 -Dlab.opt.NeighborReactStateMixin=true
 -Dlab.opt.NeoForgeBusMixin=true
+# the decoupled server's exact parts (notes/92): a block action answered at the hand-over after its handler instead of
+# one tick later (100 ms ticks: 160 -> 55 ms; 20 tps: 14 -> 2 ms; no client flashes, Create / Mekanism checked), players
+# pinged from a timer through a stall of the server thread longer than 10 s (a 35 s stall no longer times them out)
+-Dlab.opt.EarlyAnswers=true
+-Dlab.opt.StallHeartbeat=true
 -Dlab.opt.NetBulk=true
 -Dlab.opt.NetCoalesce=true
 -Dlab.opt.NetLagMixin=true
@@ -168,6 +173,9 @@
 -Dlab.opt.TickMemoMixin=true
 -Dlab.opt.AmbientChunksMixin=true
 -Dlab.opt.TickSchedulerMixin=true
+# the tracker's per-pair check with the distance first (1.3.5, notes/91): ChunkMap.move visits every tracked entity
+# for every movement packet - 100 players in real terrain 30-36 -> ~10 ms a tick of the server thread; same decisions
+-Dlab.opt.TrackFast=true
 -Dlab.opt.UniformDedupeMixin=true
 -Dlab.opt.UtilMemoizeMixin=true
 -Dlab.opt.Vec3FromRgbMixin=true
@@ -205,6 +213,12 @@
 -Dlab.opt.LightSnapshotMixin=true
 -Dlab.opt.AllocTrim=true
 -Dlab.opt.ChunkIo=true
+# region files written through to the drive (vanilla's DSYNC, contiguous records in one write) instead of two
+# FlushFileBuffers per batch: vanilla's durability and world size; world NVMe 42 -> 11 % busy while generating (notes/87)
+-Dlab.chunkio.writeThrough=true
+# early proto chunks (before carvers: regenerated identically from the seed) held as their region records in a small
+# ring instead of written and re-written at the generation edge: -42 % chunk records, Pi stick 19 -> 14 % busy (notes/85, 87)
+-Dlab.opt.StoredRingMixin=true
 -Dlab.opt.FireCheckLoopMixin=true
 -Dlab.opt.FluidScanDryMixin=true
 -Dlab.opt.GpuAnim=true
@@ -270,3 +284,13 @@
 -Dlab.opt.DfcNoiseChunkMixin=true
 -Dlab.chunkmd.uboWindows=auto
 -Dlab.gpu.framesInFlight.atSwap=true
+# 1.3.5: light of new chunks without the sorter round trips (LightDirect, LightLanes order, its own thread; notes/84)
+-Dlab.opt.LightDirect=true
+-Dlab.light.ownThread=true
+# 1.3.5: density-function corner noise octave by octave down a column block, vectorised (NoiseBatch; notes/83, 84)
+-Dlab.dfc.batch=true
+-Dlab.opt.EagerSaveScan=true
+-Dlab.opt.SavedDataNameMixin=true
+# 1.3.5 (the user 11-22): villagers' job-site rival check by a count, standing mobs' moves remembered (exact)
+-Dlab.opt.JobSiteIndex=true
+-Dlab.opt.MoveMemo=true
