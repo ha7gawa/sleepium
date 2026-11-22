@@ -1,6 +1,7 @@
 -Dlab.opt.AmbientParticleSkipMixin=true
 -Dlab.opt.AsyncChunkSaveMixin=true
 -Dlab.opt.AsyncChunkSaveStorageMixin=true
+-Dlab.asyncsave.listeners=true
 -Dlab.opt.BlockCollisionMemoMixin=true
 -Dlab.opt.BlockCollisionsFastMixin=true
 -Dlab.opt.BlockEntityCullNoAllocMixin=true
@@ -275,3 +276,4 @@
 -Dlab.opt.DfcNoiseChunkMixin=true
 -Dlab.chunkmd.uboWindows=auto
 -Dlab.gpu.framesInFlight.atSwap=true
+-Dlab.opt.SavedDataNameMixin=true

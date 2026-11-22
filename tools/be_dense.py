@@ -39,7 +39,7 @@ PROPS = os.path.join(D, 'server.properties')
 FLAT = ('{"layers":[{"block":"minecraft:bedrock","height":1},{"block":"minecraft:dirt","height":2},'
         '{"block":"minecraft:grass_block","height":1}],"biome":"minecraft:plains","structure_overrides":[],"lakes":false,"features":false}')
 props = {'online-mode': 'false', 'level-type': 'minecraft\\:flat', 'level-seed': '20260924', 'view-distance': '6',
-         'level-name': 'bedense-world', 'simulation-distance': '6', 'server-port': '25604', 'spawn-protection': '0',
+         'level-name': 'bedense-world', 'simulation-distance': '6', 'server-port': os.environ.get('MC_PORT', '25604'), 'spawn-protection': '0',
          'max-tick-time': '-1', 'generator-settings': FLAT}
 AVG = re.compile(r'Average time per tick: ([\d.,]+) ?ms')
 PCT = re.compile(r'P50: ([\d.,]+) ?ms,? P95: ([\d.,]+) ?ms,? P99: ([\d.,]+) ?ms')
