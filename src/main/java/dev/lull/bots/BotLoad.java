@@ -88,7 +88,8 @@ import org.slf4j.Logger;
  * Flags: {@code -Dsleep.bots.encrypt=false} (offline-mode server: no AES), {@code -Dsleep.bots.modded=true} (bots
  * negotiate every mod channel, as a client with the same mods; default a vanilla client), {@code
  * -Dsleep.bots.chunkRate=25} (the chunks a tick the bot asks for in its batch acknowledgement; a real client measures
- * its own: 7 ms / its time a chunk), {@code -Dsleep.bots.view=32} (requested view distance, the server clamps it).
+ * its own: 7 ms / its time a chunk; the dev client on the host asked 24-39), {@code -Dsleep.bots.view=32} (requested view
+ * distance, the server clamps it), {@code -Dsleep.bots.y=200} (flight height; a normal world's hills otherwise stop them).
  */
 @EventBusSubscriber(modid = "sleepium")
 public final class BotLoad {
@@ -97,6 +98,8 @@ public final class BotLoad {
     private static final boolean MODDED = Boolean.getBoolean("sleep.bots.modded");
     private static final float CHUNK_RATE = Float.parseFloat(System.getProperty("sleep.bots.chunkRate", "25"));
     private static final int VIEW = Integer.getInteger("sleep.bots.view", 32);
+    /** -Dsleep.bots.y=200: the height the bots fly at (default 4 above the centre's surface; real terrain: above its hills) */
+    private static final Integer FLY_Y = Integer.getInteger("sleep.bots.y");
     private static final Logger LOGGER = LogUtils.getLogger();
 
     static final LongAdder CHUNKS = new LongAdder(), BATCHES = new LongAdder(), TELEPORTS = new LongAdder(), MOVES = new LongAdder(),
@@ -301,7 +304,7 @@ public final class BotLoad {
             var spawn = level.getSharedSpawnPos();
             cx = x != null ? x : spawn.getX() + 0.5;
             cz = z != null ? z : spawn.getZ() + 0.5;
-            cy = level.getHeight(Heightmap.Types.MOTION_BLOCKING, (int) Math.floor(cx), (int) Math.floor(cz)) + 4;
+            cy = FLY_Y != null ? FLY_Y : level.getHeight(Heightmap.Types.MOTION_BLOCKING, (int) Math.floor(cx), (int) Math.floor(cz)) + 4;
         }
         long t0 = System.nanoTime();
         int ok = 0;
@@ -438,6 +441,9 @@ public final class BotLoad {
     }
 
     public static final List<Window> WINDOWS = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** runtime switches for interleaved A/B windows in one server: /sleep bots ab &lt;name&gt; on|off (a lab feature registers its own) */
+    public static final Map<String, java.util.function.Consumer<Boolean>> AB = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static long mStart = -1, mEnd, tickStart, mBytes0, mFrames0, mChunks0, mPackets0, mProc0, mRBytes0, mRFrames0, mRPackets0, mRChunks0;
     private static String mLabel;
@@ -584,6 +590,17 @@ public final class BotLoad {
                                 .then(Commands.argument("b", DoubleArgumentType.doubleArg(0))
                                         .executes(c -> move(c, StringArgumentType.getString(c, "mode"), DoubleArgumentType.getDouble(c, "a"), DoubleArgumentType.getDouble(c, "b")))))))
                 .then(Commands.literal("remove").executes(BotLoad::remove))
+                .then(Commands.literal("ab").then(Commands.argument("name", StringArgumentType.word()).then(Commands.argument("state", StringArgumentType.word()).executes(c -> {
+                    String n = StringArgumentType.getString(c, "name"), v = StringArgumentType.getString(c, "state");
+                    var sw = AB.get(n);
+                    if (sw == null) {
+                        say(c, "sleep: bots: no switch '" + n + "' (" + AB.keySet() + ")");
+                        return 0;
+                    }
+                    sw.accept(v.equals("on"));
+                    say(c, "sleep: bots: switch " + n + " -> " + (v.equals("on") ? "on" : "off"));
+                    return 1;
+                }))))
                 .then(Commands.literal("reset").executes(c -> {   // counters to zero (stats compare windows)
                     for (LongAdder l : new LongAdder[] {CHUNKS, BATCHES, TELEPORTS, MOVES, PACKETS, R_PACKETS, R_CHUNKS, R_BYTES, R_FRAMES, R_ACKS}) l.reset();
                     KINDS.clear();
