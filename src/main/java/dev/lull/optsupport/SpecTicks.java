@@ -231,8 +231,23 @@ public final class SpecTicks {
         }
     }
 
+    /**
+     * -Dlab.spec.monsters (default true): every goal-driven mob, not only animals - monsters path to players (players are
+     * not run entities: reading them is fine), their shots / explosions / door breaking are world writes or spawns (the
+     * tick stops there and runs again in order). Left out: raiders (the level's raid objects), the boss fights (dragon,
+     * wither), shulkers (collidable: other entities' moves collide with them), brain-driven mobs (noBrain).
+     */
+    static final boolean MONSTERS = !"false".equals(System.getProperty("lab.spec.monsters"));
+
+    static boolean kindOk(Entity e) {
+        if (e instanceof Animal) return true;
+        if (!MONSTERS || !(e instanceof net.minecraft.world.entity.Mob)) return false;
+        return !(e instanceof net.minecraft.world.entity.raid.Raider) && !(e instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon)
+                && !(e instanceof net.minecraft.world.entity.boss.wither.WitherBoss) && !(e instanceof net.minecraft.world.entity.monster.Shulker);
+    }
+
     static boolean eligible(Entity e) {
-        return e instanceof Animal && !e.isRemoved() && !e.isPassenger() && !e.isVehicle() && e.getClass().getName().startsWith("net.minecraft.")
+        return kindOk(e) && !e.isRemoved() && !e.isPassenger() && !e.isVehicle() && e.getClass().getName().startsWith("net.minecraft.")
                 && (!EXACT || dev.lull.optsupport.sleep.EntitySleep.plainNext(e) && noBrain(e)) && (TYPES == null || TYPES.contains(e.getType().toShortString()));
     }
 
