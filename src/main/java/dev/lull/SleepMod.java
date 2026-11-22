@@ -27,6 +27,12 @@ public final class SleepMod {
 
     public SleepMod(IEventBus modBus, net.neoforged.fml.ModContainer container) {
         IEventBus gameBus = NeoForge.EVENT_BUS;
+        // vanilla race (1.20.1 and 1.21.1): OctahedralGroup.rotate(Direction) publishes its lazily built rotatedDirections map before
+        // filling it, so a second worldgen thread rotating a jigsaw at the same time reads null (NPE in FrontAndTop: "Exception
+        // generating new chunk" on a fresh world; parallel structure generation makes it likely). Filled here once, on one
+        // thread: the same values vanilla computes, no race left (notes/91).
+        for (com.mojang.math.OctahedralGroup g : com.mojang.math.OctahedralGroup.values())
+            for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) g.rotate(d);
         // Which layer/loader owns the bus? Mixin can only transform classes of the GAME layer (TransformingClassLoader).
         LOGGER.info("sleep: bus class {} module {} loader {}; game class loader {}", gameBus.getClass().getName(),
                 gameBus.getClass().getModule(), gameBus.getClass().getClassLoader(),
