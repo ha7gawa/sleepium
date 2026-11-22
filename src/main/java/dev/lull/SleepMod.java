@@ -20,6 +20,7 @@ public final class SleepMod {
     public SleepMod() {
         IEventBus gameBus = MinecraftForge.EVENT_BUS;
         if (Boolean.getBoolean("lab.opt.HeapReturn")) LOGGER.info("sleep: {}", dev.lull.optsupport.HeapReturn.apply());   // memory back to the OS after bursts
+        if (Boolean.getBoolean("lab.opt.TrackFast")) dev.lull.optsupport.TrackFast.register();   // A/B switch and counters with /sleep bots
         // classes the game loads only while played, learned and preloaded in the background (lab.opt.ClassPreload)
         gameBus.addListener(EventPriority.NORMAL, false, net.minecraftforge.event.server.ServerAboutToStartEvent.class, e -> dev.lull.optsupport.ClassPreload.preload());
         gameBus.addListener(EventPriority.NORMAL, false, net.minecraftforge.event.server.ServerStartedEvent.class, e -> dev.lull.optsupport.ClassPreload.started());
