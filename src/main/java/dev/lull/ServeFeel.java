@@ -29,6 +29,12 @@ import net.minecraft.world.phys.Vec3;
 public final class ServeFeel {
     public static final boolean ON = Boolean.getBoolean("sleep.serveFeel");
     private static final boolean ACTIONS = !"false".equals(System.getProperty("sleep.serveFeel.actions"));
+    /**
+     * -Dsleep.serveFeel.items=create:shaft,mekanism:basic_energy_cube: the blocks placed in turn (hotbar slots 0..n-1;
+     * default stone) - mods' blocks with block entities, whose update packets come with the block's
+     */
+    private static final String[] ITEMS = System.getProperty("sleep.serveFeel.items", "minecraft:stone").split(",");
+    private static int wrong, checked;
     private static volatile boolean active;
     private static int t, chatN;
     private static long startNanos;
@@ -70,7 +76,8 @@ public final class ServeFeel {
         t = 0;
         startNanos = System.nanoTime();
         at = mc.player.blockPosition().offset(2, 1, 0);
-        if (ACTIONS) mc.getConnection().sendCommand("item replace entity @s weapon.mainhand with minecraft:stone");
+        if (ACTIONS) for (int i = 0; i < ITEMS.length; i++) mc.getConnection().sendCommand("item replace entity @s hotbar." + i + " with " + ITEMS[i]);
+        wrong = checked = 0;
         active = true;
         ClientAuto.log("serveFeel: started, blocks at " + at.toShortString());
     }
@@ -82,6 +89,15 @@ public final class ServeFeel {
         if (!ACTIONS || t < 40) return;
         if (t % 10 == 0) {
             boolean place = t % 20 == 0;
+            // the state the client settled on after the last action (10 ticks ago): placed -> a block, broken -> air
+            if (t >= 50) {
+                checked++;
+                if (mc.level.getBlockState(at).isAir() != place) {   // place now: the last was a break (air expected)
+                    wrong++;
+                    ClientAuto.log("serveFeel: wrong settled state at " + at.toShortString() + ": " + mc.level.getBlockState(at) + " after a " + (place ? "break" : "place"));
+                }
+            }
+            if (place) mc.player.getInventory().selected = (t / 20 % ITEMS.length) < 9 ? (int) (t / 20 % ITEMS.length) : 0;
             if (place) mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, new BlockHitResult(Vec3.atCenterOf(at), Direction.UP, at, false));
             else mc.gameMode.startDestroyBlock(at, Direction.UP);
             int seq = ((dev.lull.mixin.ServeFeelLevelAccessor) mc.level).sleep$predictions().currentSequence();
@@ -195,9 +211,9 @@ public final class ServeFeel {
             if (info != null) ping = info.getLatency();
         }
         synchronized (SAMPLES) {
-            return String.format(Locale.ROOT, "serveFeel '%s' (%.1f s): %s | %s | %s | %s | %s | chunks %.1f/s, corrections %d, block rollbacks %d, entity packets %d, unanswered blocks %d chat %d cmd %d, server's ping %d ms",
+            return String.format(Locale.ROOT, "serveFeel '%s' (%.1f s): %s | %s | %s | %s | %s | chunks %.1f/s, corrections %d, block rollbacks %d, wrong settled states %d of %d, entity packets %d, unanswered blocks %d chat %d cmd %d, server's ping %d ms",
                     label, secs, stat("place ack", 0), stat("break ack", 1), stat("chat echo", 2), stat("command", 3), stat("world update gap", 4),
-                    chunks / secs, corrections, rollbacks, entityPackets, SENT_SEQ.size(), SENT_CHAT.size(), SENT_CMD.size(), ping);
+                    chunks / secs, corrections, rollbacks, wrong, checked, entityPackets, SENT_SEQ.size(), SENT_CHAT.size(), SENT_CMD.size(), ping);
         }
     }
 }

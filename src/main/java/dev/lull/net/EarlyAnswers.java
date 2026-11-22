@@ -29,7 +29,25 @@ import net.minecraft.world.level.chunk.LevelChunk;
 public final class EarlyAnswers {
     public static final boolean ON = Boolean.getBoolean("lab.opt.EarlyAnswers");
     private static final boolean ACK_ONLY = Boolean.getBoolean("lab.earlyAnswers.ackOnly");
-    public static final LongAdder ANSWERED = new LongAdder(), BEFORE_TICK = new LongAdder();
+    public static final LongAdder ANSWERED = new LongAdder(), BEFORE_TICK = new LongAdder(), NANOS = new LongAdder();
+    /** the runtime switch of interleaved A/B windows (BotLoad: /sleep bots ab earlyAnswers on|off) */
+    public static volatile boolean active = true;
+
+    static {
+        if (ON) {
+            dev.lull.bots.BotLoad.AB.put("earlyAnswers", v -> active = v);
+            dev.lull.bots.BotLoad.WINDOWS.add(new dev.lull.bots.BotLoad.Window() {
+                public void start() {
+                    report();
+                }
+
+                public String end(long ticks) {
+                    long ns = NANOS.sum();
+                    return report() + String.format(java.util.Locale.ROOT, ", %.3f ms a tick in them (%s)", ticks == 0 ? 0 : ns / 1e6 / ticks, active ? "on" : "off");
+                }
+            });
+        }
+    }
     private static MinecraftServer server;
     /** inside tickServer (server thread only): a waitForTasks there is not between ticks */
     private static boolean ticking;
@@ -52,6 +70,20 @@ public final class EarlyAnswers {
     }
 
     private static int answer(MinecraftServer s) {
+        if (!active) return 0;
+        long t0 = System.nanoTime();
+        // the answers of all players leave as one batch per connection (NetReactor: one netty task, one flush), as the
+        // tick's own sends would - not a task and a flush per packet (100 bots placing blocks: 20 k block updates a second)
+        boolean batch = NetReactor.ENABLED && !NetReactor.batching();
+        if (batch) NetReactor.onTickStart();
+        try {
+            return answerAll(s, t0);
+        } finally {
+            if (batch) NetReactor.onServerTick();
+        }
+    }
+
+    private static int answerAll(MinecraftServer s, long t0) {
         int n = 0;
         for (ServerPlayer p : s.getPlayerList().getPlayers()) {
             var ack = (dev.lull.opt.EarlyAnswersAckAccessor) p.connection;
@@ -71,10 +103,12 @@ public final class EarlyAnswers {
             n++;
         }
         ANSWERED.add(n);
+        NANOS.add(System.nanoTime() - t0);
         return n;
     }
 
     public static String report() {
+        NANOS.sumThenReset();
         return String.format(java.util.Locale.ROOT, "early answers: %d (%d before a tick)", ANSWERED.sumThenReset(), BEFORE_TICK.sumThenReset());
     }
 }
