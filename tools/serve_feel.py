@@ -33,6 +33,8 @@ ap.add_argument('--client-flags', default='')
 ap.add_argument('--scene', help='a lag scene (sleep:lag_<scene>) built before the client joins')
 ap.add_argument('--stall-at', help='S:MS - /sleep stall MS, S seconds after the client joined')
 ap.add_argument('--orbit', help='ClientAuto orbit (a flight) - actions off')
+ap.add_argument('--setup', help='commands after the join, run at the player ("|" between; e.g. machines of a mod next to it)')
+ap.add_argument('--mods', help='a folder of mod jars copied into both run/mods (server and client copy) for this run')
 ap.add_argument('--client-dir', default=os.path.join(os.path.dirname(ROOT), 'work-dscli'))
 ap.add_argument('--client-heap', default='2G')
 a = ap.parse_args()
@@ -51,6 +53,16 @@ if a.orbit:
 cjvm += a.client_flags.split()
 
 log = os.path.join(ROOT, 'run', 'serve-feel-%s.server.log' % a.label)
+for d in (os.path.join(ROOT, 'run', 'mods'), os.path.join(a.client_dir, 'run', 'mods')):   # the run's mods only (none without --mods)
+    os.makedirs(d, exist_ok=True)
+    for f in os.listdir(d):
+        if f.endswith('.jar'):
+            os.remove(os.path.join(d, f))
+    if a.mods:
+        import shutil
+        for f in os.listdir(a.mods):
+            if f.endswith('.jar'):
+                shutil.copy(os.path.join(a.mods, f), d)
 os.makedirs(os.path.dirname(log), exist_ok=True)
 t0 = time.time()
 with Server(sjvm, {'enforce-secure-profile': 'false', 'view-distance': '8'}, log) as s:
@@ -74,6 +86,8 @@ with Server(sjvm, {'enforce-secure-profile': 'false', 'view-distance': '8'}, log
             if a.orbit:   # the flight starts where the player is (a jump there would be a 'moved too quickly' of its own)
                 o = [float(v) for v in a.orbit.split(',')]
                 s.cmd('tp Dev %s %s %s' % (o[0] + o[3], o[1], o[2]))
+            for c in (a.setup.split('|') if a.setup else []):
+                s.cmd('execute at Dev run ' + c.strip())
             for i in range(8):   # something that moves near the player: the world's update cadence as the client sees it
                 s.cmd('execute at Dev run summon minecraft:cow ~%d ~ ~%d {NoAI:0b}' % (4 + i % 4, -3 + i))
         threading.Thread(target=op, daemon=True).start()

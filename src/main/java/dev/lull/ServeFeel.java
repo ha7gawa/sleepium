@@ -92,6 +92,7 @@ public final class ServeFeel {
             // the state the client settled on after the last action (10 ticks ago): placed -> a block, broken -> air
             if (t >= 50) {
                 checked++;
+                if (checked <= 8) ClientAuto.log("serveFeel: settled " + mc.level.getBlockState(at) + (place ? " after a break" : " after a place"));
                 if (mc.level.getBlockState(at).isAir() != place) {   // place now: the last was a break (air expected)
                     wrong++;
                     ClientAuto.log("serveFeel: wrong settled state at " + at.toShortString() + ": " + mc.level.getBlockState(at) + " after a " + (place ? "break" : "place"));
