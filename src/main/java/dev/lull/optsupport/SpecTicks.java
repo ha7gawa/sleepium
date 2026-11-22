@@ -282,6 +282,11 @@ public final class SpecTicks {
     static final java.util.Map<String, Long> WHY = new java.util.concurrent.ConcurrentHashMap<>();
 
     static long nsGroups;
+    /**
+     * an invalid tick undoes its whole group (default). -Dlab.spec.suffix=true: only the group's ticks after it - NOT exact
+     * yet (pig pens differ, 11-22; the hole is not found), kept for the search.
+     */
+    static final boolean WHOLE_GROUP = !Boolean.getBoolean("lab.spec.suffix");
 
     private static int find(int x) {
         while (parent[x] != x) {
@@ -607,7 +612,7 @@ public final class SpecTicks {
                 int g = groupIx[i];
                 for (int a = groupStart[g]; a < groupStart[g + 1]; a++) {
                     int j = order[a];
-                    if (j > i && !invalid[j]) {   // (the group's ticks after it read its result; the ones before did not)
+                    if ((j > i || WHOLE_GROUP) && !invalid[j]) {   // (the group's ticks after it read its result; the ones before did not)
                         invalid[j] = true;
                         changed = true;
                         cascadeTicks++;
@@ -677,7 +682,7 @@ public final class SpecTicks {
                 int h = HIT.getInt(n2), g = groupIx[h];
                 for (int a = groupStart[g + 1] - 1; a >= groupStart[g]; a--) {   // (it and its group's ticks after it, latest first)
                     int j = order[a];
-                    if (j < h || invalid[j] || done[j]) continue;
+                    if (j < h && !WHOLE_GROUP || invalid[j] || done[j]) continue;
                     undo(b0, j);
                     invalid[j] = true;
                     cascadeTicks++;
