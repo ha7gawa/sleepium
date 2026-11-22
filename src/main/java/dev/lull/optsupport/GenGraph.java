@@ -312,7 +312,7 @@ public final class GenGraph {
                 java.util.concurrent.Executor pool = net.minecraft.Util.backgroundExecutor();
                 for (Node n : run) pool.execute(() -> runNode(n));
             } else {
-                for (Node n : run) GenReactor.post(n.holder.getTicketLevel(), () -> runNode(n));
+                for (Node n : run) GenReactor.post(n.holder.getTicketLevel(), n.holder.getPos().toLong(), () -> runNode(n));
             }
             run.clear();
         }
@@ -323,7 +323,7 @@ public final class GenGraph {
             CompletableFuture<?> gate = g.sleep$gateFor(n.holder.getPos());
             if (gate != null) {
                 GATED.increment();
-                gate.whenComplete((v, e) -> GenReactor.post(n.holder.getTicketLevel(), () -> runNode(n)));
+                gate.whenComplete((v, e) -> GenReactor.post(n.holder.getTicketLevel(), n.holder.getPos().toLong(), () -> runNode(n)));
                 return;
             }
         }

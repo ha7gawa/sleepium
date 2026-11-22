@@ -218,6 +218,14 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.LagFairMove");
         if (simple.startsWith("ChunkHopsInTick"))   // (lab, notes/92: chunk loading's main-thread steps inside a slow tick)
             on = Boolean.getBoolean("lab.opt.ChunkHopsInTick");
+        if (simple.startsWith("TicketNearFirst"))   // (lab, notes/93: the player-ticket throttler near a player's way first)
+            on = Boolean.getBoolean("lab.opt.TicketNearFirst");
+        if (simple.startsWith("MainDirect"))   // (lab, notes/93: main-thread chunk tasks without the sorter round trips)
+            on = Boolean.getBoolean("lab.opt.MainDirect");
+        if (simple.startsWith("TicketReleaseEager"))   // (lab, notes/93: throttler releases set up in every pass)
+            on = Boolean.getBoolean("lab.opt.TicketReleaseEager");
+        if (simple.startsWith("TicketReleaseAtFull"))   // (lab, notes/93: a throttler slot freed at FULL)
+            on = Boolean.getBoolean("lab.opt.TicketReleaseAtFull");
         if (simple.startsWith("NetReactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor");
         if (simple.equals("NetReactorWaitMixin"))   // MainReactor's waitForTasks overwrite flushes by itself

@@ -60,6 +60,8 @@ public final class SleepMod {
                 return ChunkTimeline.report() + " | " + ServeMeter.chunkCensus();
             }
         });
+        if (dev.lull.optsupport.ChunkOrder.ON)   // where the players are heading, for the chunk queues (notes/93)
+            gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.optsupport.ChunkOrder.update(e.getServer()));
         if (ServeMeter.ON || ServeMeter.SLOW_TICK > 0)   // the test load: a slow overworld tick, /sleep stall
             gameBus.addListener(net.neoforged.neoforge.event.tick.LevelTickEvent.Post.class, e -> {
                 if (e.getLevel() instanceof net.minecraft.server.level.ServerLevel l && l.dimension() == net.minecraft.world.level.Level.OVERWORLD) ServeMeter.levelTick(l);
