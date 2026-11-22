@@ -305,6 +305,8 @@ yet, whose writes then land in light already propagated) together with light tha
 is the most specific lead.
 
 ### Recommendation for 1.3.4
+(Superseded 11-22, see "the -1 near lava was fixcheck's own race" below: the differences counted in this section came
+from the check, not from LightDirect.)
 **Not a default yet.** The gain is real and play is not hurt (Xeon +23 % chunks/s, N100 +4-6 %, lightChunk latency
 ~1 s -> ~80 ms, with ownThread ~8 ms; no delay of the nearest chunks in teleports or a 40 b/s flight; mod conflicts
 handled), but LightDirect without its own thread leaves block light below vanilla's in ~12 % of N100 warm-ups (base
@@ -317,6 +319,61 @@ hypothesis; (2) then fix it inside LightDirect (or prove ownThread structurally 
 until >= 60 clean N100 warm-ups per variant; (3) the host's 16-thread genbench and the exactness suite's light scenes
 (crops, zoo, redstone, furnaces / smelters, fluids); (4) only then defaults.txt:
 `-Dlab.opt.LightDirect=true` and `-Dlab.light.ownThread=true` (lab.light.prio stays default on).
+
+## 11-22: the "-1 near lava" was fixcheck's own race, not the engine
+What vanilla guarantees, and whether LightDirect needs more: LIGHT requires the neighbours at INITIALIZE_LIGHT (radius
+1), INITIALIZE_LIGHT nothing, FEATURES CARVERS at radius 1 and writes radius 1. So when X reaches LIGHT a chunk two
+away may still run FEATURES - but it can write only into X's neighbours, which are past INITIALIZE_LIGHT, and every
+such write sends updateSectionStatus / checkBlock (ProtoChunk.setBlockState: status >= INITIALIZE_LIGHT); a chunk's
+light reaches only its 3 x 3, all readable (getChunkForLighting needs FEATURES done). The step future of
+INITIALIZE_LIGHT completes in the light actor's POST, after which setPersistedStatus runs - before any neighbour's LIGHT.
+Nothing there leans on the sorter's ~1 s delay; GenGraph keeps the same direct edges. So no dependency had to be added.
+
+The probes found where the differences came from (light15 .. light19, notes/84 tools):
+- published (visible) block light = the actor's own (updating) map in every run, hits included: not a publication bug.
+- -Dlab.light.history: 0 reads of an unavailable chunk (no BEDROCK reads), every checkNode of the differing lava ran
+  with its section stored and light on; the level's light in a differing region is internally consistent (no cell more
+  than one below a neighbour across a transparent face - "0 entry points"); the differing cell is the newest lava of a
+  flow, holding 14: its checkBlock submitted, not yet run.
+- the check runs at the END of a server tick (GenBench.onTickEnd) and relit from the blocks of that very tick: a lava
+  flow (or a falling block) of that tick was in the blocks but not yet in the light. "Light idle for 10 ticks" did not
+  see it: the task waits in LightDirect's queues / the light mailbox, outside lightTasks. Vanilla's light is just as
+  asynchronous; with LightDirect on the busy worker pool the window was longest (ownThread: microseconds).
+- Fix (the tool, not the engine): LightCheck.ready now freezes the game's ticks (tickRateManager, -Dlab.light.fixcheck.
+  freeze=false = the old behaviour), submits a marker task (waitForPendingTasks: every light task submitted before it
+  has run, whichever queue it waited in), then 10 idle ticks; the ticks resume after the check.
+- A/B on the N100 (LightLanes, no ownThread, history on), warm-ups interleaved: frozen check 0 / 25, old check 1 / 25
+  (nn7: the newest lava cell 64188,-18,64124 level=2 at 14, region self-consistent). The hit rate of the old check fell
+  from ~10 % (11-21 jars) to ~2-4 % with the probes of 11-22 in the jar (nq4, nr4, nn7, ntp1, nvp3 hits; 0 / 30 in a
+  further old-check hunt nrc with -Dlab.light.fixcheck.recheck, so the "gone after freezing" proof did not come up) -
+  consistent with a timing window, not with a logic error. Hit spots repeat (lava spring 64087,-22,64124 in hf8 / nvp3
+  / nq4; lava lake ~64073,-55,64132 in ntp1 / nr4): places where lava keeps flowing after the area is FULL.
+
+### Validation with the frozen check (warm-up areas, fresh server each, fixcheck 0 = every block / sky nibble of 144
+inner chunks equal to vanilla's from-scratch light)
+| variant | N100 | Xeon .103 | total |
+|---|---|---|---|
+| LightLanes (LightDirect, no ownThread) | 15 (nvl) + 25 (nf, history on) = 40 / 40 clean | 60 / 60 (xvl) | **100 / 100** |
+| LightLanes + ownThread | 30 / 30 (nvt) | 60 / 60 (xvt) | **90 / 90** |
+| base (1.3.3 defaults) | - | 10 / 10 (xvb) | 10 / 10 |
+At the old check's measured rate for LightLanes on the N100 (~2-10 %), 40 clean runs there alone would happen by
+chance with P = 0.98^40 = 45 % .. 0.9^40 = 1.5 %; with the old check it was the N100 warm-up and nothing else that
+ever differed, and the frozen check's difference count is 0 in all 190 runs. Every run also compared the published
+block light with the actor's (0 sections differ in all). Nether / End on the N100 with the frozen check: LightLanes +
+ownThread 141.9 / 268.5 chunks/s, LightLanes 144.3 / 263.1, fixcheck 0 in every area.
+
+Full genbench with the frozen check, Xeon .103 (light20 jar, 32 x 32, r1 / r2): base 93.4 / 95.8, 79.8 / 112.2 (95.3);
+LightLanes 97.1 / 117.3, 106.1 / 123.1 (110.9, +16 %); LightLanes + ownThread 97.0 / 120.1, 102.9 / 124.6 (111.2, +17 %);
+fixcheck 0 in every area, carvers equal in all six (r1 3d3701ca..., r2 0880a251...). Nether / End (Xeon, frozen check):
+LightLanes 198.2 / 424.8 chunks/s, + ownThread 201.3 / 444.6, fixcheck 0 in every area.
+
+### Recommendation (11-22)
+LightDirect is exact as far as every check can see: the only differences ever found were the check's own race, gone
+with a frozen, caught-up check. Recommended for 1.3.5: `-Dlab.opt.LightDirect=true` (LightLanes order, the default of
+the flag) **with** `-Dlab.light.ownThread=true` - same throughput at 4 cores, lightChunk latency ~8 ms instead of ~80,
+the lightest load on the worker pool. Before the defaults change, the host checks (asked of the coordinator): the 1.21.1
+exactness suite's light scenes (crops, zoo, redstone, furnaces, smelters, fluids) with both flags, and a 16-thread
+genbench base vs LightDirect + ownThread (fixcheck + carvers). 1.20.1: port after that (one version first).
 
 ## 11-22: SIMD octave noise (NoiseBatch, lab-simd-1.21.1 ce69442e) on the N100 - the AVX2 check
 The N100 (Gracemont, AVX2, 4c/4t) is the only AVX2 box besides the host; .103's Ivy Bridge has AVX only (notes/82:
