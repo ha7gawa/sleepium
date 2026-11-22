@@ -291,3 +291,6 @@
 -Dlab.dfc.batch=true
 -Dlab.opt.EagerSaveScan=true
 -Dlab.opt.SavedDataNameMixin=true
+# 1.3.5 (the user 11-22): villagers' job-site rival check by a count, standing mobs' moves remembered (exact)
+-Dlab.opt.JobSiteIndex=true
+-Dlab.opt.MoveMemo=true
