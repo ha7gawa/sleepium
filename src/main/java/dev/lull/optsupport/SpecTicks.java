@@ -581,11 +581,11 @@ public final class SpecTicks {
                 int g = groupIx[i];
                 for (int a = groupStart[g]; a < groupStart[g + 1]; a++) {
                     int j = order[a];
-                    if (!invalid[j]) {
+                    if (j > i && !invalid[j]) {   // (the group's ticks after it read its result; the ones before did not)
                         invalid[j] = true;
                         changed = true;
                         cascadeTicks++;
-                        why("its group is undone");
+                        why("an earlier tick of its group is undone");
                     }
                 }
                 HIT.clear();
@@ -648,10 +648,10 @@ public final class SpecTicks {
             // it read (or wrote) later ticks' results: undo it and them, then again
             undo(b0, i);
             for (int n2 = 0; n2 < HIT.size(); n2++) {
-                int g = groupIx[HIT.getInt(n2)];
-                for (int a = groupStart[g + 1] - 1; a >= groupStart[g]; a--) {   // (its whole group, latest first)
+                int h = HIT.getInt(n2), g = groupIx[h];
+                for (int a = groupStart[g + 1] - 1; a >= groupStart[g]; a--) {   // (it and its group's ticks after it, latest first)
                     int j = order[a];
-                    if (invalid[j] || done[j]) continue;
+                    if (j < h || invalid[j] || done[j]) continue;
                     undo(b0, j);
                     invalid[j] = true;
                     cascadeTicks++;
@@ -714,8 +714,9 @@ public final class SpecTicks {
     static boolean holdsOthers(Entity e) {
         if (!(e instanceof net.minecraft.world.entity.Mob m)) return false;
         if (other(e, m.getTarget()) || other(e, m.getLastHurtByMob())) return true;
-        for (net.minecraft.world.entity.ai.goal.WrappedGoal g : m.goalSelector.getAvailableGoals()) if (holds(e, g.getGoal())) return true;
-        for (net.minecraft.world.entity.ai.goal.WrappedGoal g : m.targetSelector.getAvailableGoals()) if (holds(e, g.getGoal())) return true;
+        // (a goal reads its held entity while it runs; one that is not running holds at most what it found by a query)
+        for (net.minecraft.world.entity.ai.goal.WrappedGoal g : m.goalSelector.getAvailableGoals()) if (g.isRunning() && holds(e, g.getGoal())) return true;
+        for (net.minecraft.world.entity.ai.goal.WrappedGoal g : m.targetSelector.getAvailableGoals()) if (g.isRunning() && holds(e, g.getGoal())) return true;
         return false;
     }
 

@@ -173,6 +173,7 @@ public final class WB {
     }
 
     static void hit(Object o, int id, Object w, int root) {
+        if (w instanceof SpecTx.Token && SpecTx.mine(w)) return;   // (copied already in this tick)
         if (TX) {
             SpecTx tx = SpecTx.current();
             if (tx != null && tx.active) {

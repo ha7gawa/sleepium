@@ -23,6 +23,14 @@ public final class SpecTx {
     /** the server thread (its transaction in a field: no ThreadLocal on the write barrier's path) */
     public static volatile Thread mainThread;
     private static SpecTx mainCur;
+    private static Object mainTok;
+
+    /** the write barrier's fast path: the word is the running tick's own token (an object it already copied) */
+    public static boolean mine(Object w) {
+        Thread t = Thread.currentThread();
+        if (t instanceof dev.lab.runtime.LabRuntime.LabThread lt) return lt.slots[dev.lull.optsupport.ThreadSlots.SPEC_TOK] == w;
+        return t == mainThread && mainTok == w;
+    }
 
     /** the transaction of the tick running on this thread (null: none) - a field of our pool's threads */
     public static SpecTx current() {
@@ -34,8 +42,13 @@ public final class SpecTx {
 
     private static void setCurrent(SpecTx tx) {
         Thread t = Thread.currentThread();
-        if (t instanceof dev.lab.runtime.LabRuntime.LabThread lt) lt.slots[dev.lull.optsupport.ThreadSlots.SPEC_TX] = tx;
-        else if (t == mainThread) mainCur = tx;
+        if (t instanceof dev.lab.runtime.LabRuntime.LabThread lt) {
+            lt.slots[dev.lull.optsupport.ThreadSlots.SPEC_TX] = tx;
+            lt.slots[dev.lull.optsupport.ThreadSlots.SPEC_TOK] = tx == null ? null : tx.tok;
+        } else if (t == mainThread) {
+            mainCur = tx;
+            mainTok = tx == null ? null : tx.tok;
+        }
         else CUR.get()[0] = tx;
     }
 
@@ -134,6 +147,7 @@ public final class SpecTx {
         tok = new Token(this);
         nq = 0;
         np = 0;
+        lastContent = null;
         if (!own.isEmpty()) own.clear();
         this.entity = e;
         this.index = index;
@@ -223,7 +237,10 @@ public final class SpecTx {
         if (tx != null && tx.active) tx.content(c);
     }
 
+    private Object lastContent;
+
     void content(Object c) {
+        if (c == lastContent) return;   // (the same collection again: a random's seed drawn again and again)
         if (c == levelSeed) {
             conflict("a draw from the level's random source");
             if (!serial) throw SpecAbort.INSTANCE;   // (before the draw: the level's sequence stays untouched)
@@ -242,6 +259,7 @@ public final class SpecTx {
             if (many.put(b, Boolean.TRUE) != null) return;
         }
         SpecUndo.addContent(cs, nc++, b);
+        lastContent = c;
     }
 
     // ------------------------------------------------------------------ undo / release
