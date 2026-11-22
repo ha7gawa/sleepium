@@ -89,6 +89,8 @@ lab.opt.NeighborReactStateMixin	ticks	true	Per-state cache of NeighborReact (com
 lab.opt.ForgeBusMixin	threads	true	exp/bus-composite: install CompositeEventBus as MinecraftForge.EVENT_BUS (1.21.1: NeoForgeBusMixin).	
 lab.opt.NetBulk	network	true	Large server data sent once by content hash: cached on the client's disk, resumed, deltas only, paced to the connection.	
 lab.opt.NetCoalesce	network	true	A flush's packets sent as one frame of a per-connection compressed stream (clients with Sleepium only): 45-52 % fewer bytes on movement traffic.	
+lab.opt.EarlyAnswers	network	true	Placing and breaking blocks on a busy server: the server answers right after it handled the action, not one tick later (at 10 ticks a second 160 -> 55 ms; at 20 ticks 14 -> 2 ms). The same packets in the same order; nothing in the world changes.	
+lab.opt.StallHeartbeat	network	true	Players stay connected through a long stall of the server (a huge command, a slow save): while one tick lasts longer than 10 s they are pinged, so their clients do not time out after 30 s. The world is not touched.	
 lab.opt.NetReactor	network	true	Network reactor, stage A: outbound batching.	
 lab.opt.NetReactorConnectionMixin	network	true	NetReactor: a server connection in the PLAY protocol batches the server thread's sends (see NetReactor).	lab.opt.NetReactor
 lab.opt.NetReactorTickMixin	network	true	NetReactor: sends inside the server tick are batched; its end is a flush point (one task per connection).	lab.opt.NetReactor

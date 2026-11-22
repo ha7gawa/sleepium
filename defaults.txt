@@ -97,6 +97,10 @@
 -Dlab.opt.NeighborReactMixin=true
 -Dlab.opt.NeighborReactStateMixin=true
 -Dlab.opt.ForgeBusMixin=true
+# the decoupled server's exact parts (notes/92): a block action answered at the hand-over after its handler instead of
+# one tick later, players pinged from a timer through a stall of the server thread longer than 10 s
+-Dlab.opt.EarlyAnswers=true
+-Dlab.opt.StallHeartbeat=true
 -Dlab.opt.NetBulk=true
 -Dlab.opt.NetCoalesce=true
 -Dlab.opt.NetLagMixin=true

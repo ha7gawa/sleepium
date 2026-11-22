@@ -21,10 +21,28 @@ import java.util.concurrent.atomic.LongAdder;
  *   <li>when the main thread blocks on a chunk future (managedBlock) there is no limit: it must make progress.</li>
  * </ul>
  * Only the moment a chunk becomes FULL moves; the work is vanilla's.
+ * <p>
+ * {@code -Dlab.opt.FullRingAdaptive=true} (notes/93): the feedback is relative to the server's own tick, not to a fixed
+ * 25 ms. With the fixed target a server whose ticks take 25 ms or more for any reason (a busy modded world) shrank the
+ * window to 1 chunk a tick for good, and a server behind its schedule (no idle time before the deadline) ran one FULL
+ * step per tick: a player flying 20 blocks/s on a 30 ms-tick server waited 4.5 s for each chunk entering the view (the
+ * FULL step 8.4 s in this queue with the ticket throttle lifted). Adaptive:
+ * <ul>
+ *   <li>the target is max(25 ms, 1.25 x the slow average of the server's ticks + 5 ms) - the window shrinks when the new
+ *       chunks make ticks longer than they were, not because they are long;</li>
+ *   <li>a server that is behind (the deadline already passed) gets {@code lab.worldgen.behindBudgetMs} (10 ms) of FULL
+ *       steps after each tick - vanilla, behind, runs the chunk tasks it has for up to 50 ms.</li>
+ * </ul>
  */
 public final class FullRing {
     public static final boolean ENABLED = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenReactor");
     private static final long TARGET_NANOS = Long.getLong("lab.worldgen.tickTargetMs", 25L) * 1_000_000L;
+    public static final boolean ADAPTIVE = Boolean.getBoolean("lab.opt.FullRingAdaptive");
+    private static final long BEHIND_BUDGET_NANOS = Long.getLong("lab.worldgen.behindBudgetMs", 10L) * 1_000_000L;
+    /** slow average of the server's tick time (ADAPTIVE) */
+    private static double baselineNanos = TARGET_NANOS * 0.6;
+    /** when the current idle window's first FULL step ran (ADAPTIVE, behind the deadline) */
+    private static long windowStartNanos;
     private static final int LEVELS = 64;
     @SuppressWarnings("unchecked")
     private static final ConcurrentLinkedQueue<Runnable>[] QUEUES = new ConcurrentLinkedQueue[LEVELS];
@@ -58,7 +76,12 @@ public final class FullRing {
 
     /** main thread, after each server tick: the congestion window follows the tick's cost */
     public static void onTick(long tickNanos) {
-        if (tickNanos < TARGET_NANOS) cwnd = Math.min(cwnd + 1, 1024);
+        long target = TARGET_NANOS;
+        if (ADAPTIVE) {
+            target = Math.max(TARGET_NANOS, (long) (baselineNanos * 1.25) + 5_000_000L);
+            baselineNanos += (tickNanos - baselineNanos) * 0.05;
+        }
+        if (tickNanos < target) cwnd = Math.min(cwnd + 1, 1024);
         else cwnd = Math.max(1, cwnd * 0.7);
         allowance = (int) cwnd;
         lastRefill = System.nanoTime();
@@ -85,8 +108,17 @@ public final class FullRing {
         // twice the average (prepareLevels gives 10 ms; the first FULL tasks of a fresh JVM cost several ms) would hold
         // every task forever, and the average, measured only on tasks that run, would never come down.
         if (deadlineNanos != firstOfWindow) {
-            if (take) firstOfWindow = deadlineNanos;
+            if (take) {
+                firstOfWindow = deadlineNanos;
+                windowStartNanos = net.minecraft.Util.getNanos();
+            }
             return true;
+        }
+        // behind the schedule (ADAPTIVE): a budget after each tick instead of nothing
+        if (ADAPTIVE && deadlineNanos <= windowStartNanos) {
+            if (net.minecraft.Util.getNanos() + costNanos - windowStartNanos <= BEHIND_BUDGET_NANOS) return true;
+            HELD_BY_TIME.increment();
+            return false;
         }
         // deadlineNanos is the server's (Util.getNanos(): GLFW time on the client, System.nanoTime on a dedicated server)
         if (net.minecraft.Util.getNanos() + 2 * costNanos > deadlineNanos) {
