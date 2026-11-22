@@ -45,6 +45,11 @@ final class GenBench {
     private static final it.unimi.dsi.fastutil.ints.IntArrayList TICK_LOADS = new it.unimi.dsi.fastutil.ints.IntArrayList();
     private static final it.unimi.dsi.fastutil.longs.LongArrayList TICK_NANOS = new it.unimi.dsi.fastutil.longs.LongArrayList();
     private static long lastTickEnd;
+    /** when the area's last chunk became FULL (s since start, ticks); -1 before */
+    private static double doneSecs = -1;
+    private static int doneTicks;
+    private static String probeLine = "";
+    private static String firstLight;
 
     static void onChunkLoad(net.neoforged.neoforge.event.level.ChunkEvent.Load e) {
         if (active && e.getLevel() == level) loadsThisTick++;
@@ -111,6 +116,8 @@ final class GenBench {
         startTick = TickTimer.INSTANCE.ticks();
         startNanos = System.nanoTime();
         cpu = new CpuWindow();
+        if (LightProbe.ON) LightProbe.reset();
+        doneSecs = -1;
         for (int dx = 0; dx < side; dx++) {
             for (int dz = 0; dz < side; dz++) {
                 // Async FORCED ticket (ticket level 31). NOT level.setChunkForced(): that also calls getChunk()
@@ -161,6 +168,7 @@ final class GenBench {
         if (dev.lull.optsupport.GenGraph.ENABLED) par += "; " + dev.lull.optsupport.GenGraph.report();
         if (dev.lull.optsupport.FullRing.ENABLED) par += "; " + dev.lull.optsupport.FullRing.report();
         if (dev.lull.optsupport.LightNotifyRing.ENABLED) par += "; " + dev.lull.optsupport.LightNotifyRing.report();
+        if (dev.lull.optsupport.LightPar.ENABLED) par += "; " + dev.lull.optsupport.LightPar.report();
         if (dev.lull.optsupport.GenReactor.ENABLED) par += "; " + dev.lull.optsupport.ReadJournal.report();
         if (dev.lull.optsupport.MainReactor.ENABLED) par += "; " + dev.lull.optsupport.MainReactor.wakeReport();
         if (Boolean.getBoolean("lab.reactor.scout")) par += "; " + dev.lull.optsupport.MainReactor.scoutReport();
@@ -209,19 +217,39 @@ final class GenBench {
             }
         }
         double secs = (System.nanoTime() - startNanos) / 1e9;
-        if (GenTimeline.ON) GenTimeline.sample(level, x0, z0, side, secs);
+        if (GenTimeline.ON && doneSecs < 0) GenTimeline.sample(level, x0, z0, side, secs);
         if (done < total && secs < 600) {
             return;
         }
+        if (doneSecs < 0) {   // the area's time and ticks: when its last chunk became FULL (the light check below may wait)
+            doneSecs = secs;
+            doneTicks = TickTimer.INSTANCE.ticks() - startTick;
+            probeLine = LightProbe.ON ? System.lineSeparator() + LightProbe.report(done) : "";
+        }
+        String lightLine = probeLine;
+        if (LightCheck.ON) {
+            if (!LightCheck.ready(level)) return;   // until the light actor is idle (the fixed point reached)
+            String r = LightCheck.run(level, x0, z0, side, server.getServerDirectory().resolve(dev.lull.SleepOut.ROOT).resolve("genlight-" + label + ".txt"));
+            // -Dlab.light.fixcheck.recheck (with freeze=false): a difference found in a running world is checked again
+            // with the ticks frozen and the light caught up - gone then = the check's race, still there = the engine's
+            if (firstLight == null && LightCheck.wantsRecheck(r)) {
+                firstLight = r;
+                return;
+            }
+            lightLine += System.lineSeparator() + (firstLight != null ? firstLight + System.lineSeparator() + "light recheck after freezing the ticks: " : "") + r;
+            firstLight = null;
+        }
+        secs = doneSecs;
         active = false;
         GenBenchHooks.active = false;
-        int ticks = TickTimer.INSTANCE.ticks() - startTick;
+        int ticks = doneTicks;
         String line = String.format(Locale.ROOT, "genbench '%s': %d/%d chunks FULL in %.2f s (%d ticks) = %.1f chunks/s",
                 label, done, total, secs, ticks, done / secs);
         String cpuLine = burstReport() + System.lineSeparator() + cpu.report(secs, 12) + System.lineSeparator() + GenProfile.reportAndReset(done)
                 + (Boolean.getBoolean("lab.genscout") ? System.lineSeparator() + dev.lull.optsupport.GenScout.reportAndReset() + System.lineSeparator() + dev.lull.optsupport.GenScout.perlinBench()
                         + System.lineSeparator() + dev.lull.optsupport.ColumnBound.report() : "");
         if (GenTimeline.ON) cpuLine += System.lineSeparator() + GenTimeline.reportAndReset();
+        cpuLine += lightLine;
         String hashLine = writeChunkHashes(server) + "\n" + cpuLine;
         Path report = SleepCommand.finishRecording(server, "genbench-" + label, line + "\n" + hashLine);
         for (int dx = 0; dx < side; dx++) {
