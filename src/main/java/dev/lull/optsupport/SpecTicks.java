@@ -266,7 +266,7 @@ public final class SpecTicks {
      * committed tick read nothing another tick of the block changed, an invalid one runs in vanilla's order.
      */
     public static final boolean EXACT = !Boolean.getBoolean("lab.spec.unsafe");
-    static final int BLOCK = Integer.getInteger("lab.spec.block", 2048);
+    static final int BLOCK = Math.min(4096, Integer.getInteger("lab.spec.block", 2048));   // (the grid packs a slot in 12 bits)
     private static dev.lull.optsupport.sleep.SpecTx[] txs = new dev.lull.optsupport.sleep.SpecTx[0];
     private static double[] sweep = new double[0];   // per slot: the swept box (6)
     private static boolean[] invalid = new boolean[0], done = new boolean[0];
@@ -307,11 +307,13 @@ public final class SpecTicks {
         }
         buildGrid(m);
         double[] s = sweep;
-        for (it.unimi.dsi.fastutil.ints.IntArrayList l : GRID.values()) {
-            for (int x = 0; x < l.size(); x++) {
-                int i = l.getInt(x), oi = i * 6;
-                for (int y = x + 1; y < l.size(); y++) {
-                    int j = l.getInt(y), oj = j * 6;
+        for (int p = 0, q; p < nCells; p = q) {
+            long key = cells[p] & ~0xFFFL;
+            for (q = p + 1; q < nCells && (cells[q] & ~0xFFFL) == key; q++) ;
+            for (int x = p; x < q; x++) {
+                int i = (int) (cells[x] & 0xFFF), oi = i * 6;
+                for (int y = x + 1; y < q; y++) {
+                    int j = (int) (cells[y] & 0xFFF), oj = j * 6;
                     if (s[oi] <= s[oj + 3] && s[oi + 3] >= s[oj] && s[oi + 1] <= s[oj + 4] && s[oi + 4] >= s[oj + 1] && s[oi + 2] <= s[oj + 5] && s[oi + 5] >= s[oj + 2]) {
                         int a = find(i), b = find(j);
                         if (a != b) parent[Math.max(a, b)] = Math.min(a, b);
@@ -395,8 +397,12 @@ public final class SpecTicks {
 
     private static java.lang.reflect.Field seedField;
 
+    /** the current block's size */
+    private static int curM;
+
     private static void block(int b0, int b1, Consumer<Entity> consumer) {
         int m = b1 - b0;
+        curM = m;
         blocks++;
         specTicks += m;
         if (txs.length < m) {
@@ -504,35 +510,42 @@ public final class SpecTicks {
         s[o + 3] = Math.max(bb.maxX, eb.maxX); s[o + 4] = Math.max(bb.maxY, eb.maxY); s[o + 5] = Math.max(bb.maxZ, eb.maxZ);
     }
 
-    private static final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<it.unimi.dsi.fastutil.ints.IntArrayList> GRID = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
-    private static final java.util.ArrayList<it.unimi.dsi.fastutil.ints.IntArrayList> LISTS = new java.util.ArrayList<>();
-    private static int listsUsed;
+    /**
+     * the spatial grid: cells of 4 blocks (x, z); per covered cell of a slot's box one entry (cell << 12 | slot), sorted -
+     * a cell's slots are a run of the array (no maps, no lists)
+     */
+    private static long[] cells = new long[8192];
+    private static int nCells;
 
-    private static long cell(int x, int z) {
-        return ((long) x << 32) ^ (z & 0xFFFFFFFFL);
+    private static long ck(int x, int z) {
+        return ((long) (x & 0x7FFFFF) << 35) | ((long) (z & 0x7FFFFF) << 12);
     }
 
-    /** spatial cells of 4 blocks (x, z): which slots' swept boxes touch each */
+    /** the first entry of cell key (or nCells) */
+    private static int lowerBound(long key) {
+        int lo = 0, hi = nCells;
+        while (lo < hi) {
+            int mid = (lo + hi) >>> 1;
+            if (cells[mid] < key) lo = mid + 1;
+            else hi = mid;
+        }
+        return lo;
+    }
+
+    /** which slots' boxes (sweep) cover each cell */
     private static void buildGrid(int m) {
-        GRID.clear();
-        listsUsed = 0;
+        nCells = 0;
         double[] s = sweep;
         for (int i = 0; i < m; i++) {
             int o = i * 6;
             int x0 = (int) Math.floor(s[o]) >> 2, z0 = (int) Math.floor(s[o + 2]) >> 2, x1 = (int) Math.floor(s[o + 3]) >> 2, z1 = (int) Math.floor(s[o + 5]) >> 2;
             for (int x = x0; x <= x1; x++)
                 for (int z = z0; z <= z1; z++) {
-                    long c = cell(x, z);
-                    it.unimi.dsi.fastutil.ints.IntArrayList l = GRID.get(c);
-                    if (l == null) {
-                        if (listsUsed == LISTS.size()) LISTS.add(new it.unimi.dsi.fastutil.ints.IntArrayList(4));
-                        l = LISTS.get(listsUsed++);
-                        l.clear();
-                        GRID.put(c, l);
-                    }
-                    l.add(i);
+                    if (nCells == cells.length) cells = java.util.Arrays.copyOf(cells, nCells * 2);
+                    cells[nCells++] = ck(x, z) | i;
                 }
         }
+        java.util.Arrays.sort(cells, 0, nCells);
     }
 
     /** the slots (other than i) whose swept boxes meet a query box of tx; later ones only: {@code laterThan} >= 0 */
@@ -543,15 +556,14 @@ public final class SpecTicks {
             double x0 = qb[a], y0 = qb[a + 1], z0 = qb[a + 2], x1 = qb[a + 3], y1 = qb[a + 4], z1 = qb[a + 5];
             int cx0 = (int) Math.floor(x0) >> 2, cz0 = (int) Math.floor(z0) >> 2, cx1 = (int) Math.floor(x1) >> 2, cz1 = (int) Math.floor(z1) >> 2;
             if ((long) (cx1 - cx0 + 1) * (cz1 - cz0 + 1) > 4096) {   // a huge query: every slot
-                for (int j = 0; j < s.length / 6 && j < txs.length; j++) if (j != i && j > laterThan && !out.contains(j)) out.add(j);
+                for (int j = 0; j < curM; j++) if (j != i && j > laterThan && !out.contains(j)) out.add(j);
                 continue;
             }
             for (int cx = cx0; cx <= cx1; cx++)
                 for (int cz = cz0; cz <= cz1; cz++) {
-                    it.unimi.dsi.fastutil.ints.IntArrayList l = GRID.get(cell(cx, cz));
-                    if (l == null) continue;
-                    for (int n2 = 0; n2 < l.size(); n2++) {
-                        int j = l.getInt(n2);
+                    long key = ck(cx, cz);
+                    for (int p = lowerBound(key); p < nCells && (cells[p] & ~0xFFFL) == key; p++) {
+                        int j = (int) (cells[p] & 0xFFF);
                         if (j == i || j <= laterThan) continue;
                         int o = j * 6;
                         if (s[o] <= x1 && s[o + 3] >= x0 && s[o + 1] <= y1 && s[o + 4] >= y0 && s[o + 2] <= z1 && s[o + 5] >= z0 && !out.contains(j)) out.add(j);
