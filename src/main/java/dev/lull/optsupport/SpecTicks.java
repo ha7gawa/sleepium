@@ -37,6 +37,13 @@ public final class SpecTicks {
     static final int CHUNK = Integer.getInteger("lab.spec.chunk", 16);
     static final boolean ALTERNATE = Boolean.getBoolean("lab.spec.alternate");
 
+    static {
+        // (the transaction code out of line: inlined into vanilla's hot methods while runs tick, it slows the plain
+        // ticks after them - JitHints; -Dlab.spec.jitHints=false: the JIT's own choice)
+        if (ON && !"false".equals(System.getProperty("lab.spec.jitHints")))
+            JitHints.dontInline("dev/lull/optsupport/sleep/SpecTx.*", "dev/lull/optsupport/sleep/SpecUndo.*", "dev/lull/optsupport/sleep/WB.hit");
+    }
+
     private static volatile boolean running;
     private static Thread main;
     private static Entity[] all = new Entity[4096];
@@ -420,7 +427,75 @@ public final class SpecTicks {
         dev.lull.optsupport.sleep.SpecTx.mainThread = main;
         pathCache = lvl.getPathTypeCache();
         dev.lull.optsupport.sleep.SpecTx.levelSeed = levelSeed(lvl);
-        for (int b = from; b < to; b += BLOCK) block(b, Math.min(to, b + BLOCK), consumer);
+        for (int b = from; b < to; b += BLOCK) {
+            int b1 = Math.min(to, b + BLOCK), key = Math.min(KEYS - 1, b / BLOCK);
+            boolean ser = FORCE_PLAIN || walks > SPEC_WALKS || ADAPT && (walks < denseUntil[key] || serialNext(key, b1 - b));
+            long t = System.nanoTime();
+            if (ser) serialBlock(b, b1, consumer);
+            else if (!block(b, b1, consumer)) {   // (dense: most of its ticks in huge groups - plain ticks)
+                serialBlock(b, b1, consumer);
+                denseBlocks++;
+                denseUntil[key] = walks + 16;   // (plain for the next 16 walks without building its groups again)
+                ser = true;
+            }
+            float per = (System.nanoTime() - t) / (float) (b1 - b);
+            float[] ema = ser ? serNs : specNs;
+            // (a re-try is a fresh measurement of the loser: it replaces the old one)
+            ema[key] = ema[key] == 0 || retry[key] ? per : ema[key] * 0.75f + per * 0.25f;
+            if (ser) serialTicks += b1 - b;
+        }
+    }
+
+    // adaptive: per block of the walk (by its place), the measured cost a tick of speculating it and of ticking it
+    // plainly in walk order; the cheaper one is taken, the other re-tried now and then (dense pens / farms where most
+    // speculative ticks are undone run plainly, open herds in parallel)
+    static final boolean ADAPT = !"false".equals(System.getProperty("lab.spec.adapt"));
+    private static final int KEYS = 256;
+    private static final float[] specNs = new float[KEYS], serNs = new float[KEYS];
+    private static final int[] sinceTry = new int[KEYS], tryEvery = new int[KEYS];
+    /** per key: the last block was a re-try of the loser; the winner before it */
+    private static final boolean[] retry = new boolean[KEYS], wasSerial = new boolean[KEYS];
+    static long serialTicks, serialBlocks, denseBlocks;
+    private static long plainWithTx;
+    /** -Dlab.spec.forcePlain (measurement): every block ticked plainly */
+    static final boolean FORCE_PLAIN = Boolean.getBoolean("lab.spec.forcePlain");
+    /** -Dlab.spec.specWalks=N (measurement): after N walks every block plainly (does speculation slow plain ticks later?) */
+    static final long SPEC_WALKS = Long.getLong("lab.spec.specWalks", Long.MAX_VALUE);
+    private static final long[] denseUntil = new long[KEYS];
+    /** a group of more than DENSE ticks is huge (a packed pen, a crowd): one thread, undone as a whole */
+    static final int DENSE = Integer.getInteger("lab.spec.dense", 64);
+
+    private static boolean serialNext(int key, int m) {
+        float sp = specNs[key], se = serNs[key];
+        if (sp == 0) return false;                      // (speculation measured first)
+        if (se == 0) return lastInvalidShare > 0.25f;   // (plain ticks measured once speculation undid much)
+        boolean ser = se < sp;
+        // the loser re-tried after 16 walks, then twice as late after each re-try it lost again (up to 2048 walks):
+        // a re-try costs the gap once - a long tick where speculation loses badly
+        if (retry[key]) {
+            retry[key] = false;
+            tryEvery[key] = ser == wasSerial[key] ? Math.min(4096, Math.max(64, tryEvery[key] * 2)) : 64;
+        }
+        if (++sinceTry[key] >= Math.max(64, tryEvery[key])) {
+            sinceTry[key] = 0;
+            retry[key] = true;
+            wasSerial[key] = ser;
+            return !ser;
+        }
+        return ser;
+    }
+
+    /** the last speculated block's share of undone ticks */
+    private static float lastInvalidShare;
+
+    private static void serialBlock(int b0, int b1, Consumer<Entity> consumer) {
+        serialBlocks++;
+        var ctx = dev.lull.optsupport.sleep.SpecTx.current();
+        if (dev.lull.optsupport.sleep.WB.TX || ctx != null && ctx.active) {
+            if (plainWithTx++ < 3) System.out.println("[sleep/spec] a plain block with transactions on: TX " + dev.lull.optsupport.sleep.WB.TX + ", running " + running
+                    + ", the thread's transaction " + (ctx == null ? "none" : "active " + ctx.active + " serial " + ctx.serial + " index " + ctx.index) + ", " + Thread.currentThread().getName());
+        }
+        for (int k = b0; k < b1; k++) consumer.accept(all[k]);
     }
 
     private static Object levelSeed(ServerLevel lvl) {
@@ -440,11 +515,10 @@ public final class SpecTicks {
     /** the current block's size */
     private static int curM;
 
-    private static void block(int b0, int b1, Consumer<Entity> consumer) {
+    /** a block speculated; false: not (most of its ticks in huge groups - nothing ran, the caller ticks it plainly) */
+    private static boolean block(int b0, int b1, Consumer<Entity> consumer) {
         int m = b1 - b0;
         curM = m;
-        blocks++;
-        specTicks += m;
         if (txs.length < m) {
             int old = txs.length;
             txs = java.util.Arrays.copyOf(txs, m);
@@ -467,6 +541,16 @@ public final class SpecTicks {
         groups(b0, m);
         long t0 = System.nanoTime();
         nsGroups += t0 - tg;
+        if (ADAPT) {
+            int huge = 0;
+            for (int g = 0; g < nGroups; g++) {
+                int size = groupStart[g + 1] - groupStart[g];
+                if (size > DENSE) huge += size;
+            }
+            if (huge * 2 > m) return false;
+        }
+        blocks++;
+        specTicks += m;
         dev.lull.optsupport.sleep.SpecTx.GROUP = SpecTicks::groupOfEntity;
         dev.lull.optsupport.sleep.SpecTx.VICTIM = SpecTicks::victim;
         dev.lull.optsupport.sleep.SpecTx.COMMITTED = SpecTicks::committed;
@@ -549,9 +633,13 @@ public final class SpecTicks {
             });
         }
         commitCursor = 0;
+        int inv = 0;
+        for (int i = 0; i < m; i++) if (invalid[i]) inv++;
+        lastInvalidShare = inv / (float) m;
         nsRerun += rr;
         nsCommitRest += System.nanoTime() - t3 - rr;
         nsCommit += System.nanoTime() - t1;
+        return true;
     }
 
     private static void speculate(int b0, int q, Consumer<Entity> consumer) {
@@ -1134,8 +1222,8 @@ public final class SpecTicks {
 
     static void report() {
         if (EXACT && blocks > 0) System.out.println(String.format(java.util.Locale.ROOT,
-                "[sleep/spec] exact: blocks %d, ticks %d (in groups of 2+: %d in %d), invalid %d (%.2f %%: transaction %d, spatial %d, cascade %d, path cache %d), re-runs %d; ms a walk: groups %.2f [init %.2f grid %.2f pairs %.2f order %.2f slots %.2f] (path replay %.2f, deferred work %.2f), grid %.2f, validate %.2f, undo %.2f, re-runs %.2f, commit rest %.2f; copies %d, contents %d, restores %d; why %s",
-                blocks, specTicks, groupedTicks, groupsMulti, invalidTicks, specTicks == 0 ? 0 : 100.0 * invalidTicks / specTicks, txInvalid, spatialInvalid, cascadeTicks, pathInvalid, reruns,
+                "[sleep/spec] exact: live words met outside runs %d; blocks %d (plain %d: %d ticks, %d of them dense), ticks %d (in groups of 2+: %d in %d), invalid %d (%.2f %%: transaction %d, spatial %d, cascade %d, path cache %d), re-runs %d; ms a walk: groups %.2f [init %.2f grid %.2f pairs %.2f order %.2f slots %.2f] (path replay %.2f, deferred work %.2f), grid %.2f, validate %.2f, undo %.2f, re-runs %.2f, commit rest %.2f; copies %d, contents %d, restores %d; why %s",
+                dev.lull.optsupport.sleep.WB.liveOutside, blocks, serialBlocks, serialTicks, denseBlocks, specTicks, groupedTicks, groupsMulti, invalidTicks, specTicks == 0 ? 0 : 100.0 * invalidTicks / specTicks, txInvalid, spatialInvalid, cascadeTicks, pathInvalid, reruns,
                 nsGroups / 1e6 / Math.max(1, walks), nsgInit / 1e6 / Math.max(1, walks), nsgGrid / 1e6 / Math.max(1, walks), nsgPairs / 1e6 / Math.max(1, walks),
                 nsgOrder / 1e6 / Math.max(1, walks), nsgSlots / 1e6 / Math.max(1, walks), nsReplay / 1e6 / Math.max(1, walks), nsDeferredWork / 1e6 / Math.max(1, walks), nsGrid / 1e6 / Math.max(1, walks), nsValidate / 1e6 / Math.max(1, walks), nsUndo / 1e6 / Math.max(1, walks), nsRerun / 1e6 / Math.max(1, walks), nsCommitRest / 1e6 / Math.max(1, walks),
                 txSum(true), txSum(false), dev.lull.optsupport.sleep.SpecTx.restores, WHY));

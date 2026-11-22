@@ -166,6 +166,8 @@ public final class WB {
      * writing thread's transaction (copy on first write, conflicts between transactions); outside runs false.
      */
     public static volatile boolean TX;
+    /** writes outside runs into an object still holding a live transaction's word (should stay 0) */
+    public static long liveOutside;
 
     /** a mutating call on a collection, map or atomic in a barrier class (WriteBarrier.mutSites): to the transaction */
     public static void mut(Object c) {
@@ -184,6 +186,7 @@ public final class WB {
         }
         if (w instanceof SpecTx.Token t) {
             if (!t.live) U.putObject(o, offset(root), null);   // (a released transaction's word: gone for the next writes)
+            else if (!TX) liveOutside++;   // (measurement: a live transaction's word met outside runs)
             return;
         }
         if (w instanceof EntitySleep.PartWatch pw) pw.write(id);
