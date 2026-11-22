@@ -24,9 +24,13 @@ public final class SavedDataName {
         COPIED.set(tag);
     }
 
+    /** test only: -Dlab.test.savedDataNullKey=true puts a null key into the first SavedData tag written (its write fails as 11-21's did) */
+    private static final java.util.concurrent.atomic.AtomicBoolean TEST_NULL_KEY = new java.util.concurrent.atomic.AtomicBoolean(Boolean.getBoolean("lab.test.savedDataNullKey"));
+
     public static Runnable wrap(Runnable task, Object data, File file) {
         CompoundTag tag = COPIED.get();
         COPIED.remove();
+        if (tag != null && TEST_NULL_KEY.compareAndSet(true, false) && tag.get("data") instanceof CompoundTag d) d.put(null, new CompoundTag());
         return () -> {
             try {
                 task.run();
