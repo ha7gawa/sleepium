@@ -11,6 +11,8 @@
     "TrackFastMixin",
     "TrackFastChunkMapInvoker",
     "TrackFastEntityAccessor",
+    "TrackIndexChunkMapMixin",
+    "TrackIndexEntityMixin",
     "PipeScoutChunkMapMixin",
     "PipeScoutTrackedMixin",
     "PipeScoutServerEntityMixin",

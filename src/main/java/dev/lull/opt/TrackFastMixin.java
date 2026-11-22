@@ -1,8 +1,8 @@
 package dev.lull.opt;
 
 import dev.lull.optsupport.TrackFast;
+import dev.lull.optsupport.TrackIndex;
 import java.util.Set;
-import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerEntity;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerPlayerConnection;
@@ -15,12 +15,27 @@ import org.spongepowered.asm.mixin.Shadow;
 
 /** lab.opt.TrackFast: the tracker's per-pair check with the distance first (optsupport/TrackFast). */
 @Mixin(targets = "net.minecraft.server.level.ChunkMap$TrackedEntity")
-public abstract class TrackFastMixin {
+public abstract class TrackFastMixin implements TrackIndex.Tracked {
     @Shadow @Final ServerEntity serverEntity;
     @Shadow @Final Entity entity;
     @Shadow @Final private int range;
     @Shadow @Final private Set<ServerPlayerConnection> seenBy;
-    @Shadow @Final ChunkMap this$0;
+
+    @Override
+    public Entity sleep$entity() {
+        return this.entity;
+    }
+
+    @Override
+    public Set<ServerPlayerConnection> sleep$seenBy() {
+        return this.seenBy;
+    }
+
+    /** TrackIndex's reverse sets follow every change of seenBy */
+    @org.spongepowered.asm.mixin.injection.Inject(method = "removePlayer", at = @org.spongepowered.asm.mixin.injection.At("HEAD"))
+    private void sleep$removePlayer(ServerPlayer player, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+        if (TrackIndex.ON) TrackIndex.seenRemove(player.connection, this.entity.getId());
+    }
 
     @Shadow
     private int getEffectiveRange() {
@@ -39,7 +54,9 @@ public abstract class TrackFastMixin {
     @Overwrite
     public void updatePlayer(ServerPlayer player) {
         if (player == this.entity) return;
-        TrackFastChunkMapInvoker map = (TrackFastChunkMapInvoker) this$0;
+        // the tracker's own ChunkMap (vanilla's ChunkMap.this) through its entity's level - not the synthetic this$0 (the
+        // 1.20.1 production jar does not carry it under that name; one code for both)
+        TrackFastChunkMapInvoker map = (TrackFastChunkMapInvoker) ((net.minecraft.server.level.ServerLevel) this.entity.level()).getChunkSource().chunkMap;
         int i = map.sleep$viewDistance(player);
         if (!TrackFast.active) {   // vanilla's body (A/B windows)
             Vec3 vec3 = player.position().subtract(this.entity.position());
@@ -48,8 +65,12 @@ public abstract class TrackFastMixin {
             boolean v = v1 <= v0 * v0 && this.entity.broadcastToPlayer(player)
                     && map.sleep$chunkTracked(player, this.entity.chunkPosition().x, this.entity.chunkPosition().z);
             if (v) {
-                if (this.seenBy.add(player.connection)) this.serverEntity.addPairing(player);
+                if (this.seenBy.add(player.connection)) {
+                    if (TrackIndex.ON) TrackIndex.seenAdd(player.connection, this.entity.getId());
+                    this.serverEntity.addPairing(player);
+                }
             } else if (this.seenBy.remove(player.connection)) {
+                if (TrackIndex.ON) TrackIndex.seenRemove(player.connection, this.entity.getId());
                 this.serverEntity.removePairing(player);
             }
             return;
@@ -79,8 +100,12 @@ public abstract class TrackFastMixin {
             if (v != flag) TrackFast.MISMATCH.increment();
         }
         if (flag) {
-            if (this.seenBy.add(player.connection)) this.serverEntity.addPairing(player);
+            if (this.seenBy.add(player.connection)) {
+                if (TrackIndex.ON) TrackIndex.seenAdd(player.connection, this.entity.getId());
+                this.serverEntity.addPairing(player);
+            }
         } else if (this.seenBy.remove(player.connection)) {
+            if (TrackIndex.ON) TrackIndex.seenRemove(player.connection, this.entity.getId());
             this.serverEntity.removePairing(player);
         }
         if (t0 != 0) {
