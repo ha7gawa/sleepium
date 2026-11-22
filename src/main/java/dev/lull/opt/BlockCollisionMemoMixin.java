@@ -98,9 +98,9 @@ public abstract class BlockCollisionMemoMixin {
         }
         java.util.Optional<net.minecraft.core.BlockPos> r;
         r = null;
-        // (the server's kernel is one object with scratch state: the owner thread's - SpecTicks' workers walk vanilla's way)
+        // (the server's kernel is the owner thread's; in SpecTicks' runs every thread takes its own - CollideKernel.specRun)
         if (dev.lull.optsupport.CollideKernel.SUPPORT && dev.lull.optsupport.CollideKernel.usable()
-                && (isClientSide() || BlockCollisionMemo.usable((Level) (Object) this))
+                && (isClientSide() || BlockCollisionMemo.usable((Level) (Object) this) || dev.lull.optsupport.CollideKernel.specRun((Level) (Object) this))
                 && (r = dev.lull.optsupport.CollideKernel.of((Level) (Object) this).support(entity, box, (Level) (Object) this)) != null) {
             // the kernel's walk over the same blocks (BlockCollisions' cursor, checks, shapes): the nearest one, no iterator
             if (dev.lull.optsupport.CollideKernel.CHECK) {
