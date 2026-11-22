@@ -25,6 +25,8 @@ public final class SleepMixinPlugin implements IMixinConfigPlugin {
         if (simple.startsWith("FrameHash")) return Boolean.getBoolean("sleep.clientAuto.framehash");
         if (simple.startsWith("DrawStats")) return Boolean.getBoolean("sleep.drawStats");
         if (simple.startsWith("NetStats")) return Boolean.getBoolean("sleep.net.stats");
+        if (simple.startsWith("ServeMeter")) return Boolean.getBoolean("sleep.serveMeter");
+        if (simple.startsWith("ServeFeel")) return Boolean.getBoolean("sleep.serveFeel");
         if (simple.startsWith("GenTrace") || simple.equals("DataLayerMapAccessor")) return Boolean.getBoolean("lab.pgen.trace");
         // genbench's phase profile (11-21): measurement only, now off unless asked - its @WrapMethod hooks built an
         // Operation object on every call even with the profile idle (NoiseChunk.selectCellYZ ~300 k calls a 1024-chunk
