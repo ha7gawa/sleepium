@@ -655,6 +655,10 @@ public final class SpecTicks {
     private static void undo(int b0, int i) {
         txs[i].restore();
         int k = b0 + i;
+        // the box came back past setBoundingBox: set it again the usual way (the same value) so that what follows a box
+        // change on the owner thread runs - the entity section indexes' update (no game state changes)
+        Entity ue = all[k];
+        if (ue != null) ue.setBoundingBox(ue.getBoundingBox());
         Object[] d = deferred[k];
         for (int q = 0; q < deferredN[k]; q++) d[q] = null;
         deferredN[k] = 0;
