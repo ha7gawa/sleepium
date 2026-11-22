@@ -109,6 +109,8 @@
 -Dlab.opt.NetReactorConnectionMixin=true
 -Dlab.opt.NetReactorTickMixin=true
 -Dlab.opt.NetReactorWaitMixin=true
+# NetReactor's hand-overs at the end of tickChildren only (vanilla's flush point), on a pool thread (notes/91)
+-Dlab.opt.NetFlushLater=true
 -Dlab.opt.OverworldFogMixin=true
 -Dlab.opt.ParallelEntitiesMixin=true
 -Dlab.opt.ParallelReloadMixin=true
