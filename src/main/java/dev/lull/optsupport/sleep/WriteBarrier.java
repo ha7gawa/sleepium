@@ -40,7 +40,10 @@ public final class WriteBarrier {
             "net/minecraft/network/protocol/game/VecDeltaCodec",
             "net/minecraft/world/entity/ai/sensing/Sensing",
             "net/minecraft/world/entity/WalkAnimationState",
-            "net/minecraft/world/entity/ItemBasedSteering"};
+            "net/minecraft/world/entity/ItemBasedSteering",
+            // SpecTicks (SpecTx): the synched data items and the random's gaussian state are an entity's too
+            "net/minecraft/network/syncher/SynchedEntityData", "net/minecraft/network/syncher/SynchedEntityData$DataItem",
+            "net/minecraft/world/level/levelgen/MarsagliaPolarGaussian"};
     public static final String FIELD = "sleep$w";
     private static final Map<String, Integer> ROOT_OF = new HashMap<>();
     public static int sites, classes, draws;
@@ -120,6 +123,81 @@ public final class WriteBarrier {
         }
     }
 
+    /** -Dlab.wb.mutations=false: no barrier before mutating calls on collections (SpecTx then cannot undo them) */
+    static final boolean MUTATIONS = !"false".equals(System.getProperty("lab.wb.mutations"));
+    public static int mutationSites, mutationMisses;
+
+    /** a JDK / fastutil / Guava collection, map, iterator or atomic type (internal name) */
+    static boolean mutableType(String owner) {
+        if (owner.startsWith("java/util/concurrent/atomic/Atomic")) return true;
+        if (owner.startsWith("it/unimi/dsi/fastutil/")) return true;
+        if (owner.startsWith("com/google/common/collect/") && !owner.contains("Immutable")) return true;
+        if (!owner.startsWith("java/util/")) return false;
+        String n = owner.substring(10);
+        return n.equals("Map") || n.equals("Set") || n.equals("List") || n.equals("Collection") || n.equals("Iterator") || n.equals("ListIterator")
+                || n.equals("Queue") || n.equals("Deque") || n.equals("SortedMap") || n.equals("NavigableMap") || n.equals("SortedSet") || n.equals("NavigableSet")
+                || n.endsWith("Map") || n.endsWith("Set") || n.endsWith("List") || n.equals("ArrayDeque") || n.equals("PriorityQueue") || n.equals("Stack") || n.equals("Vector")
+                || n.equals("BitSet");
+    }
+
+    static boolean mutator(String name) {
+        for (String p : new String[] {"put", "remove", "rem", "add", "set", "clear", "compute", "merge", "replace", "poll", "push", "pop", "offer", "trim",
+                "retain", "sort", "increment", "decrement", "compareAndSet", "weakCompare", "getAnd", "lazySet", "accumulate", "updateAnd", "flip"})
+            if (name.startsWith(p)) return true;
+        return false;
+    }
+
+    /**
+     * Before every mutating call on a collection, map, iterator or atomic: {@code WB.mut(receiver)}. The receiver's value
+     * is found by a source analysis of the method's frames: after each instruction that produced it, DUP and the call
+     * (stack net zero, no branches, no locals - the frames stay valid). Unresolvable receivers are counted.
+     */
+    static void mutSites(ClassNode cn) {
+        for (MethodNode m : cn.methods) {
+            if (m.instructions == null || m.instructions.size() == 0 || m.name.equals("<clinit>")) continue;
+            java.util.List<MethodInsnNode> calls = new java.util.ArrayList<>();
+            for (AbstractInsnNode in = m.instructions.getFirst(); in != null; in = in.getNext())
+                if (in instanceof MethodInsnNode mi && (mi.getOpcode() == Opcodes.INVOKEINTERFACE || mi.getOpcode() == Opcodes.INVOKEVIRTUAL)
+                        && mutableType(mi.owner) && mutator(mi.name)) calls.add(mi);
+            if (calls.isEmpty()) continue;
+            org.objectweb.asm.tree.analysis.Frame<org.objectweb.asm.tree.analysis.SourceValue>[] frames;
+            try {
+                frames = new org.objectweb.asm.tree.analysis.Analyzer<>(new org.objectweb.asm.tree.analysis.SourceInterpreter()).analyze(cn.name, m);
+            } catch (org.objectweb.asm.tree.analysis.AnalyzerException ex) {
+                mutationMisses += calls.size();
+                continue;
+            }
+            java.util.Set<AbstractInsnNode> after = new java.util.LinkedHashSet<>();
+            for (MethodInsnNode mi : calls) {
+                var f = frames[m.instructions.indexOf(mi)];
+                if (f == null) continue;   // (dead code)
+                int argSlots = 0;
+                for (org.objectweb.asm.Type t : org.objectweb.asm.Type.getArgumentTypes(mi.desc)) argSlots++;   // (SourceInterpreter: one value per argument)
+                var recv = f.getStack(f.getStackSize() - argSlots - 1);
+                boolean ok = !recv.insns.isEmpty();
+                for (AbstractInsnNode src : recv.insns) {
+                    int op = src.getOpcode();   // (a value from NEW / a DUP may be an uninitialised object: not passed anywhere)
+                    if (op == Opcodes.NEW || op >= Opcodes.DUP && op <= Opcodes.SWAP || op < 0) ok = false;
+                }
+                if (!ok) {
+                    mutationMisses++;
+                    continue;
+                }
+                after.addAll(recv.insns);
+            }
+            for (AbstractInsnNode src : after) {
+                InsnList post = new InsnList();
+                post.add(new InsnNode(Opcodes.DUP));
+                post.add(new MethodInsnNode(Opcodes.INVOKESTATIC, WB, "mut", "(Ljava/lang/Object;)V", false));
+                m.instructions.insert(src, post);
+            }
+            if (!after.isEmpty()) {
+                m.maxStack += 1;
+                mutationSites += after.size();
+            }
+        }
+    }
+
     public static void transform(ClassNode cn) {
         for (String r : ROOTS)
             if (r.equals(cn.name)) {
@@ -161,6 +239,7 @@ public final class WriteBarrier {
         }
         sites += n;
         classes++;
+        if (MUTATIONS) mutSites(cn);
         if (DRAW_SITES) drawSites(cn);
         if (WBIds.VERBOSE) System.out.println("[sleep/wb] " + cn.name + ": " + n + " write sites");
     }

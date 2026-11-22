@@ -45,30 +45,30 @@ public final class WB {
 
     // ------------------------------------------------------------------ the barrier (one per root: constant offsets)
 
-    public static void w0(Object o, int id) { Object w = U.getObject(o, O0); if (w != null) hit(o, id, w); }
-    public static void w1(Object o, int id) { Object w = U.getObject(o, O1); if (w != null) hit(o, id, w); }
-    public static void w2(Object o, int id) { Object w = U.getObject(o, O2); if (w != null) hit(o, id, w); }
-    public static void w3(Object o, int id) { Object w = U.getObject(o, O3); if (w != null) hit(o, id, w); }
-    public static void w4(Object o, int id) { Object w = U.getObject(o, O4); if (w != null) hit(o, id, w); }
-    public static void w5(Object o, int id) { Object w = U.getObject(o, O5); if (w != null) hit(o, id, w); }
-    public static void w6(Object o, int id) { Object w = U.getObject(o, O6); if (w != null) hit(o, id, w); }
-    public static void w7(Object o, int id) { Object w = U.getObject(o, O7); if (w != null) hit(o, id, w); }
-    public static void w8(Object o, int id) { Object w = U.getObject(o, O8); if (w != null) hit(o, id, w); }
-    public static void w9(Object o, int id) { Object w = U.getObject(o, O9); if (w != null) hit(o, id, w); }
-    public static void w10(Object o, int id) { Object w = U.getObject(o, O10); if (w != null) hit(o, id, w); }
-    public static void w11(Object o, int id) { Object w = U.getObject(o, O11); if (w != null) hit(o, id, w); }
-    public static void w12(Object o, int id) { Object w = U.getObject(o, O12); if (w != null) hit(o, id, w); }
-    public static void w13(Object o, int id) { Object w = U.getObject(o, O13); if (w != null) hit(o, id, w); }
-    public static void w14(Object o, int id) { Object w = U.getObject(o, O14); if (w != null) hit(o, id, w); }
-    public static void w15(Object o, int id) { Object w = U.getObject(o, O15); if (w != null) hit(o, id, w); }
-    public static void w16(Object o, int id) { Object w = U.getObject(o, O16); if (w != null) hit(o, id, w); }
-    public static void w17(Object o, int id) { Object w = U.getObject(o, O17); if (w != null) hit(o, id, w); }
-    public static void w18(Object o, int id) { Object w = U.getObject(o, O18); if (w != null) hit(o, id, w); }
-    public static void w19(Object o, int id) { Object w = U.getObject(o, O19); if (w != null) hit(o, id, w); }
-    public static void w20(Object o, int id) { Object w = U.getObject(o, O20); if (w != null) hit(o, id, w); }
-    public static void w21(Object o, int id) { Object w = U.getObject(o, O21); if (w != null) hit(o, id, w); }
-    public static void w22(Object o, int id) { Object w = U.getObject(o, O22); if (w != null) hit(o, id, w); }
-    public static void w23(Object o, int id) { Object w = U.getObject(o, O23); if (w != null) hit(o, id, w); }
+    public static void w0(Object o, int id) { Object w = U.getObject(o, O0); if (w != null || TX) hit(o, id, w, 0); }
+    public static void w1(Object o, int id) { Object w = U.getObject(o, O1); if (w != null || TX) hit(o, id, w, 1); }
+    public static void w2(Object o, int id) { Object w = U.getObject(o, O2); if (w != null || TX) hit(o, id, w, 2); }
+    public static void w3(Object o, int id) { Object w = U.getObject(o, O3); if (w != null || TX) hit(o, id, w, 3); }
+    public static void w4(Object o, int id) { Object w = U.getObject(o, O4); if (w != null || TX) hit(o, id, w, 4); }
+    public static void w5(Object o, int id) { Object w = U.getObject(o, O5); if (w != null || TX) hit(o, id, w, 5); }
+    public static void w6(Object o, int id) { Object w = U.getObject(o, O6); if (w != null || TX) hit(o, id, w, 6); }
+    public static void w7(Object o, int id) { Object w = U.getObject(o, O7); if (w != null || TX) hit(o, id, w, 7); }
+    public static void w8(Object o, int id) { Object w = U.getObject(o, O8); if (w != null || TX) hit(o, id, w, 8); }
+    public static void w9(Object o, int id) { Object w = U.getObject(o, O9); if (w != null || TX) hit(o, id, w, 9); }
+    public static void w10(Object o, int id) { Object w = U.getObject(o, O10); if (w != null || TX) hit(o, id, w, 10); }
+    public static void w11(Object o, int id) { Object w = U.getObject(o, O11); if (w != null || TX) hit(o, id, w, 11); }
+    public static void w12(Object o, int id) { Object w = U.getObject(o, O12); if (w != null || TX) hit(o, id, w, 12); }
+    public static void w13(Object o, int id) { Object w = U.getObject(o, O13); if (w != null || TX) hit(o, id, w, 13); }
+    public static void w14(Object o, int id) { Object w = U.getObject(o, O14); if (w != null || TX) hit(o, id, w, 14); }
+    public static void w15(Object o, int id) { Object w = U.getObject(o, O15); if (w != null || TX) hit(o, id, w, 15); }
+    public static void w16(Object o, int id) { Object w = U.getObject(o, O16); if (w != null || TX) hit(o, id, w, 16); }
+    public static void w17(Object o, int id) { Object w = U.getObject(o, O17); if (w != null || TX) hit(o, id, w, 17); }
+    public static void w18(Object o, int id) { Object w = U.getObject(o, O18); if (w != null || TX) hit(o, id, w, 18); }
+    public static void w19(Object o, int id) { Object w = U.getObject(o, O19); if (w != null || TX) hit(o, id, w, 19); }
+    public static void w20(Object o, int id) { Object w = U.getObject(o, O20); if (w != null || TX) hit(o, id, w, 20); }
+    public static void w21(Object o, int id) { Object w = U.getObject(o, O21); if (w != null || TX) hit(o, id, w, 21); }
+    public static void w22(Object o, int id) { Object w = U.getObject(o, O22); if (w != null || TX) hit(o, id, w, 22); }
+    public static void w23(Object o, int id) { Object w = U.getObject(o, O23); if (w != null || TX) hit(o, id, w, 23); }
 
     /** sets an object's watcher (null: unwatched); false if its class has no watcher field */
     static boolean watch(Object o, Object watcher) {
@@ -161,10 +161,34 @@ public final class WB {
     private static final List<Entity> sampled = new ArrayList<>();
     private static long reportAt = 400;
 
-    static void hit(Object o, int id, Object w) {
+    /**
+     * SpecTicks' transaction mode (SpecTx): while a parallel run ticks, every write into a root object goes to the
+     * writing thread's transaction (copy on first write, conflicts between transactions); outside runs false.
+     */
+    public static volatile boolean TX;
+
+    /** a mutating call on a collection, map or atomic in a barrier class (WriteBarrier.mutSites): to the transaction */
+    public static void mut(Object c) {
+        if (TX) SpecTx.mutated(c);
+    }
+
+    static void hit(Object o, int id, Object w, int root) {
+        if (TX) {
+            SpecTx tx = SpecTx.current();
+            if (tx != null && tx.active) {
+                tx.wrote(o, w, root);
+                if (w == null || w instanceof SpecTx.Token) return;
+            }
+            if (w == null || w instanceof SpecTx.Token) return;
+        }
+        if (w instanceof SpecTx.Token t) {
+            if (!t.live) U.putObject(o, offset(root), null);   // (a released transaction's word: gone for the next writes)
+            return;
+        }
         if (w instanceof EntitySleep.PartWatch pw) pw.write(id);
         else if (w instanceof EntitySleep.SharedWatch sw) EntitySleep.onWrite(sw, id);
         else if (w instanceof dev.lull.TickCensus.Owner ow) dev.lull.TickCensus.write(ow, id);
+        else if (w instanceof SpecTx.Token) return;
         else sampleHit(o, id);
     }
 

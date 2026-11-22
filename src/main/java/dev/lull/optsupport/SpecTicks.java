@@ -63,6 +63,14 @@ public final class SpecTicks {
         boolean serial = ALTERNATE && (walks & 1) == 0;
         long t0 = System.nanoTime();
         try {
+            if (UNDO_TEST) {
+                for (int k = 0; k < n; k++) if (eligible(all[k])) undoTest(k, consumer); else consumer.accept(all[k]);
+                return;
+            }
+            if (TX_TEST) {
+                for (int k = 0; k < n; k++) if (eligible(all[k])) txTest(k, consumer); else consumer.accept(all[k]);
+                return;
+            }
             int i = 0;
             while (i < n) {
                 if (serial || !eligible(all[i])) {
@@ -72,6 +80,7 @@ public final class SpecTicks {
                 int j = i;
                 while (j < n && eligible(all[j])) j++;
                 if (j - i < MIN) for (int k = i; k < j; k++) consumer.accept(all[k]);
+                else if (EXACT) runExact(i, j, consumer, lvl);
                 else run(i, j, consumer, lvl);
                 i = j;
             }
@@ -83,8 +92,652 @@ public final class SpecTicks {
         }
     }
 
+    // ------------------------------------------------------------------ test: a tick, undone, ticked again - the same?
+
+    /**
+     * -Dlab.spec.undoTest=true (serial, a test of SpecUndo): each eligible entity's state taken, the entity ticked (its
+     * storage moves and effects kept aside, then dropped), its state taken again, the first state put back, the tick
+     * run again (its moves and effects done for real): both results compared. A difference = state the undo misses
+     * (or a tick that is not a function of its state). Ticks that saw another entity are counted apart (a push changed
+     * the neighbour in the first run too).
+     */
+    static final boolean UNDO_TEST = Boolean.getBoolean("lab.spec.undoTest");
+    private static boolean testing;
+    private static final dev.lull.optsupport.sleep.SpecUndo.Snap S0 = new dev.lull.optsupport.sleep.SpecUndo.Snap(), S1 = new dev.lull.optsupport.sleep.SpecUndo.Snap(),
+            S2 = new dev.lull.optsupport.sleep.SpecUndo.Snap();
+    static long undoTicks, undoSame, undoDiff, undoNsTake, undoNsRestore, undoParts, undoContents;
+    static final java.util.Map<String, Long> UNDO_DIFFS = new java.util.TreeMap<>();
+    private static String described;
+
+    private static void undoTest(int k, Consumer<Entity> consumer) {
+        Entity e = all[k];
+        if (deferred.length <= k) {
+            int len = Math.max(k + 1, deferred.length * 2);
+            deferred = java.util.Arrays.copyOf(deferred, len);
+            deferredN = java.util.Arrays.copyOf(deferredN, len);
+        }
+        long t0 = System.nanoTime();
+        dev.lull.optsupport.sleep.SpecUndo.take(e, S0);
+        long t1 = System.nanoTime();
+        undoNsTake += t1 - t0;
+        undoParts += S0.parts();
+        undoContents += S0.contents();
+        if (described == null) System.out.println("[sleep/spec] undo test: a " + e.getType().toShortString() + "'s state: " + (described = dev.lull.optsupport.sleep.SpecUndo.describe(S0)));
+        int[] cur = CUR.get();
+        testing = true;
+        cur[0] = k;
+        try {
+            consumer.accept(e);
+        } finally {
+            cur[0] = -1;
+            testing = false;
+        }
+        for (int q = 0; q < deferredN[k]; q++) deferred[k][q] = null;   // the first run's moves and effects: dropped
+        deferredN[k] = 0;
+        dev.lull.optsupport.sleep.SpecUndo.take(e, S1);
+        long t2 = System.nanoTime();
+        dev.lull.optsupport.sleep.SpecUndo.restore(S0);
+        undoNsRestore += System.nanoTime() - t2;
+        testing = true;
+        cur[0] = k;
+        try {
+            consumer.accept(e);
+        } finally {
+            cur[0] = -1;
+            testing = false;
+        }
+        dev.lull.optsupport.sleep.SpecUndo.take(e, S2);
+        commitDeferred(k, k + 1);
+        undoTicks++;
+        String d = e.isRemoved() ? null : dev.lull.optsupport.sleep.SpecUndo.diff(S1, S2);
+        if (d == null) undoSame++;
+        else {
+            undoDiff++;
+            if (UNDO_DIFFS.merge(e.getType().toShortString() + " " + d, 1L, Long::sum) == 1 && UNDO_DIFFS.size() < 40)
+                System.out.println("[sleep/spec] undo test: DIFFERENT after undo + tick again: " + e.getType().toShortString() + " " + d);
+        }
+    }
+
+    /**
+     * -Dlab.spec.txTest=true (serial, a test of SpecTx with the write barrier): each eligible entity's full state taken
+     * (SpecUndo, the reference), the entity ticked inside a transaction (its moves and effects kept aside, dropped), the
+     * transaction undone, the state taken again: it must equal the reference. Then the tick for real (no transaction);
+     * every 2nd walk the real tick runs inside a transaction that is released (its cost, against the plain ticks).
+     */
+    static final boolean TX_TEST = Boolean.getBoolean("lab.spec.txTest");
+    private static final dev.lull.optsupport.sleep.SpecTx TX0 = new dev.lull.optsupport.sleep.SpecTx();
+    static long txTicks, txSame, txDiff, txObjs, txContents, nsTxTick, nsPlainTick, txTimed, plainTimed;
+    static final java.util.Map<String, Long> TX_DIFFS = new java.util.TreeMap<>();
+
+    private static void txTest(int k, Consumer<Entity> consumer) {
+        Entity e = all[k];
+        if (deferred.length <= k) {
+            int len = Math.max(k + 1, deferred.length * 2);
+            deferred = java.util.Arrays.copyOf(deferred, len);
+            deferredN = java.util.Arrays.copyOf(deferredN, len);
+        }
+        dev.lull.optsupport.sleep.SpecUndo.take(e, S0);
+        int[] cur = CUR.get();
+        testing = true;
+        cur[0] = k;
+        TX0.begin(e, k, false);
+        dev.lull.optsupport.sleep.WB.TX = true;
+        try {
+            consumer.accept(e);
+        } finally {
+            dev.lull.optsupport.sleep.WB.TX = false;
+            TX0.end();
+            cur[0] = -1;
+            testing = false;
+        }
+        for (int q = 0; q < deferredN[k]; q++) deferred[k][q] = null;
+        deferredN[k] = 0;
+        txObjs += TX0.objects();
+        txContents += TX0.contentsCopied();
+        TX0.restore();
+        dev.lull.optsupport.sleep.SpecUndo.take(e, S1);
+        txTicks++;
+        String d = dev.lull.optsupport.sleep.SpecUndo.diff(S0, S1);
+        if (d == null) txSame++;
+        else {
+            txDiff++;
+            if (TX_DIFFS.merge(e.getType().toShortString() + " " + d, 1L, Long::sum) == 1 && TX_DIFFS.size() < 40)
+                System.out.println("[sleep/spec] tx test: NOT UNDONE: " + e.getType().toShortString() + " " + d);
+        }
+        // the real tick: plain, or (every 2nd walk) inside a transaction - the barrier's cost
+        boolean inTx = (walks & 1) == 0;
+        long t0 = System.nanoTime();
+        if (inTx) {
+            testing = true;
+            cur[0] = k;
+            TX0.begin(e, k, false);
+            dev.lull.optsupport.sleep.WB.TX = true;
+            try {
+                consumer.accept(e);
+            } finally {
+                dev.lull.optsupport.sleep.WB.TX = false;
+                TX0.end();
+                cur[0] = -1;
+                testing = false;
+            }
+            TX0.release();
+            nsTxTick += System.nanoTime() - t0;
+            txTimed++;
+            commitDeferred(k, k + 1);
+        } else {
+            consumer.accept(e);
+            nsPlainTick += System.nanoTime() - t0;
+            plainTimed++;
+        }
+    }
+
     static boolean eligible(Entity e) {
-        return e instanceof Animal && !e.isRemoved() && !e.isPassenger() && !e.isVehicle() && e.getClass().getName().startsWith("net.minecraft.");
+        return e instanceof Animal && !e.isRemoved() && !e.isPassenger() && !e.isVehicle() && e.getClass().getName().startsWith("net.minecraft.")
+                && (!EXACT || dev.lull.optsupport.sleep.EntitySleep.plainNext(e));
+    }
+
+    // ------------------------------------------------------------------ stage 1: exact (transactions, validation, re-runs)
+
+    /**
+     * -Dlab.spec.exact (default with lab.spec; needs -Dlab.opt.WriteBarrier=true): a run is ticked in blocks of the
+     * walk ({@code lab.spec.block} entities). A block's ticks run in parallel, each in a SpecTx (undo log, conflicts),
+     * recording its entity queries and path type lookups; its storage moves, removals and effects are deferred. Then,
+     * on the server thread: a tick is invalid when its transaction saw a conflict (a write into another tick's object
+     * or another entity, a world write, a spawn, a draw from the level's random, an exception), when it holds a
+     * reference to another entity of the run (goal targets: read through fields, unseen by the queries), or when one of
+     * its query boxes meets the box another tick of the block swept (start to end of its tick: it may have seen that
+     * one before or after its tick); a tick after an invalid one whose swept box an invalid one's query met is undone
+     * too (the invalid one must see it as before its tick). All invalid ticks are undone (latest first); then in walk
+     * order: a valid tick's path type lookups are replayed into the shared cache (a value that differs, or a shared
+     * entry vanilla would have recomputed: invalid after all - undone), its deferred work done; an invalid tick runs
+     * again on the server thread inside a serial transaction - if that run's queries meet a later tick's swept box or it
+     * writes into a later tick's objects, it is undone with those later ticks and runs again. Exact by construction: a
+     * committed tick read nothing another tick of the block changed, an invalid one runs in vanilla's order.
+     */
+    static final boolean EXACT = !Boolean.getBoolean("lab.spec.unsafe");
+    static final int BLOCK = Integer.getInteger("lab.spec.block", 2048);
+    private static dev.lull.optsupport.sleep.SpecTx[] txs = new dev.lull.optsupport.sleep.SpecTx[0];
+    private static double[] sweep = new double[0];   // per slot: the swept box (6)
+    private static boolean[] invalid = new boolean[0], done = new boolean[0];
+    /** groups: slots whose start boxes (inflated by MARGIN) meet; per slot its group (the group's first slot), the
+     * groups' slots in walk order (order[], from groupStart[g] to groupStart[g + 1]) */
+    static final double MARGIN = Double.parseDouble(System.getProperty("lab.spec.margin", "1.0"));
+    private static int[] groupOf = new int[0], parent = new int[0], order = new int[0], groupStart = new int[0], groupIx = new int[0];
+    private static boolean[] sectionMoved = new boolean[0];
+    private static int nGroups;
+    private static final it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap SLOT_OF = new it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap();
+    static long groupedTicks, groupsMulti;
+    static long blocks, specTicks, invalidTicks, cascadeTicks, reruns, pathInvalid, refInvalid, spatialInvalid, txInvalid;
+    static final java.util.Map<String, Long> WHY = new java.util.concurrent.ConcurrentHashMap<>();
+
+    static long nsGroups;
+
+    private static int find(int x) {
+        while (parent[x] != x) {
+            parent[x] = parent[parent[x]];
+            x = parent[x];
+        }
+        return x;
+    }
+
+    /** the block's groups: union of slots whose start boxes, inflated by MARGIN, meet (grid of 4-block cells) */
+    private static void groups(int b0, int m) {
+        for (int i = 0; i < m; i++) {
+            parent[i] = i;
+            net.minecraft.world.phys.AABB bb = all[b0 + i].getBoundingBox();
+            int o = i * 6;
+            sweep[o] = bb.minX - MARGIN; sweep[o + 1] = bb.minY - MARGIN; sweep[o + 2] = bb.minZ - MARGIN;
+            sweep[o + 3] = bb.maxX + MARGIN; sweep[o + 4] = bb.maxY + MARGIN; sweep[o + 5] = bb.maxZ + MARGIN;
+        }
+        buildGrid(m);
+        double[] s = sweep;
+        for (it.unimi.dsi.fastutil.ints.IntArrayList l : GRID.values()) {
+            for (int x = 0; x < l.size(); x++) {
+                int i = l.getInt(x), oi = i * 6;
+                for (int y = x + 1; y < l.size(); y++) {
+                    int j = l.getInt(y), oj = j * 6;
+                    if (s[oi] <= s[oj + 3] && s[oi + 3] >= s[oj] && s[oi + 1] <= s[oj + 4] && s[oi + 4] >= s[oj + 1] && s[oi + 2] <= s[oj + 5] && s[oi + 5] >= s[oj + 2]) {
+                        int a = find(i), b = find(j);
+                        if (a != b) parent[Math.max(a, b)] = Math.min(a, b);
+                    }
+                }
+            }
+        }
+        // group ids by first slot; slots ordered by group, walk order inside
+        int[] count = groupIx;   // (reused: count per root, then the group index per slot)
+        java.util.Arrays.fill(count, 0, m, 0);
+        for (int i = 0; i < m; i++) {
+            int r = find(i);
+            groupOf[i] = r;
+            count[r]++;
+        }
+        int g = 0, pos = 0;
+        int[] startOfRoot = parent;   // (parent no longer needed: reuse as the root's group index)
+        for (int i = 0; i < m; i++) {
+            if (groupOf[i] != i) continue;
+            groupStart[g] = pos;
+            pos += count[i];
+            startOfRoot[i] = g++;
+        }
+        groupStart[g] = pos;
+        nGroups = g;
+        int[] fill = count;
+        for (int i = 0; i < g; i++) fill[i] = groupStart[i];   // (count no longer needed: next free place per group)
+        for (int i = 0; i < m; i++) {
+            int gi = startOfRoot[groupOf[i]];
+            order[fill[gi]++] = i;
+        }
+        for (int i = 0; i < m; i++) groupIx[i] = startOfRoot[groupOf[i]];
+        for (int i = 0; i < g; i++) if (groupStart[i + 1] - groupStart[i] > 1) { groupsMulti++; groupedTicks += groupStart[i + 1] - groupStart[i]; }
+        SLOT_OF.clear();
+        for (int i = 0; i < m; i++) SLOT_OF.put(all[b0 + i].getId(), i);
+        groupB0 = b0;
+    }
+
+    private static int groupB0;
+
+    /** an entity's group in the current block (-1: not one of its ticks) */
+    static int groupOfEntity(Entity e) {
+        int slot = SLOT_OF.getOrDefault(e.getId(), -1);
+        return slot < 0 || all[groupB0 + slot] != e ? -1 : groupOf[slot];
+    }
+
+    private static void runExact(int from, int to, Consumer<Entity> consumer, ServerLevel lvl) {
+        if (deferred.length < to) {
+            int len = Math.max(to, deferred.length * 2);
+            deferred = java.util.Arrays.copyOf(deferred, len);
+            deferredN = java.util.Arrays.copyOf(deferredN, len);
+        }
+        runs++;
+        inRuns += to - from;
+        main = Thread.currentThread();
+        dev.lull.optsupport.sleep.SpecTx.mainThread = main;
+        pathCache = lvl.getPathTypeCache();
+        dev.lull.optsupport.sleep.SpecTx.levelSeed = levelSeed(lvl);
+        for (int b = from; b < to; b += BLOCK) block(b, Math.min(to, b + BLOCK), consumer);
+    }
+
+    private static Object levelSeed(ServerLevel lvl) {
+        try {
+            if (seedField == null) {
+                seedField = net.minecraft.world.level.levelgen.LegacyRandomSource.class.getDeclaredField("seed");
+                seedField.setAccessible(true);
+            }
+            return lvl.random instanceof net.minecraft.world.level.levelgen.LegacyRandomSource r ? seedField.get(r) : null;
+        } catch (ReflectiveOperationException e) {
+            return null;
+        }
+    }
+
+    private static java.lang.reflect.Field seedField;
+
+    private static void block(int b0, int b1, Consumer<Entity> consumer) {
+        int m = b1 - b0;
+        blocks++;
+        specTicks += m;
+        if (txs.length < m) {
+            int old = txs.length;
+            txs = java.util.Arrays.copyOf(txs, m);
+            for (int i = old; i < m; i++) txs[i] = new dev.lull.optsupport.sleep.SpecTx();
+            sweep = new double[m * 6];
+            invalid = new boolean[m];
+            done = new boolean[m];
+            groupOf = new int[m];
+            parent = new int[m];
+            order = new int[m];
+            groupStart = new int[m + 1];
+            groupIx = new int[m];
+            sectionMoved = new boolean[m];
+        }
+        java.util.Arrays.fill(invalid, 0, m, false);
+        java.util.Arrays.fill(done, 0, m, false);
+        var pool = ServerReactor.pool();
+        long tg = System.nanoTime();
+        groups(b0, m);
+        long t0 = System.nanoTime();
+        nsGroups += t0 - tg;
+        dev.lull.optsupport.sleep.SpecTx.GROUP = SpecTicks::groupOfEntity;
+        dev.lull.optsupport.sleep.WB.TX = true;
+        running = true;
+        try {
+            pool.forRange(nGroups, 4, pool.workerCount(), g -> {
+                for (int a = groupStart[g]; a < groupStart[g + 1]; a++) speculate(b0, order[a], consumer);
+            });
+        } finally {
+            running = false;
+            dev.lull.optsupport.sleep.WB.TX = false;
+        }
+        long t1 = System.nanoTime();
+        nsPhase += t1 - t0;
+        validate(b0, m);
+        long t2 = System.nanoTime();
+        // undo every invalid tick, the latest first
+        for (int i = m - 1; i >= 0; i--) if (invalid[i]) undo(b0, i);
+        long t3 = System.nanoTime();
+        nsUndo += t3 - t2;
+        long rr = 0;
+        dev.lull.optsupport.sleep.WB.TX = true;
+        try {
+            for (int i = 0; i < m; i++) {
+                int k = b0 + i;
+                if (!invalid[i] && !replayPaths(txs[i])) {
+                    pathInvalid++;
+                    why("path type cache");
+                    int g = groupIx[i];   // (it and the rest of its group, latest first)
+                    for (int a = groupStart[g + 1] - 1; a >= groupStart[g]; a--) {
+                        int j = order[a];
+                        if (done[j] || invalid[j]) continue;
+                        invalid[j] = true;
+                        undo(b0, j);
+                    }
+                }
+                if (invalid[i]) {
+                    long r0 = System.nanoTime();
+                    rerun(b0, m, i, consumer);
+                    rr += System.nanoTime() - r0;
+                } else {
+                    commitDeferred(k, k + 1);
+                    txs[i].release();
+                }
+                done[i] = true;
+            }
+        } finally {
+            dev.lull.optsupport.sleep.WB.TX = false;
+        }
+        nsRerun += rr;
+        nsCommitRest += System.nanoTime() - t3 - rr;
+        nsCommit += System.nanoTime() - t1;
+    }
+
+    private static void speculate(int b0, int q, Consumer<Entity> consumer) {
+        int k = b0 + q;
+        Entity e = all[k];
+        dev.lull.optsupport.sleep.SpecTx tx = txs[q];
+        net.minecraft.world.phys.AABB bb = e.getBoundingBox();
+        int[] cur = CUR.get();
+        cur[0] = k;
+        tx.begin(e, k, false);
+        tx.group = groupOf[q];
+        long sec = net.minecraft.core.SectionPos.asLong(e.blockPosition());
+        if (holdsOthers(e)) tx.conflict("holds another entity");
+        try {
+            consumer.accept(e);   // (exceptions: ServerParallelItemsGuardMixin makes them conflicts)
+            if (holdsOthers(e)) tx.conflict("holds another entity");
+        } catch (Throwable t) {
+            tx.conflict("threw " + t);
+        } finally {
+            tx.end();
+            cur[0] = -1;
+        }
+        net.minecraft.world.phys.AABB eb = e.getBoundingBox();
+        sectionMoved[q] = net.minecraft.core.SectionPos.asLong(e.blockPosition()) != sec;
+        double[] s = sweep;
+        int o = q * 6;
+        s[o] = Math.min(bb.minX, eb.minX); s[o + 1] = Math.min(bb.minY, eb.minY); s[o + 2] = Math.min(bb.minZ, eb.minZ);
+        s[o + 3] = Math.max(bb.maxX, eb.maxX); s[o + 4] = Math.max(bb.maxY, eb.maxY); s[o + 5] = Math.max(bb.maxZ, eb.maxZ);
+    }
+
+    private static final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<it.unimi.dsi.fastutil.ints.IntArrayList> GRID = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+    private static final java.util.ArrayList<it.unimi.dsi.fastutil.ints.IntArrayList> LISTS = new java.util.ArrayList<>();
+    private static int listsUsed;
+
+    private static long cell(int x, int z) {
+        return ((long) x << 32) ^ (z & 0xFFFFFFFFL);
+    }
+
+    /** spatial cells of 4 blocks (x, z): which slots' swept boxes touch each */
+    private static void buildGrid(int m) {
+        GRID.clear();
+        listsUsed = 0;
+        double[] s = sweep;
+        for (int i = 0; i < m; i++) {
+            int o = i * 6;
+            int x0 = (int) Math.floor(s[o]) >> 2, z0 = (int) Math.floor(s[o + 2]) >> 2, x1 = (int) Math.floor(s[o + 3]) >> 2, z1 = (int) Math.floor(s[o + 5]) >> 2;
+            for (int x = x0; x <= x1; x++)
+                for (int z = z0; z <= z1; z++) {
+                    long c = cell(x, z);
+                    it.unimi.dsi.fastutil.ints.IntArrayList l = GRID.get(c);
+                    if (l == null) {
+                        if (listsUsed == LISTS.size()) LISTS.add(new it.unimi.dsi.fastutil.ints.IntArrayList(4));
+                        l = LISTS.get(listsUsed++);
+                        l.clear();
+                        GRID.put(c, l);
+                    }
+                    l.add(i);
+                }
+        }
+    }
+
+    /** the slots (other than i) whose swept boxes meet a query box of tx; later ones only: {@code laterThan} >= 0 */
+    private static void touched(dev.lull.optsupport.sleep.SpecTx tx, int i, int laterThan, it.unimi.dsi.fastutil.ints.IntArrayList out) {
+        double[] s = sweep;
+        double[] qb = tx.q;
+        for (int a = 0; a < tx.nq; a += 6) {
+            double x0 = qb[a], y0 = qb[a + 1], z0 = qb[a + 2], x1 = qb[a + 3], y1 = qb[a + 4], z1 = qb[a + 5];
+            int cx0 = (int) Math.floor(x0) >> 2, cz0 = (int) Math.floor(z0) >> 2, cx1 = (int) Math.floor(x1) >> 2, cz1 = (int) Math.floor(z1) >> 2;
+            if ((long) (cx1 - cx0 + 1) * (cz1 - cz0 + 1) > 4096) {   // a huge query: every slot
+                for (int j = 0; j < s.length / 6 && j < txs.length; j++) if (j != i && j > laterThan && !out.contains(j)) out.add(j);
+                continue;
+            }
+            for (int cx = cx0; cx <= cx1; cx++)
+                for (int cz = cz0; cz <= cz1; cz++) {
+                    it.unimi.dsi.fastutil.ints.IntArrayList l = GRID.get(cell(cx, cz));
+                    if (l == null) continue;
+                    for (int n2 = 0; n2 < l.size(); n2++) {
+                        int j = l.getInt(n2);
+                        if (j == i || j <= laterThan) continue;
+                        int o = j * 6;
+                        if (s[o] <= x1 && s[o + 3] >= x0 && s[o + 1] <= y1 && s[o + 4] >= y0 && s[o + 2] <= z1 && s[o + 5] >= z0 && !out.contains(j)) out.add(j);
+                    }
+                }
+        }
+    }
+
+    private static final it.unimi.dsi.fastutil.ints.IntArrayList HIT = new it.unimi.dsi.fastutil.ints.IntArrayList();
+
+    private static boolean[] spatial = new boolean[0];
+    private static final ThreadLocal<it.unimi.dsi.fastutil.ints.IntArrayList> HITS = ThreadLocal.withInitial(it.unimi.dsi.fastutil.ints.IntArrayList::new);
+    static long nsGrid, nsValidate, nsUndo, nsRerun, nsCommitRest;
+
+    private static void validate(int b0, int m) {
+        long t0 = System.nanoTime();
+        buildGrid(m);
+        long t1 = System.nanoTime();
+        nsGrid += t1 - t0;
+        if (spatial.length < m) spatial = new boolean[m];
+        var pool = ServerReactor.pool();
+        pool.forRange(m, 64, pool.workerCount(), i -> {   // (read-only: the grid, the boxes, the query logs)
+            it.unimi.dsi.fastutil.ints.IntArrayList h = HITS.get();
+            h.clear();
+            touched(txs[i], i, -1, h);
+            boolean bad = false;
+            for (int n2 = 0; n2 < h.size() && !bad; n2++) {
+                int j = h.getInt(n2);
+                // a tick of its own group ran in walk order next to it (fine) - unless an earlier one changed section:
+                // its storage move was deferred, a query of this one may have missed it there
+                bad = groupOf[j] != groupOf[i] || j < i && sectionMoved[j];
+            }
+            spatial[i] = bad;
+        });
+        for (int i = 0; i < m; i++) {
+            dev.lull.optsupport.sleep.SpecTx tx = txs[i];
+            if (tx.conflict) {
+                invalid[i] = true;
+                txInvalid++;
+                why(tx.why);
+            } else if (spatial[i]) {
+                invalid[i] = true;
+                spatialInvalid++;
+                why("saw another tick's box");
+            }
+        }
+        nsValidate += System.nanoTime() - t1;
+        // a group is undone as a whole (its ticks read each other's results); an invalid tick's queries that meet a
+        // later valid tick: that one's group too (it must see that one as before its tick) - until nothing changes
+        for (boolean changed = true; changed; ) {
+            changed = false;
+            for (int i = 0; i < m; i++) {
+                if (!invalid[i]) continue;
+                int g = groupIx[i];
+                for (int a = groupStart[g]; a < groupStart[g + 1]; a++) {
+                    int j = order[a];
+                    if (!invalid[j]) {
+                        invalid[j] = true;
+                        changed = true;
+                        cascadeTicks++;
+                        why("its group is undone");
+                    }
+                }
+                HIT.clear();
+                touched(txs[i], i, i, HIT);
+                for (int n2 = 0; n2 < HIT.size(); n2++) {
+                    int j = HIT.getInt(n2);
+                    if (!invalid[j]) {
+                        invalid[j] = true;
+                        changed = true;
+                        cascadeTicks++;
+                        why("seen by an earlier invalid tick");
+                    }
+                }
+            }
+        }
+        for (int i = 0; i < m; i++) if (invalid[i]) invalidTicks++;
+    }
+
+    private static void why(String w) {
+        WHY.merge(w == null ? "?" : w.length() > 80 ? w.substring(0, 80) : w, 1L, Long::sum);
+    }
+
+    /** slot i's speculative result undone (its transaction restored, its deferred work dropped) */
+    private static void undo(int b0, int i) {
+        txs[i].restore();
+        int k = b0 + i;
+        Object[] d = deferred[k];
+        for (int q = 0; q < deferredN[k]; q++) d[q] = null;
+        deferredN[k] = 0;
+    }
+
+    /** slot i again, on the server thread in walk order (serial transaction; later ticks it touches undone first) */
+    private static void rerun(int b0, int m, int i, Consumer<Entity> consumer) {
+        int k = b0 + i;
+        Entity e = all[k];
+        dev.lull.optsupport.sleep.SpecTx tx = txs[i];
+        int[] cur = CUR.get();
+        for (int round = 0; ; round++) {
+            reruns++;
+            tx.begin(e, k, true);
+            testing = true;
+            cur[0] = k;
+            try {
+                consumer.accept(e);
+            } finally {
+                tx.end();
+                cur[0] = -1;
+                testing = false;
+            }
+            HIT.clear();
+            touched(tx, i, i, HIT);
+            for (int n2 = HIT.size() - 1; n2 >= 0; n2--) if (done[HIT.getInt(n2)] || invalid[HIT.getInt(n2)]) HIT.removeInt(n2);
+            for (dev.lull.optsupport.sleep.SpecTx into : tx.cascade)
+                for (int j = i + 1; j < m; j++) if (txs[j] == into && !invalid[j] && !done[j] && !HIT.contains(j)) HIT.add(j);
+            if (HIT.isEmpty()) {
+                commitDeferred(k, k + 1);
+                tx.release();
+                return;
+            }
+            // it read (or wrote) later ticks' results: undo it and them, then again
+            undo(b0, i);
+            for (int n2 = 0; n2 < HIT.size(); n2++) {
+                int g = groupIx[HIT.getInt(n2)];
+                for (int a = groupStart[g + 1] - 1; a >= groupStart[g]; a--) {   // (its whole group, latest first)
+                    int j = order[a];
+                    if (invalid[j] || done[j]) continue;
+                    undo(b0, j);
+                    invalid[j] = true;
+                    cascadeTicks++;
+                    why("touched by a re-run");
+                }
+            }
+            if (round > 64) throw new IllegalStateException("[sleep/spec] re-run of " + e + " does not settle");
+        }
+    }
+
+    /**
+     * slot's path type lookups into the shared cache in walk order: a shared entry it used must be what vanilla would
+     * find now (else vanilla would have recomputed or seen another value: false); its own computes stored as vanilla
+     * stores them.
+     */
+    private static boolean replayPaths(dev.lull.optsupport.sleep.SpecTx tx) {
+        if (tx.np == 0 || pathCache == null) return true;
+        var acc = (dev.lull.opt.ServerParallelItemsPathAccessor) pathCache;
+        long[] positions = acc.sleep$positions();
+        PathType[] types = acc.sleep$pathTypes();
+        for (int a = 0; a < tx.np; a++) {
+            long key = tx.pathKey[a];
+            int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & 4095;
+            PathType live = positions[idx] == key ? types[idx] : null;
+            if (live != null) {
+                if (live != tx.pathVal[a]) return false;   // (vanilla would have used this one)
+            } else if (tx.pathShared[a]) return false;   // (vanilla would have recomputed: not checkable here)
+            else {
+                positions[idx] = key;
+                types[idx] = tx.pathVal[a];
+            }
+        }
+        return true;
+    }
+
+    /** a goal (or the target) of the mob holds another entity that is not a player: read through a field, not a query */
+    private static final ClassValue<long[]> ENTITY_FIELDS = new ClassValue<>() {
+        @Override
+        protected long[] computeValue(Class<?> c) {
+            it.unimi.dsi.fastutil.longs.LongArrayList l = new it.unimi.dsi.fastutil.longs.LongArrayList();
+            for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass())
+                for (java.lang.reflect.Field fd : k.getDeclaredFields())
+                    if (!java.lang.reflect.Modifier.isStatic(fd.getModifiers()) && Entity.class.isAssignableFrom(fd.getType())) l.add(UNSAFE.objectFieldOffset(fd));
+            return l.toLongArray();
+        }
+    };
+    private static final sun.misc.Unsafe UNSAFE;
+
+    static {
+        sun.misc.Unsafe u = null;
+        try {
+            java.lang.reflect.Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            u = (sun.misc.Unsafe) f.get(null);
+        } catch (ReflectiveOperationException ignored) {
+        }
+        UNSAFE = u;
+    }
+
+    static boolean holdsOthers(Entity e) {
+        if (!(e instanceof net.minecraft.world.entity.Mob m)) return false;
+        if (other(e, m.getTarget()) || other(e, m.getLastHurtByMob())) return true;
+        for (net.minecraft.world.entity.ai.goal.WrappedGoal g : m.goalSelector.getAvailableGoals()) if (holds(e, g.getGoal())) return true;
+        for (net.minecraft.world.entity.ai.goal.WrappedGoal g : m.targetSelector.getAvailableGoals()) if (holds(e, g.getGoal())) return true;
+        return false;
+    }
+
+    private static boolean other(Entity self, Object o) {
+        return o instanceof Entity en && en != self && !(en instanceof net.minecraft.world.entity.player.Player);
+    }
+
+    private static boolean holds(Entity self, Object goal) {
+        long[] offs = ENTITY_FIELDS.get(goal.getClass());
+        for (int i = 0; i < offs.length; i++) {
+            Object o = UNSAFE.getObject(goal, offs[i]);
+            if (o != null && o != self && other(self, o)) return true;
+        }
+        return false;
+    }
+
+    /** a world write or spawn during a speculative tick: a conflict, the tick stops there (SpecAbort) */
+    public static void abortIfSpeculative(String what) {
+        dev.lull.optsupport.sleep.SpecTx tx = dev.lull.optsupport.sleep.SpecTx.current();
+        if (tx == null || !tx.active || tx.serial) return;
+        tx.conflict(what);
+        throw dev.lull.optsupport.sleep.SpecTx.SpecAbort.INSTANCE;
     }
 
     private static void run(int from, int to, Consumer<Entity> consumer, ServerLevel lvl) {
@@ -117,7 +770,12 @@ public final class SpecTicks {
         long t1 = System.nanoTime();
         nsPhase += t1 - t0;
         mergePaths();
-        // what the ticks deferred, in the walk's order
+        commitDeferred(from, to);
+        nsCommit += System.nanoTime() - t1;
+    }
+
+    /** what the ticks of [from, to) deferred, in the walk's order */
+    private static void commitDeferred(int from, int to) {
         for (int k = from; k < to; k++) {
             Object[] d = deferred[k];
             int m = deferredN[k];
@@ -137,7 +795,6 @@ public final class SpecTicks {
             }
             deferredN[k] = 0;
         }
-        nsCommit += System.nanoTime() - t1;
     }
 
     static long nsPhase, nsCommit;
@@ -154,7 +811,7 @@ public final class SpecTicks {
 
     /** the walk index this thread is ticking in a run, or -1 */
     private static int current() {
-        return running ? CUR.get()[0] : -1;
+        return running || testing ? CUR.get()[0] : -1;
     }
 
     // ------------------------------------------------------------------ hooks
@@ -197,6 +854,10 @@ public final class SpecTicks {
         ChunkAccess c = h == null ? null : h.getChunkIfPresent(ChunkStatus.FULL);
         if (c instanceof LevelChunk lc) return lc;
         chunkMisses++;
+        if (require && EXACT) {
+            abortIfSpeculative("needs an unloaded chunk");
+            throw new IllegalStateException("[sleep/spec] a run tick needs chunk " + x + ", " + z + " that is not loaded");
+        }
         if (require) throw new IllegalStateException("[sleep/spec] a run tick needs chunk " + x + ", " + z + " that is not loaded");
         return null;
     }
@@ -213,6 +874,22 @@ public final class SpecTicks {
 
     /** PathTypeCache.getOrCompute during a run (any thread): this thread's computes, else the shared entry, else computed */
     public static PathType pathType(long[] positions, PathType[] types, BlockGetter level, BlockPos pos) {
+        if (EXACT) {
+            long key = pos.asLong();
+            dev.lull.optsupport.sleep.SpecTx tx = dev.lull.optsupport.sleep.SpecTx.current();
+            if (tx == null || !tx.active) return dev.lull.opt.ServerParallelItemsWalkInvoker.sleep$pathTypeFromState(level, pos);   // (not a run tick)
+            PathType t = tx.ownPath(key);
+            if (t != null) return t;
+            int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & 4095;
+            if (positions[idx] == key && (t = types[idx]) != null) {
+                tx.path(key, t, true);
+                return t;
+            }
+            t = dev.lull.opt.ServerParallelItemsWalkInvoker.sleep$pathTypeFromState(level, pos);
+            tx.ownPath(key, t);
+            tx.path(key, t, false);
+            return t;
+        }
         long key = pos.asLong();
         Long2ObjectOpenHashMap<PathType> ov = OVERLAY.get();
         PathType t = ov.get(key);
@@ -242,7 +919,26 @@ public final class SpecTicks {
         }
     }
 
+    private static long txSum(boolean copies) {
+        long n = 0;
+        for (dev.lull.optsupport.sleep.SpecTx t : txs) n += copies ? t.copiesMine() : t.contentsMine();
+        return n;
+    }
+
     static void report() {
+        if (EXACT && blocks > 0) System.out.println(String.format(java.util.Locale.ROOT,
+                "[sleep/spec] exact: blocks %d, ticks %d (in groups of 2+: %d in %d), invalid %d (%.2f %%: transaction %d, spatial %d, cascade %d, path cache %d), re-runs %d; ms a walk: groups %.2f, grid %.2f, validate %.2f, undo %.2f, re-runs %.2f, commit rest %.2f; copies %d, contents %d, restores %d; why %s",
+                blocks, specTicks, groupedTicks, groupsMulti, invalidTicks, specTicks == 0 ? 0 : 100.0 * invalidTicks / specTicks, txInvalid, spatialInvalid, cascadeTicks, pathInvalid, reruns,
+                nsGroups / 1e6 / Math.max(1, walks), nsGrid / 1e6 / Math.max(1, walks), nsValidate / 1e6 / Math.max(1, walks), nsUndo / 1e6 / Math.max(1, walks), nsRerun / 1e6 / Math.max(1, walks), nsCommitRest / 1e6 / Math.max(1, walks),
+                txSum(true), txSum(false), dev.lull.optsupport.sleep.SpecTx.restores, WHY));
+        if (TX_TEST && txTicks > 0) System.out.println(String.format(java.util.Locale.ROOT,
+                "[sleep/spec] tx test: %d ticks, undone %d, NOT UNDONE %d; %.1f objects copied, %.1f contents a tick; tick in a transaction %.0f ns vs plain %.0f ns; writes %d, conflicts %d; mutation sites %d (missed %d); not undone: %s",
+                txTicks, txSame, txDiff, txObjs / (double) txTicks, txContents / (double) txTicks, nsTxTick / (double) Math.max(1, txTimed), nsPlainTick / (double) Math.max(1, plainTimed),
+                dev.lull.optsupport.sleep.SpecTx.writes, dev.lull.optsupport.sleep.SpecTx.conflicts, dev.lull.optsupport.sleep.WriteBarrier.mutationSites, dev.lull.optsupport.sleep.WriteBarrier.mutationMisses, TX_DIFFS));
+        if (UNDO_TEST && undoTicks > 0) System.out.println(String.format(java.util.Locale.ROOT,
+                "[sleep/spec] undo test: %d ticks, same %d, DIFFERENT %d; take %.0f ns, restore %.0f ns a tick; %.1f parts, %.1f contents a state; restored parts %d, contents %d; overflows %d; differences %s",
+                undoTicks, undoSame, undoDiff, undoNsTake / (double) undoTicks, undoNsRestore / (double) undoTicks, undoParts / (double) undoTicks, undoContents / (double) undoTicks,
+                dev.lull.optsupport.sleep.SpecUndo.restoredParts, dev.lull.optsupport.sleep.SpecUndo.restoredContents, dev.lull.optsupport.sleep.SpecUndo.overflows, UNDO_DIFFS) + "; " + dev.lull.optsupport.sleep.SpecUndo.stats());
         long dw = walksParallel - lastWalksPar;
         if (dw > 0) System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] last %d parallel walks: walk %.2f ms, of it the runs' parallel phase %.2f ms, their commit %.2f ms (%d runs)",
                 dw, (nsParallel - lastPar) / 1e6 / dw, (nsPhase - lastPhase) / 1e6 / dw, (nsCommit - lastCommit) / 1e6 / dw, runs - lastRuns));
