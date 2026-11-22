@@ -32,6 +32,9 @@ ap.add_argument('--bots', default='0', help='bot players (BotLoad) around the sc
 ap.add_argument('--botmode', default='mix', help='mix | idle | "circle 4.3 24" | "orbit 10 160" | "line 15" | "tp 15 2000"')
 ap.add_argument('--botspread', type=float, default=48)
 ap.add_argument('--botwarm', type=int, default=20, help='seconds of bot movement before the profiled window (their first chunks)')
+ap.add_argument('--ab', help='a runtime switch (/sleep bots ab NAME on|off): windows alternate off, on, off, on ... (--reps pairs) at each bot count')
+ap.add_argument('--reps', type=int, default=3)
+ap.add_argument('--normal', action='store_true', help='a normal (noise) world instead of the flat one: real terrain to generate and send')
 a = ap.parse_args()
 
 LINE = re.compile(r'^\[(\d+)\]\s*([| ]*)(\S.*?)\((\d+)/(\d+)\)\s*-\s*([\d.]+)%/([\d.]+)%')
@@ -104,7 +107,10 @@ for scene in a.scenes:
     x1, z1, x2, z2 = scene_area(scene)
     jvm = ['-Dsleep.seedEntities=true'] + ([] if a.off else ['-Dlab.opt.defaults=true']) + a.flags.split()
     log = os.path.join(RUN, 'tickprof-%s.log' % scene)
-    with Server(jvm, {'spawn-monsters': 'false'}, log) as s:
+    props = {'spawn-monsters': 'false'}
+    if a.normal:
+        props['level-type'] = 'minecraft\:normal'
+    with Server(jvm, props, log) as s:
         s.wait_for(r'Done \(')
         s.cmd('forceload add %d %d %d %d' % (x1, z1, x2, z2))
         s.cmd('tick freeze')
@@ -125,15 +131,19 @@ for scene in a.scenes:
                 have = n
                 time.sleep(a.botwarm)
             time.sleep(a.warm if i == 0 else 3)
-            before = set(glob.glob(os.path.join(RUN, 'debug', 'profiling', '*.zip')))
-            start = len(s.lines)
-            s.cmd('sleep bots measure %d %s-%dbots' % (a.secs, scene, n))
-            s.cmd('perf start')
-            s.wait_for(r'Created debug report', timeout=60, start=start)
-            m = s.wait_for(r"sleep: (bots measure '.*)", timeout=30, start=start)
-            st = s.ask('sleep bots stats', r'sleep: (bots stats: .*)', timeout=30)
-            after = sorted(set(glob.glob(os.path.join(RUN, 'debug', 'profiling', '*.zip'))) - before)
-            if not after:
-                print('%s: no profile written (see %s)' % (scene, log), flush=True)
-                continue
-            report(scene, n, after[-1], m.group(1) + '\n  ' + st.group(1)[:600])
+            for state in (['off', 'on'] * a.reps if a.ab else [None]):
+                if state:
+                    s.ask('sleep bots ab %s %s' % (a.ab, state), r'bots: switch', timeout=30)
+                    time.sleep(2)
+                before = set(glob.glob(os.path.join(RUN, 'debug', 'profiling', '*.zip')))
+                start = len(s.lines)
+                s.cmd('sleep bots measure %d %s-%dbots%s' % (a.secs, scene, n, '-%s-%s' % (a.ab, state) if state else ''))
+                s.cmd('perf start')
+                s.wait_for(r'Created debug report', timeout=60, start=start)
+                m = s.wait_for(r"sleep: (bots measure '.*)", timeout=30, start=start)
+                st = s.ask('sleep bots stats', r'sleep: (bots stats: .*)', timeout=30)
+                after = sorted(set(glob.glob(os.path.join(RUN, 'debug', 'profiling', '*.zip'))) - before)
+                if not after:
+                    print('%s: no profile written (see %s)' % (scene, log), flush=True)
+                    continue
+                report(scene, n, after[-1], m.group(1) + '\n  ' + st.group(1)[:600])
