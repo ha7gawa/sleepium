@@ -38,6 +38,33 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.3.5: servers with many players, modded factories, less disk, faster generation
+
+**100 players on one server** (bots flying in a normal world, 1.21.1): every movement packet makes the server check
+every tracked entity against that player - a cost /perf does not show. Sleepium checks the distance first:
+**33 -> 10 ms a tick, 9 -> 15 TPS**. On a slow server a placed or broken block is answered between ticks instead of a
+tick later (at 100 ms ticks **162 -> 53 ms**), and a long stall no longer kicks players with "Timed out".
+
+**A factory with 562 kinds of modded machines** (Create, Mekanism, AE2, Immersive Engineering and more), server
+milliseconds per tick: without Sleepium 17.9, 1.3.4 18.4, **1.3.5 14.0**. Vanilla checked every loaded chunk every tick
+for saving; Sleepium skips the chunks where that check would do nothing.
+
+**Disk:** region files written through as vanilla writes them, without flushing the drive's whole cache twice per
+batch; freshly generated edge chunks kept in a small memory ring instead of written and read back. Chunky: the world
+disk **15 -> 6 % busy** on an NVMe, 13 -> 9 % on a SATA SSD.
+
+**World generation:** light for new chunks without the round trips through vanilla's task sorter, on its own thread:
+**x1.38 chunks/s** with 16 threads, Chunky **451 -> 494 chunks/s** (Ryzen 7 5800X). On 1.20.1 this also fixes a vanilla
+race that could light a chunk before it was visible.
+
+**Mobs:** standing mobs' movement and villagers' job-site checks are no longer recomputed when nothing changed.
+
+**Experimental switches** (off, Options -> Sleepium): chunks keep reaching players on a busy server (holes in view
+80 -> 0 at 10 TPS); a tick's packets sent at the tick's end; movement after a lag spike judged by packet arrival.
+
+Still exactly vanilla's game: 23 test scenes give identical worlds with and without Sleepium, now checked on real
+servers with the released jar on both versions.
+
 ## New in 1.3.3: world generation up to 4.6x faster, still exactly vanilla's terrain
 
 **Pregenerating with Chunky** (5 929 chunks around spawn, NeoForge 1.21.1 server, Ryzen 7 5800X):
