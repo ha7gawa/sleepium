@@ -6,7 +6,8 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ForeignFurnaceMixin",
-    "ForeignPostWrapMixin"
+    "ForeignPostWrapMixin",
+    "ForeignTrackedMixin"
   ],
   "injectors": {
     "defaultRequire": 1

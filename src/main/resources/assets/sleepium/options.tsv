@@ -152,6 +152,7 @@ lab.opt.TextureRegisterWorkerMixin	chunks	true	ParallelRender: a texture registe
 lab.opt.TickMemoMixin	ticks	true	exp/tick-memo: Level.tickBlockEntities asks shouldTickBlocksAt(pos) for every ticking block entity, every tick: a hash lookup in the distance manager's ticking tracker (JFR: ~30 % of the server thread in the smelter scene).	
 lab.opt.AmbientChunksMixin	ticks	true	exp/ambient-skip (client, with AmbientParticleSkipMixin): the loaded chunks whose biome palettes contain a biome with ambient particles (vanilla: nether biomes; any modded one too).	lab.opt.AmbientParticleSkipMixin
 lab.opt.TickSchedulerMixin	ticks	true	exp/tick-scheduler: scheduled block and fluid ticks (vanilla and every mod) through the lab's time queue.	
+lab.opt.TrackFast	ticks	true	The entity tracker's per-pair check with the distance first (TrackedEntity.updatePlayer, run for every tracked entity on every movement packet a player sends): same decisions, a fraction of the cost with many players.	
 lab.opt.UniformDedupeMixin	chunks	true	exp/uniform-dedupe (client): Uniform.upload sends the value only when it differs from the one this uniform last sent to its location.	
 lab.opt.UtilMemoizeMixin	ticks	true	exp/frame-garbage: Util.memoize(BiFunction) without a Pair and a lambda per call (Memo2).	lab.opt.FrameGarbageMixin
 lab.opt.Vec3FromRgbMixin	entities_render	true	exp/frame-garbage: Vec3.fromRGB24 (fog and sky colours: 216 fetches per sampler call, every frame, from a handful of biome colours) answered from a small direct-mapped cache.	lab.opt.FrameGarbageMixin

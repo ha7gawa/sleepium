@@ -219,6 +219,10 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.equals("LightRecipeVerifyMixin")) on = Boolean.getBoolean("lab.lightrecipe.verify");   // measurement only
         if (simple.startsWith("LightScout")) on = Boolean.getBoolean("lab.lightscout");   // measurement only
         if (simple.startsWith("GenScout")) on = Boolean.getBoolean("lab.genscout");   // measurement only
+        if (simple.startsWith("PipeScout")) on = Boolean.getBoolean("lab.pipescout");   // measurement only (optsupport/PipeScout)
+        if (simple.startsWith("ChunkSendPar")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkSendPar");   // optsupport/ChunkSendPar
+        if (simple.startsWith("TrackIndex")) on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.TrackFast")) && Boolean.getBoolean("lab.opt.TrackIndex");   // optsupport/TrackIndex
+        if (simple.startsWith("TrackFast")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.TrackFast");   // optsupport/TrackFast
         if (simple.equals("LightTimingMixin")) on = Boolean.getBoolean("lab.lighttime");   // measurement only
         if (simple.startsWith("Scout") && simple.endsWith("Mixin"))   // measurement only, never with lab.opt.all
             on = Boolean.getBoolean("lab.scout");
