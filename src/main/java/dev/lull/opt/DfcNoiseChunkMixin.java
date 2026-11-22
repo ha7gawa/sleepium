@@ -1,6 +1,7 @@
 package dev.lull.opt;
 
 import dev.lull.optsupport.Dfc;
+import dev.lull.optsupport.NoiseBatch;
 import dev.lull.optsupport.Reflect;
 import java.lang.invoke.MethodHandles;
 import java.util.List;
@@ -30,6 +31,8 @@ public abstract class DfcNoiseChunkMixin implements Dfc.Host {
     @Shadow @Final int cellNoiseMinY;
     @Shadow @Final int cellWidth;
     @Shadow @Final int cellHeight;
+    @Shadow @Final private int firstCellX;
+    @Shadow @Final private int firstCellZ;
 
     @Shadow @Final private net.minecraft.world.level.levelgen.DensityFunctions.BeardifierOrMarker beardifier;
 
@@ -49,6 +52,8 @@ public abstract class DfcNoiseChunkMixin implements Dfc.Host {
     @Unique private Dfc.Code sleep$dfcCell;
     @Unique private Dfc.Code sleep$dfcCorner;
     @Unique private Object sleep$dfcCellRoot;
+    /** NoiseBatch in this NoiseChunk's corners (with -Dlab.dfc.batch.ab: every other chunk, timed by mode) */
+    @Unique private int sleep$dfcBatch;
 
     @Override
     public MethodHandles.Lookup sleep$dfcLookup() {
@@ -61,7 +66,9 @@ public abstract class DfcNoiseChunkMixin implements Dfc.Host {
         if (blender != Blender.empty() || cellCountXZ < 2) return;
         long t0 = System.nanoTime();
         MethodHandles.Lookup l = MethodHandles.lookup();
-        sleep$dfcCorner = Dfc.corners(l, sleep$dfcState, interpolators, cellHeight, cellNoiseMinY, cellCountY, beardifier);
+        boolean batch = NoiseBatch.ON && (!NoiseBatch.AB || (((firstCellX >> 2) ^ (firstCellZ >> 2)) & 1) == 0);
+        sleep$dfcBatch = batch ? 1 : 0;
+        sleep$dfcCorner = Dfc.corners(l, sleep$dfcState, interpolators, cellHeight, cellNoiseMinY, cellCountY, beardifier, batch);
         if (!cellCaches.isEmpty()) {
             Object f = Reflect.get(cellCaches.get(0), "noiseFiller");
             sleep$dfcCellRoot = f;
@@ -75,6 +82,12 @@ public abstract class DfcNoiseChunkMixin implements Dfc.Host {
         if (!sleep$dfcBuilt) sleep$dfcBuild();
         Dfc.Code c = sleep$dfcCorner;
         if (c == null) return false;
+        if (NoiseBatch.AB) {
+            long t = System.nanoTime();
+            c.corners((NoiseChunk) (Object) this, slice0, i);
+            NoiseBatch.timed(sleep$dfcBatch, System.nanoTime() - t);
+            return true;
+        }
         c.corners((NoiseChunk) (Object) this, slice0, i);
         return true;
     }
