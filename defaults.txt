@@ -276,4 +276,5 @@
 -Dlab.opt.DfcNoiseChunkMixin=true
 -Dlab.chunkmd.uboWindows=auto
 -Dlab.gpu.framesInFlight.atSwap=true
+-Dlab.opt.EagerSaveScan=true
 -Dlab.opt.SavedDataNameMixin=true
