@@ -202,6 +202,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.StallHeartbeat");
         if (simple.startsWith("NetReactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor");
+        if (simple.equals("NetOrderVerifyMixin"))   // measurement only (optsupport/NetOrderVerify), on NetReactor's batches
+            on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor")) && Boolean.getBoolean("lab.opt.NetOrderVerify");
         // (1.21.1 turned NetReactorWaitMixin off with MainReactor, whose waitForTasks overwrite flushed; 1.20.1's MainReactor
         // only replaces BlockableEventLoop's park, so the flush before the wait stays this mixin's)
         if (simple.equals("StructurePlaceLockMixin") || simple.equals("StructurePaletteCacheMixin"))   // parallel generation's guards

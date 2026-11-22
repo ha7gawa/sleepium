@@ -22,6 +22,7 @@ public final class SleepMod {
         if (Boolean.getBoolean("lab.opt.HeapReturn")) LOGGER.info("sleep: {}", dev.lull.optsupport.HeapReturn.apply());   // memory back to the OS after bursts
         if (Boolean.getBoolean("lab.opt.TrackFast")) dev.lull.optsupport.TrackFast.register();   // A/B switch and counters with /sleep bots
         if (dev.lull.net.NetReactor.ENABLED) dev.lull.net.NetReactor.registerAb();   // /sleep bots ab flushlater
+        if (dev.lull.optsupport.NetOrderVerify.ON) dev.lull.optsupport.NetOrderVerify.register();   // measurement only: the order check with /sleep bots measure
         // classes the game loads only while played, learned and preloaded in the background (lab.opt.ClassPreload)
         gameBus.addListener(EventPriority.NORMAL, false, net.minecraftforge.event.server.ServerAboutToStartEvent.class, e -> dev.lull.optsupport.ClassPreload.preload());
         gameBus.addListener(EventPriority.NORMAL, false, net.minecraftforge.event.server.ServerStartedEvent.class, e -> dev.lull.optsupport.ClassPreload.started());

@@ -39,6 +39,7 @@
     "MainReactorScoutLoopMixin",
     "EventLoopQueueAccessor",
     "NetReactorConnectionMixin",
+    "NetOrderVerifyMixin",
     "NetLagMixin",
     "EarlyAnswersServerMixin",
     "EarlyAnswersWaitMixin",
