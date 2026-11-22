@@ -25,6 +25,7 @@ ap.add_argument('--machines', default='x92,x103,n100,pi')
 ap.add_argument('--jar', required=True)
 ap.add_argument('--scenes', default='pigs5k,pigs10k')
 ap.add_argument('--variants', default='vanilla,jar', help='vanilla, jar, or jar:NAME=-Dx=y;-Dz=w (the jar with those flags, label suffix NAME)')
+ap.add_argument('--sep', default=',', help='separator between variants (JVM options with commas: another one)')
 ap.add_argument('--rounds', type=int, default=1, help='the scene x variants list this many times (interleaved A/B)')
 ap.add_argument('--warm', type=int, default=30)
 ap.add_argument('--secs', type=int, default=40)
@@ -71,7 +72,7 @@ def machine(name):
     heap = m.cfg['heap']
     for rnd in range(a.rounds):
       for sc in scenes:
-        for v in a.variants.split(','):
+        for v in a.variants.split(a.sep):
             vflags, suffix = a.flags, ''
             if v.startswith('jar:'):
                 suffix, _, extra = v[4:].partition('=')

@@ -205,12 +205,13 @@ public final class SpecTx {
     // ------------------------------------------------------------------ fields
 
     void wrote(Object o, Object w, int root) {
+        Object seen = w;   // (the word as read: the claim swaps exactly it - null or a released transaction's stale token)
         if (w == tok) return;
         if (w instanceof Token t) {
             if (!t.live) w = null;   // (stale: a released transaction's word)
             else if (group >= 0 && t.tx.group == group && !serial) {
                 // an earlier tick of this group wrote it (a push): ours on top - copied as it is now, the word stays
-                copy(o, root, false);
+                copy(o, root, false, null);
                 return;
             } else {
                 SpecTx other = t.tx;
@@ -229,12 +230,21 @@ public final class SpecTx {
         if (w != null) conflict("write into a watched object");
         else if (o instanceof Entity en && en != entity && !serial) {
             java.util.function.ToIntFunction<Entity> g = GROUP;
-            if (group < 0 || g == null || g.applyAsInt(en) != group) conflict("writes another entity");
+            if (group < 0 || g == null || g.applyAsInt(en) != group) {
+                conflict("writes another entity");
+                java.util.function.Consumer<Entity> v = VICTIM;
+                if (v != null) v.accept(en);   // (its tick may have read the write half done: invalid too)
+            }
         }
-        copy(o, root, w == null);
+        if (!copy(o, root, w == null, seen)) wrote(o, U.getObject(o, WB.offset(root)), root);   // (lost the claim: as the winner's)
     }
 
-    private void copy(Object o, int root, boolean mark) {
+    /** a run entity another tick wrote into (SpecTicks marks its tick invalid) */
+    public static volatile java.util.function.Consumer<Entity> VICTIM;
+    static final boolean YOUNG_REFS = !"false".equals(System.getProperty("lab.spec.youngRefs"));
+
+    /** o's fields into the log; with mark, the object claimed for this tick (atomically: false when another tick won it) */
+    private boolean copy(Object o, int root, boolean mark, Object expected) {
         int i = n++;
         if (i == objs.length) {
             int len = i * 2;
@@ -249,12 +259,17 @@ public final class SpecTx {
         long[] p = prims[i];
         Object[] r = refs[i];
         if (p == null || p.length < f) prims[i] = p = new long[Math.max(f, 8)];
-        if (r == null || r.length < f) refs[i] = r = new Object[Math.max(f, 8)];
+        // a fresh array each copy: young, so its reference stores skip the collector's card marking (a reused one is old)
+        refs[i] = r = YOUNG_REFS ? new Object[f] : r == null || r.length < f ? new Object[Math.max(f, 8)] : r;
         if (f > 0) sh.sn.both(o, p, r);
         objs[i] = o;
         shapes[i] = sh;
         roots[i] = mark ? root : -1;
-        if (mark) U.putObject(o, WB.offset(root), tok);
+        if (mark && !U.compareAndSwapObject(o, WB.offset(root), expected, tok)) {
+            n--;   // (another tick claimed it between our read and now: our copy may be torn - dropped)
+            return false;
+        }
+        return true;
     }
 
     /** an object about to be written past the write barrier (Unsafe, a memo's write-back): copied first */

@@ -233,7 +233,18 @@ public final class SpecTicks {
 
     static boolean eligible(Entity e) {
         return e instanceof Animal && !e.isRemoved() && !e.isPassenger() && !e.isVehicle() && e.getClass().getName().startsWith("net.minecraft.")
-                && (!EXACT || dev.lull.optsupport.sleep.EntitySleep.plainNext(e));
+                && (!EXACT || dev.lull.optsupport.sleep.EntitySleep.plainNext(e) && noBrain(e)) && (TYPES == null || TYPES.contains(e.getType().toShortString()));
+    }
+
+    /**
+     * a mob driven by goals only: its brain holds no memories (a brain's behaviors, sensors and memory values are objects
+     * outside the write barrier's roots - their undo is not covered yet)
+     */
+    /** -Dlab.spec.types=pig,cow,...: only these entity types in runs (bisecting) */
+    static final java.util.Set<String> TYPES = System.getProperty("lab.spec.types") == null ? null : java.util.Set.of(System.getProperty("lab.spec.types").split(","));
+
+    static boolean noBrain(Entity e) {
+        return !(e instanceof net.minecraft.world.entity.LivingEntity le) || le.getBrain().getMemories().isEmpty();
     }
 
     // ------------------------------------------------------------------ stage 1: exact (transactions, validation, re-runs)
@@ -335,6 +346,13 @@ public final class SpecTicks {
     }
 
     private static int groupB0;
+    /** per slot: another tick of the block wrote into this one's entity */
+    private static volatile boolean[] hitBy = new boolean[0];
+
+    static void victim(Entity e) {
+        int slot = SLOT_OF.getOrDefault(e.getId(), -1);
+        if (slot >= 0 && all[groupB0 + slot] == e) hitBy[slot] = true;
+    }
 
     /** an entity's group in the current block (-1: not one of its ticks) */
     static int groupOfEntity(Entity e) {
@@ -350,6 +368,7 @@ public final class SpecTicks {
         }
         runs++;
         inRuns += to - from;
+        chunkEpoch++;
         main = Thread.currentThread();
         dev.lull.optsupport.sleep.SpecTx.mainThread = main;
         pathCache = lvl.getPathTypeCache();
@@ -397,6 +416,9 @@ public final class SpecTicks {
         long t0 = System.nanoTime();
         nsGroups += t0 - tg;
         dev.lull.optsupport.sleep.SpecTx.GROUP = SpecTicks::groupOfEntity;
+        dev.lull.optsupport.sleep.SpecTx.VICTIM = SpecTicks::victim;
+        if (hitBy.length < m) hitBy = new boolean[m];
+        java.util.Arrays.fill(hitBy, 0, m, false);
         dev.lull.optsupport.sleep.WB.TX = true;
         running = true;
         try {
@@ -569,6 +591,10 @@ public final class SpecTicks {
                 invalid[i] = true;
                 spatialInvalid++;
                 why("saw another tick's box");
+            } else if (hitBy[i]) {
+                invalid[i] = true;
+                spatialInvalid++;
+                why("another tick wrote into it");
             }
         }
         nsValidate += System.nanoTime() - t1;
@@ -749,6 +775,7 @@ public final class SpecTicks {
         }
         runs++;
         inRuns += to - from;
+        chunkEpoch++;
         main = Thread.currentThread();
         pathCache = lvl.getPathTypeCache();
         var pool = ServerReactor.pool();
@@ -854,10 +881,32 @@ public final class SpecTicks {
     }
 
     /** a worker's chunk lookup during a run: the published chunk map, no blocking, no shared lookup cache */
+    /** per worker: its last chunks (position, chunk) - the server thread's lookup cache is its own */
+    private static final ThreadLocal<Object[]> LAST_CHUNKS = ThreadLocal.withInitial(() -> new Object[8]);
+    private static final ThreadLocal<long[]> LAST_POS = ThreadLocal.withInitial(() -> new long[] {Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, 0, -1});
+    /** a new value per run: a worker's remembered chunks are good for one run only (chunks unload between ticks) */
+    private static volatile long chunkEpoch;
+
     public static LevelChunk chunk(ServerChunkCache cache, int x, int z, boolean require) {
-        ChunkHolder h = cache.chunkMap.getVisibleChunkIfPresent(ChunkPos.asLong(x, z));
+        long key = ChunkPos.asLong(x, z);
+        long[] lp = LAST_POS.get();
+        Object[] lc0 = LAST_CHUNKS.get();
+        long ep = chunkEpoch;
+        if (lp[5] != ep) {
+            lp[0] = lp[1] = lp[2] = lp[3] = Long.MIN_VALUE;
+            java.util.Arrays.fill(lc0, null);
+            lp[5] = ep;
+        }
+        for (int q = 0; q < 4; q++) if (lp[q] == key && lc0[q] instanceof LevelChunk hit && lc0[q + 4] == cache) return hit;
+        ChunkHolder h = cache.chunkMap.getVisibleChunkIfPresent(key);
         ChunkAccess c = h == null ? null : h.getChunkIfPresent(ChunkStatus.FULL);
-        if (c instanceof LevelChunk lc) return lc;
+        if (c instanceof LevelChunk lc) {
+            int slot = (int) (lp[4]++ & 3);
+            lp[slot] = key;
+            lc0[slot] = lc;
+            lc0[slot + 4] = cache;
+            return lc;
+        }
         chunkMisses++;
         if (require && EXACT) {
             abortIfSpeculative("needs an unloaded chunk");

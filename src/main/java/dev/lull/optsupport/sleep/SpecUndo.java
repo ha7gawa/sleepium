@@ -598,8 +598,12 @@ public final class SpecUndo {
                 }
                 if (!same) {
                     restoredContents++;
-                    col.clear();
-                    for (int j = 0; j < len; j++) col.add(a[j]);
+                    if (col instanceof net.minecraft.core.NonNullList nl && nl.size() == len) {   // (fixed size: set, never add)
+                        for (int j = 0; j < len; j++) nl.set(j, a[j]);
+                    } else {
+                        col.clear();
+                        for (int j = 0; j < len; j++) col.add(a[j]);
+                    }
                 }
             } else System.arraycopy(s.cBuf[c], 0, v, 0, len);
         }

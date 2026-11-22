@@ -132,6 +132,7 @@ public final class WriteBarrier {
         if (owner.startsWith("java/util/concurrent/atomic/Atomic")) return true;
         if (owner.startsWith("it/unimi/dsi/fastutil/")) return true;
         if (owner.startsWith("com/google/common/collect/") && !owner.contains("Immutable")) return true;
+        if (owner.equals("net/minecraft/core/NonNullList")) return true;   // (equipment lists: set)
         if (!owner.startsWith("java/util/")) return false;
         String n = owner.substring(10);
         return n.equals("Map") || n.equals("Set") || n.equals("List") || n.equals("Collection") || n.equals("Iterator") || n.equals("ListIterator")
