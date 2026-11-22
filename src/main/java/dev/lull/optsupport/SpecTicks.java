@@ -335,16 +335,17 @@ public final class SpecTicks {
         }
         buildGrid(m);
         double[] s = sweep;
-        for (int p = 0, q; p < nCells; p = q) {
-            long key = cells[p] & ~0xFFFL;
-            for (q = p + 1; q < nCells && (cells[q] & ~0xFFFL) == key; q++) ;
-            for (int x = p; x < q; x++) {
+        for (int ub = 0; ub < nUsed; ub++) {
+            int b = used[ub];
+            for (int x = head[b]; x >= 0; x = next[x]) {
+                long key = cells[x] & ~0xFFFL;
                 int i = (int) (cells[x] & 0xFFF), oi = i * 6;
-                for (int y = x + 1; y < q; y++) {
+                for (int y = next[x]; y >= 0; y = next[y]) {
+                    if ((cells[y] & ~0xFFFL) != key) continue;
                     int j = (int) (cells[y] & 0xFFF), oj = j * 6;
                     if (s[oi] <= s[oj + 3] && s[oi + 3] >= s[oj] && s[oi + 1] <= s[oj + 4] && s[oi + 4] >= s[oj + 1] && s[oi + 2] <= s[oj + 5] && s[oi + 5] >= s[oj + 2]) {
-                        int a = find(i), b = find(j);
-                        if (a != b) parent[Math.max(a, b)] = Math.min(a, b);
+                        int ra = find(i), rb = find(j);
+                        if (ra != rb) parent[Math.max(ra, rb)] = Math.min(ra, rb);
                     }
                 }
             }
@@ -582,31 +583,49 @@ public final class SpecTicks {
         return ((long) (x & 0x7FFFFF) << 35) | ((long) (z & 0x7FFFFF) << 12);
     }
 
-    /** the first entry of cell key (or nCells) */
-    private static int lowerBound(long key) {
-        int lo = 0, hi = nCells;
-        while (lo < hi) {
-            int mid = (lo + hi) >>> 1;
-            if (cells[mid] < key) lo = mid + 1;
-            else hi = mid;
-        }
-        return lo;
+    // a hash grid: entry t = cells[t] (cell << 12 | slot), chained per bucket (next[t]); a bucket is current when its
+    // stamp is this build's generation (no clearing between builds)
+    private static int[] next = new int[8192], head = new int[1 << 14], stamp = new int[1 << 14], used = new int[1 << 14];
+    private static int gen, nUsed;
+    private static final int HMASK = (1 << 14) - 1;
+
+    private static int bucket(long key) {
+        return (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & HMASK;
+    }
+
+    /** the first entry of cell key's bucket chain (-1: none) - entries of other cells in the chain are skipped by the caller */
+    private static int chain(long key) {
+        int b = bucket(key);
+        return stamp[b] == gen ? head[b] : -1;
     }
 
     /** which slots' boxes (sweep) cover each cell */
     private static void buildGrid(int m) {
         nCells = 0;
+        nUsed = 0;
+        gen++;
         double[] s = sweep;
         for (int i = 0; i < m; i++) {
             int o = i * 6;
             int x0 = (int) Math.floor(s[o]) >> 2, z0 = (int) Math.floor(s[o + 2]) >> 2, x1 = (int) Math.floor(s[o + 3]) >> 2, z1 = (int) Math.floor(s[o + 5]) >> 2;
             for (int x = x0; x <= x1; x++)
                 for (int z = z0; z <= z1; z++) {
-                    if (nCells == cells.length) cells = java.util.Arrays.copyOf(cells, nCells * 2);
-                    cells[nCells++] = ck(x, z) | i;
+                    if (nCells == cells.length) {
+                        cells = java.util.Arrays.copyOf(cells, nCells * 2);
+                        next = java.util.Arrays.copyOf(next, nCells * 2);
+                    }
+                    long key = ck(x, z);
+                    int t = nCells++, b = bucket(key);
+                    cells[t] = key | i;
+                    if (stamp[b] != gen) {
+                        stamp[b] = gen;
+                        head[b] = -1;
+                        used[nUsed++] = b;
+                    }
+                    next[t] = head[b];
+                    head[b] = t;
                 }
         }
-        java.util.Arrays.sort(cells, 0, nCells);
     }
 
     /** the slots (other than i) whose swept boxes meet a query box of tx; later ones only: {@code laterThan} >= 0 */
@@ -623,8 +642,9 @@ public final class SpecTicks {
             for (int cx = cx0; cx <= cx1; cx++)
                 for (int cz = cz0; cz <= cz1; cz++) {
                     long key = ck(cx, cz);
-                    for (int p = lowerBound(key); p < nCells && (cells[p] & ~0xFFFL) == key; p++) {
-                        int j = (int) (cells[p] & 0xFFF);
+                    for (int t = chain(key); t >= 0; t = next[t]) {
+                        if ((cells[t] & ~0xFFFL) != key) continue;
+                        int j = (int) (cells[t] & 0xFFF);
                         if (j == i || j <= laterThan) continue;
                         int o = j * 6;
                         if (s[o] <= x1 && s[o + 3] >= x0 && s[o + 1] <= y1 && s[o + 4] >= y0 && s[o + 2] <= z1 && s[o + 5] >= z0 && !out.contains(j)) out.add(j);
@@ -763,9 +783,10 @@ public final class SpecTicks {
                 tx.release();
                 return;
             }
-            // it read (or wrote) later ticks' results: undo it and them, then again
+            // it read (or wrote) later ticks' results: undo it and them (the latest first), then again
             undo(b0, i);
-            for (int n2 = 0; n2 < HIT.size(); n2++) {
+            it.unimi.dsi.fastutil.ints.IntArrays.quickSort(HIT.elements(), 0, HIT.size());
+            for (int n2 = HIT.size() - 1; n2 >= 0; n2--) {
                 int h = HIT.getInt(n2), g = groupIx[h];
                 for (int a = groupStart[g + 1] - 1; a >= groupStart[g]; a--) {   // (it and its group's ticks after it, latest first)
                     int j = order[a];
