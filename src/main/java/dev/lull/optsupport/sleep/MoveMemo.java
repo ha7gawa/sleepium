@@ -164,6 +164,7 @@ public final class MoveMemo {
                 verified++;
                 return false;   // the real move runs; after() compares
             }
+            if (WB.TX) SpecTx.touch(e);   // (written past the barrier: the transaction copies the entity first)
             for (int i : s.diff) k.snap.put(e, i, s.after[i], s.afterRefs[i]);
             hits++;
             if (DIAG) {

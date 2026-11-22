@@ -87,7 +87,7 @@ public final class SpecTx {
     /** vanilla's path type cache as the tick used it: position, value, whether it came from the shared cache */
     public long[] pathKey = new long[32];
     public net.minecraft.world.level.pathfinder.PathType[] pathVal = new net.minecraft.world.level.pathfinder.PathType[32];
-    public boolean[] pathShared = new boolean[32];
+    public byte[] pathKind = new byte[32];
     public int np;
 
     public static void queried(net.minecraft.world.phys.AABB box) {
@@ -100,28 +100,38 @@ public final class SpecTx {
         tx.nq = i + 6;
     }
 
-    public void path(long key, net.minecraft.world.level.pathfinder.PathType v, boolean shared) {
+    public void path(long key, net.minecraft.world.level.pathfinder.PathType v, byte kind) {
         if (np == pathKey.length) {
             pathKey = java.util.Arrays.copyOf(pathKey, np * 2);
             pathVal = java.util.Arrays.copyOf(pathVal, np * 2);
-            pathShared = java.util.Arrays.copyOf(pathShared, np * 2);
+            pathKind = java.util.Arrays.copyOf(pathKind, np * 2);
         }
         pathKey[np] = key;
         pathVal[np] = v;
-        pathShared[np] = shared;
+        pathKind[np] = kind;
         np++;
     }
 
     /** this tick's own path type computes (its view of the cache: shared as at the block's start + these) */
-    final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<net.minecraft.world.level.pathfinder.PathType> own = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+    // as vanilla's cache: one entry per slot (index = mix(position) & 4095) - a compute replaces the slot's entry
+    final it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap ownKey = new it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap();
+    final it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap<net.minecraft.world.level.pathfinder.PathType> ownVal = new it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap<>();
 
-    public net.minecraft.world.level.pathfinder.PathType ownPath(long key) {
-        return own.isEmpty() ? null : own.get(key);
+    /** this tick's own entry in slot idx: its value when it holds key; null when it holds another; NONE when untouched */
+    public Object ownSlot(int idx, long key) {
+        if (ownKey.isEmpty() || !ownKey.containsKey(idx)) return NONE;
+        return ownKey.get(idx) == key ? ownVal.get(idx) : null;
     }
 
-    public void ownPath(long key, net.minecraft.world.level.pathfinder.PathType v) {
-        own.put(key, v);
+    public static final Object NONE = new Object();
+
+    public void ownPut(int idx, long key, net.minecraft.world.level.pathfinder.PathType v) {
+        ownKey.put(idx, key);
+        ownVal.put(idx, v);
     }
+
+    /** path log kinds */
+    public static final byte SHARED = 0, OWN = 1, COMPUTED = 2;
 
     /**
      * the watch word a transaction puts on the objects it copied: live until the transaction is released or restored
@@ -143,12 +153,29 @@ public final class SpecTx {
 
     public long contentsMine() { return contentsMine; }
 
+    /** the entity's section as the tick began / as of its last storage move; section changes in this tick */
+    long section;
+    int sectionChanges;
+
+    /** a storage move (deferred): a second section change in one tick would reorder the storage unlike vanilla - a conflict */
+    public void moved(Entity e) {
+        long s = net.minecraft.core.SectionPos.asLong(e.blockPosition());
+        if (s == section) return;
+        section = s;
+        if (++sectionChanges > 1) conflict("changed section twice");
+    }
+
     public void begin(Entity e, int index, boolean serial) {
+        section = net.minecraft.core.SectionPos.asLong(e.blockPosition());
+        sectionChanges = 0;
         tok = new Token(this);
         nq = 0;
         np = 0;
         lastContent = null;
-        if (!own.isEmpty()) own.clear();
+        if (!ownKey.isEmpty()) {
+            ownKey.clear();
+            ownVal.clear();
+        }
         this.entity = e;
         this.index = index;
         this.serial = serial;
@@ -228,6 +255,17 @@ public final class SpecTx {
         shapes[i] = sh;
         roots[i] = mark ? root : -1;
         if (mark) U.putObject(o, WB.offset(root), tok);
+    }
+
+    /** an object about to be written past the write barrier (Unsafe, a memo's write-back): copied first */
+    public static void touch(Object o) {
+        SpecTx tx = current();
+        if (tx == null || !tx.active) return;
+        int root = WB.rootIndex(o.getClass());
+        if (root < 0) return;
+        Object w = U.getObject(o, WB.offset(root));
+        if (w instanceof Token && mine(w)) return;
+        tx.wrote(o, w, root);
     }
 
     // ------------------------------------------------------------------ collections, maps, atomics

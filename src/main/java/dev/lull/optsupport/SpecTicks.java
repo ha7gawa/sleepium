@@ -678,7 +678,7 @@ public final class SpecTicks {
             PathType live = positions[idx] == key ? types[idx] : null;
             if (live != null) {
                 if (live != tx.pathVal[a]) return false;   // (vanilla would have used this one)
-            } else if (tx.pathShared[a]) return false;   // (vanilla would have recomputed: not checkable here)
+            } else if (tx.pathKind[a] != dev.lull.optsupport.sleep.SpecTx.COMPUTED) return false;   // (vanilla would have recomputed: not checkable here)
             else {
                 positions[idx] = key;
                 types[idx] = tx.pathVal[a];
@@ -829,6 +829,10 @@ public final class SpecTicks {
     public static boolean deferMove(EntityInLevelCallback cb) {
         int k = current();
         if (k < 0) return false;
+        if (EXACT) {
+            dev.lull.optsupport.sleep.SpecTx tx = dev.lull.optsupport.sleep.SpecTx.current();
+            if (tx != null && tx.active && !tx.serial) tx.moved(all[k]);
+        }
         int m = deferredN[k];
         if (m == 0 || deferred[k][m - 1] != cb) add(k, cb);
         return true;
@@ -879,16 +883,20 @@ public final class SpecTicks {
             long key = pos.asLong();
             dev.lull.optsupport.sleep.SpecTx tx = dev.lull.optsupport.sleep.SpecTx.current();
             if (tx == null || !tx.active) return dev.lull.opt.ServerParallelItemsWalkInvoker.sleep$pathTypeFromState(level, pos);   // (not a run tick)
-            PathType t = tx.ownPath(key);
-            if (t != null) return t;
             int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & 4095;
-            if (positions[idx] == key && (t = types[idx]) != null) {
-                tx.path(key, t, true);
+            Object own = tx.ownSlot(idx, key);
+            PathType t;
+            if (own instanceof PathType ot) {   // (its own compute, still in the slot: vanilla's hit)
+                tx.path(key, ot, dev.lull.optsupport.sleep.SpecTx.OWN);
+                return ot;
+            }
+            if (own == dev.lull.optsupport.sleep.SpecTx.NONE && positions[idx] == key && (t = types[idx]) != null) {
+                tx.path(key, t, dev.lull.optsupport.sleep.SpecTx.SHARED);
                 return t;
             }
-            t = dev.lull.opt.ServerParallelItemsWalkInvoker.sleep$pathTypeFromState(level, pos);
-            tx.ownPath(key, t);
-            tx.path(key, t, false);
+            t = dev.lull.opt.ServerParallelItemsWalkInvoker.sleep$pathTypeFromState(level, pos);   // (vanilla's miss)
+            tx.ownPut(idx, key, t);
+            tx.path(key, t, dev.lull.optsupport.sleep.SpecTx.COMPUTED);
             return t;
         }
         long key = pos.asLong();
