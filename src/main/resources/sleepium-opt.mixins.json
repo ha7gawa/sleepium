@@ -39,6 +39,7 @@
     "EarlyAnswersServerMixin",
     "StallHeartbeatTickMixin",
     "LagFairMoveMixin",
+    "ChunkHopsInTickMixin",
     "EarlyAnswersAckAccessor",
     "EarlyAnswersChunkMapAccessor",
     "NetReactorTickMixin",

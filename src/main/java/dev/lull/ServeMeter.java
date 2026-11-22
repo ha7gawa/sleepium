@@ -66,13 +66,39 @@ public final class ServeMeter {
         tickStart = System.nanoTime();
     }
 
+    private static long nextChunkLog;
+
     /** ServerTickEvent.Post */
-    public static void tickEnd() {
-        if (tickStart != 0 && tickN < TICKS.length) TICKS[tickN++] = System.nanoTime() - tickStart;
+    public static void tickEnd(net.minecraft.server.MinecraftServer server) {
+        long now = System.nanoTime();
+        if (tickStart != 0 && tickN < TICKS.length) TICKS[tickN++] = now - tickStart;
+        if (windowStart != 0 && now >= nextChunkLog) {   // once a second: where the chunks around the first player wait
+            nextChunkLog = now + 1_000_000_000L;
+            var players = server.getPlayerList().getPlayers();
+            if (players.isEmpty()) return;
+            var p = players.get(0);
+            var cs = p.serverLevel().getChunkSource();
+            int r = server.getPlayerList().getViewDistance() - 1, cx = p.chunkPosition().x, cz = p.chunkPosition().z, notFull = 0, all = 0;
+            for (int dx = -r; dx <= r; dx++)
+                for (int dz = -r; dz <= r; dz++)
+                    if (dx * dx + dz * dz <= r * r) {
+                        all++;
+                        if (cs.getChunkNow(cx + dx, cz + dz) == null) notFull++;
+                    }
+            var s = (dev.lull.mixin.ServeMeterSenderAccessor) p.connection.chunkSender;
+            SleepMod.LOGGER.info("sleep: serve chunks: {} of {} in view not full, {} full and waiting to be sent, {} batches unacknowledged, desired {} a tick",
+                    notFull, all, s.sleep$pending().size(), s.sleep$unacked(), s.sleep$desired());
+        }
     }
 
+    /**
+     * -Dlab.serve.drainEveryMs=N (with lab.opt.ChunkHopsInTick): the test load's sleep cut into N ms slices with the
+     * chunk mailboxes run between them - a long tick with drain points inside it, as a real tick's phases would give
+     */
+    private static final int DRAIN_EVERY = Integer.getInteger("lab.serve.drainEveryMs", 0);
+
     /** LevelTickEvent.Post of the overworld: the test load */
-    public static void levelTick() {
+    public static void levelTick(net.minecraft.server.level.ServerLevel level) {
         int ms = SLOW_TICK + (SLOW_JITTER > 0 ? jitter.nextInt(SLOW_JITTER + 1) : 0);
         int s = stallMs;
         if (s > 0) {
@@ -82,7 +108,11 @@ public final class ServeMeter {
         }
         if (ms > 0) {
             try {
-                Thread.sleep(ms);
+                if (DRAIN_EVERY <= 0) Thread.sleep(ms);
+                else for (int left = ms; left > 0; left -= DRAIN_EVERY) {
+                    Thread.sleep(Math.min(left, DRAIN_EVERY));
+                    dev.lull.optsupport.ChunkHops.run(level.getServer().getAllLevels());
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }

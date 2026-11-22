@@ -6,6 +6,8 @@
   "overwrites": { "conformVisibility": true },
   "mixins": [
     "ServeMeterPacketMixin",
+    "ServeMeterSenderAccessor",
+    "ServeMeterThrottleMixin",
     "SeedEntitiesMixin",
     "SeedLevelMixin",
     "SeedLevelAccessor",

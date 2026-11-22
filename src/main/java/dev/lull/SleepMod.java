@@ -44,11 +44,11 @@ public final class SleepMod {
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Pre.class, e -> NetBench.onTickStart());
         if (ServeMeter.ON) {   // what a slow tick does to the players (notes/92): measurement only
             gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Pre.class, e -> ServeMeter.tickStart());
-            gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> ServeMeter.tickEnd());
+            gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> ServeMeter.tickEnd(e.getServer()));
         }
         if (ServeMeter.ON || ServeMeter.SLOW_TICK > 0)   // the test load: a slow overworld tick, /sleep stall
             gameBus.addListener(net.neoforged.neoforge.event.tick.LevelTickEvent.Post.class, e -> {
-                if (e.getLevel() instanceof net.minecraft.server.level.ServerLevel l && l.dimension() == net.minecraft.world.level.Level.OVERWORLD) ServeMeter.levelTick();
+                if (e.getLevel() instanceof net.minecraft.server.level.ServerLevel l && l.dimension() == net.minecraft.world.level.Level.OVERWORLD) ServeMeter.levelTick(l);
             });
         modBus.addListener(net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent.class, dev.lull.net.BulkPayloads::register);
         gameBus.addListener(net.neoforged.neoforge.event.tick.ServerTickEvent.Post.class, e -> dev.lull.net.Bulk.pump(e.getServer()));
