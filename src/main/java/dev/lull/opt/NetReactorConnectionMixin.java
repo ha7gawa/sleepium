@@ -84,7 +84,7 @@ public abstract class NetReactorConnectionMixin implements NetReactor.Batched {
                     boolean full, mark;
                     synchronized (this.sleep$lock) {
                         this.sleep$filling.add(entry);
-                        full = this.sleep$filling.size() >= NetReactor.MAX_BATCH && !this.sleep$scheduled;
+                        full = !NetReactor.flushLater && this.sleep$filling.size() >= NetReactor.MAX_BATCH && !this.sleep$scheduled;
                         mark = !this.sleep$dirty;
                         this.sleep$dirty = true;
                     }
@@ -166,6 +166,7 @@ public abstract class NetReactorConnectionMixin implements NetReactor.Batched {
     /** the connection's tick (it flushes the channel itself) is a flush point (1.20.1 has no flushChannel) */
     @Inject(method = "tick", at = @At("HEAD"))
     private void sleep$tick(CallbackInfo ci) {
+        if (NetReactor.flushLater && NetReactor.batching()) return;   // inside the tick: the tick's end flushes (NetReactor.flushLater)
         this.sleep$flush();
     }
 

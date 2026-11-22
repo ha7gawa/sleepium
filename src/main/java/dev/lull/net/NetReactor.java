@@ -30,6 +30,22 @@ import net.minecraft.network.protocol.Packet;
 public final class NetReactor {
     public static final boolean ENABLED = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor");
     public static final int MAX_BATCH = Integer.getInteger("lab.net.maxBatch", 256);
+
+    /**
+     * -Dlab.opt.NetFlushLater=true (lab; 1.21.1 lab-pipe2 68df7d52, notes/91): inside the server tick a batch is not handed
+     * to netty at 256 packets nor at its connection's tick - all of them at the tick's end - and the hand-over itself (one
+     * netty task per connection: an event loop wake-up) runs on a server pool thread, not the server thread. Same packets
+     * in the same order per connection; only the moment the drains are scheduled moves. NB 1.20.1's vanilla flushes every
+     * packet as it is sent (no suspended flushing in 1.20.1): here the tick's packets leave at its end, later than
+     * vanilla's - a latency question measured before any default (1.21.1: vanilla's own flush point is the tick's end).
+     */
+    public static volatile boolean flushLater = Boolean.getBoolean("lab.opt.NetFlushLater");
+    public static final LongAdder HANDOFFS = new LongAdder();
+
+    /** /sleep bots ab flushlater on|off (lab A/B) */
+    public static void registerAb() {
+        dev.lull.bots.BotLoad.AB.put("flushlater", v -> flushLater = v);
+    }
     public static final LongAdder BATCHED = new LongAdder(), OTHER_THREAD = new LongAdder(), DRAINS = new LongAdder(), EARLY = new LongAdder();
 
     /** a batched packet with a send listener (rare: most sends have none) */
@@ -71,6 +87,15 @@ public final class NetReactor {
 
     /** server thread, a flush point: every pending batch goes to netty */
     public static void flushAll() {
+        if (flushLater && DIRTY.size() > 1) {   // the wake-ups on a pool thread (dev.lull.optsupport.ServerReactor)
+            Batched[] all = DIRTY.toArray(new Batched[0]);
+            DIRTY.clear();
+            HANDOFFS.increment();
+            dev.lull.optsupport.ServerReactor.pool().execute(() -> {
+                for (Batched b : all) b.sleep$flush();
+            });
+            return;
+        }
         for (int i = 0; i < DIRTY.size(); i++) DIRTY.get(i).sleep$flush();
         DIRTY.clear();
     }
