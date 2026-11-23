@@ -369,7 +369,7 @@ public final class SleepScreen extends Screen {
             opts.removeIf(o -> !group.equals(o.group()));
             opts.sort((a, b) -> Boolean.compare(!a.partOf().isEmpty(), !b.partOf().isEmpty()));   // its own flags first
             list.add(new Row(() -> Component.translatable("sleepium.ui.group." + group).withStyle(ChatFormatting.BOLD), null,
-                    Component.translatable("sleepium.ui.group." + group + ".desc"), new AbstractWidget[0]));
+                    Component.translatable("sleepium.ui.group." + group + ".desc"), new AbstractWidget[0]));            if (group.equals("threads")) fillCores();
         }
         for (SleepOptions.Option o : opts) {
             if (group == null && !f.isEmpty() && !o.key().toLowerCase(Locale.ROOT).contains(f) && !o.description().toLowerCase(Locale.ROOT).contains(f))
@@ -404,6 +404,27 @@ public final class SleepScreen extends Screen {
                 toggle.setMessage(on(part ? effective(o.partOf().get(0)) : desired.get(o.key())));
                 return !part && restartNeeded(o.key()) ? Component.translatable("sleepium.ui.restart.short").withStyle(ChatFormatting.YELLOW) : null;
             }, tip, toggle));
+        }
+    }
+
+    /** the cores budget (Cores): a summary, then each pool's worker threads - Auto or a number, applied at the next start */
+    private void fillCores() {
+        int cpus = dev.lull.optsupport.Cores.cpus();
+        list.add(new Row(() -> {
+            int sv = dev.lull.optsupport.Cores.atStart(0), cl = dev.lull.optsupport.Cores.atStart(1), bg = dev.lull.optsupport.Cores.atStart(2);
+            int all = sv + cl + bg;
+            return Component.translatable("sleepium.ui.cores.summary", cpus, sv, cl, bg, all).withStyle(all > cpus ? ChatFormatting.GOLD : ChatFormatting.WHITE);
+        }, null, Component.translatable("sleepium.ui.cores.summary.tip"), new AbstractWidget[0]));
+        for (int i = 0; i < dev.lull.optsupport.Cores.POOLS.length; i++) {
+            int k = i;
+            String pool = dev.lull.optsupport.Cores.POOLS[i];
+            Button b = Button.builder(Component.empty(), x -> dev.lull.optsupport.Cores.cycle(k)).size(110, 20).build();
+            list.add(new Row(() -> Component.translatable("sleepium.ui.cores." + pool), () -> {
+                int c = dev.lull.optsupport.Cores.chosen(k);
+                b.setMessage(c == 0 ? Component.translatable("sleepium.ui.cores.auto", dev.lull.optsupport.Cores.atStart(k)).withStyle(ChatFormatting.GRAY)
+                        : Component.literal(String.valueOf(c)).withStyle(ChatFormatting.GREEN));
+                return dev.lull.optsupport.Cores.restartNeeded(k) ? Component.translatable("sleepium.ui.restart.short").withStyle(ChatFormatting.YELLOW) : null;
+            }, Component.translatable("sleepium.ui.cores." + pool + ".tip"), b));
         }
     }
 

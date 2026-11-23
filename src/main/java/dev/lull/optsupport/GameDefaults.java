@@ -49,8 +49,12 @@ public final class GameDefaults {
      */
     private static void specPreset() {
         if (!Boolean.getBoolean("lab.specTicks") && !Boolean.getBoolean("lab.fast")) return;   // (lab.fast: the same parts, ticked without transactions)
-        String[] set = {"lab.opt.ServerParallelItemsMixin=true", "lab.opt.WriteBarrier=true", "lab.spec=true", "lab.spec.margin=0.3",
-                "lab.opt.TrackParMixin=true"};
+        // (lab.fast: no write barrier - nothing is undone; its hooks on every field write and random draw cost x92 pigs30k
+        // 8 % of the parallel phase, 93 -> 86 ms)
+        String[] set = Boolean.getBoolean("lab.fast")
+                ? new String[] {"lab.opt.ServerParallelItemsMixin=true", "lab.spec=true", "lab.spec.margin=0.3", "lab.opt.TrackParMixin=true"}
+                : new String[] {"lab.opt.ServerParallelItemsMixin=true", "lab.opt.WriteBarrier=true", "lab.spec=true", "lab.spec.margin=0.3",
+                        "lab.opt.TrackParMixin=true"};
         int n = 0;
         for (String kv : set) {
             int eq = kv.indexOf('=');
@@ -60,18 +64,47 @@ public final class GameDefaults {
             }
         }
         System.out.println("[sleep/opt] parallel entity ticks (lab.specTicks): " + n + " flags set");
+        if (Boolean.getBoolean("lab.fast")) fastPreset();
+    }
+
+    /**
+     * lab.fast (Maximum speed, not exact) beyond the parallel ticks: the server's pool on every core but one (two with a
+     * client; the exact modes keep min(4, cores - 2): host pigs30k 4 workers 84.6 ms, 14 workers 49.8 ms - 20 TPS).
+     * (1.20.1: no view-edge hysteresis yet.) A given value wins.
+     */
+    private static void fastPreset() {
+        int cpus = Runtime.getRuntime().availableProcessors();
+        boolean client;   // (a game with its own client: the render thread keeps a core too)
+        try {
+            Class.forName("net.minecraft.client.Minecraft", false, GameDefaults.class.getClassLoader());
+            client = true;
+        } catch (Throwable t) {
+            client = false;
+        }
+        String[] set = {"lab.sreactor.threads=" + Math.max(1, cpus - (client ? 2 : 1))};
+        java.util.List<String> applied = new java.util.ArrayList<>();
+        for (String kv : set) {
+            int eq = kv.indexOf('=');
+            if (System.getProperty(kv.substring(0, eq)) == null) {
+                System.setProperty(kv.substring(0, eq), kv.substring(eq + 1));
+                applied.add(kv);
+            }
+        }
+        System.out.println("[sleep/opt] Maximum speed (lab.fast): " + applied.size() + " more flags set " + applied);
     }
 
     public static synchronized void ensure() {
         if (done) return;
         done = true;
         SleepConfig.load();   // the player's settings first: they win over the defaults
+        Cores.apply();   // the cores budget (sleepium-cores.properties): before the presets size the pools
         decoupledPreset();
         specPreset();
         try {
             defaults();
         } finally {
             SleepConfig.started();
+            Cores.started();
         }
     }
 
