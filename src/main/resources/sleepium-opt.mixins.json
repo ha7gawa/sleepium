@@ -27,6 +27,7 @@
     "ServerParallelItemsMixin",
     "ServerParallelItemsChunkListenersAccessor",
     "ServerParallelItemsPushMixin",
+    "ServerParallelItemsCreeperMixin",
     "ServerParallelItemsPushAccMixin",
     "ServerParallelItemsSectionKeyAccessor",
     "ServerParallelItemsLevelRandomMixin",
