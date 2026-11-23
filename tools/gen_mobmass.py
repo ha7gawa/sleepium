@@ -146,9 +146,33 @@ def farm():
     write('farm', head, lines)
 
 
+
+def raiders():
+    """400 witches, 200 pillagers and 100 vindicators around 10 iron golems in a roofed dark pen (a witch / raid farm's
+    raiders; everyone invulnerable so the counts stay; no raid)"""
+    x1, z1 = 8192, 4096
+    x2, z2 = x1 + 63, z1 + 63
+    head = ['# sleep:lag_raiders - 400 witches, 200 pillagers, 100 vindicators around 10 iron golems in a roofed stone pen',
+            '# 60x60 (all invulnerable). Area x %d..%d, z %d..%d' % (x1, x2, z1, z2)]
+    lines = RULES + forceloads(x1, z1, x2, z2) + [kill(x1, z1, x2, z2)]
+    ax, az = x1 + 2, z1 + 2
+    lines.append('fill %d %d %d %d %d %d minecraft:stone hollow' % (ax, Y - 1, az, ax + 59, Y + 5, az + 59))
+    lines.append('fill %d %d %d %d %d %d minecraft:grass_block' % (ax + 1, Y - 1, az + 1, ax + 58, Y - 1, az + 58))
+    for x, z in grid(10, ax + 25, az + 25, ax + 35, az + 35):
+        lines.append('summon minecraft:iron_golem %.2f %d %.2f {PersistenceRequired:1b,Invulnerable:1b}' % (x, Y, z))
+    kinds = ['witch'] * 400 + ['pillager'] * 200 + ['vindicator'] * 100
+    ring = [(x, z) for x, z in grid(3364, ax + 1, az + 1, ax + 59, az + 59)
+            if not (ax + 20 < x < ax + 40 and az + 20 < z < az + 40)]
+    step = len(ring) / float(len(kinds))
+    for i, k in enumerate(kinds):
+        x, z = ring[int(i * step)]
+        lines.append('summon minecraft:%s %.2f %d %.2f {PersistenceRequired:1b,Invulnerable:1b}' % (k, x, Y, z))
+    write('raiders', head, lines)
+
 if __name__ == '__main__':
     pigs_spread('pigs5k', 5000, 4096, 4096, 16)
     pigs_spread('pigs10k', 10000, 4096, 4096, 23)
     pigs_spread('pigs30k', 30000, 4096, 4096, 40)
     pigpens()
     farm()
+    raiders()
