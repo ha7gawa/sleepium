@@ -124,6 +124,11 @@ public final class SpecTicks {
             all[n++] = e;
         });
         walks++;
+        if (FAST) {
+            int tries = PATHS.getAndSet(0);
+            if (PATH_BUDGET > 0) pathChance = Math.min(1f, PATH_BUDGET / (float) Math.max(1, tries));
+            pathTicks++;
+        }
         boolean serial = ALTERNATE && (walks & 1) == 0;
         long t0 = System.nanoTime();
         try {
@@ -352,6 +357,29 @@ public final class SpecTicks {
     @SuppressWarnings("unchecked")
     private static final net.minecraft.world.entity.ai.memory.MemoryModuleType<? extends Entity>[] PARTNERS = new net.minecraft.world.entity.ai.memory.MemoryModuleType[] {
             net.minecraft.world.entity.ai.memory.MemoryModuleType.INTERACTION_TARGET, net.minecraft.world.entity.ai.memory.MemoryModuleType.BREED_TARGET};
+
+    /** lab.fast.pathBudget=N: new paths a tick for mobs with no target (0: no limit, counted) */
+    static final int PATH_BUDGET = Integer.getInteger("lab.fast.pathBudget", 0);
+    private static final java.util.concurrent.atomic.AtomicInteger PATHS = new java.util.concurrent.atomic.AtomicInteger();
+    static long pathsMade, pathsDenied, pathTicks;
+    private static volatile float pathChance = 1f;
+
+    /** a path for this mob now (lab.fast): always with a target, else within this tick's budget */
+    public static boolean pathAllowed(net.minecraft.world.entity.Mob mob) {
+        if (mob.getTarget() != null) {
+            pathsMade++;
+            return true;
+        }
+        PATHS.incrementAndGet();
+        // (fair: each try is allowed with the chance budget / last tick's tries - not the first N of the walk's order,
+        // which would leave the same mobs standing for good)
+        if (PATH_BUDGET > 0 && running && pathChance < 1f && java.util.concurrent.ThreadLocalRandom.current().nextFloat() >= pathChance) {
+            pathsDenied++;
+            return false;
+        }
+        pathsMade++;
+        return true;
+    }
 
     static boolean usesPoi(Entity e) {
         return e instanceof net.minecraft.world.entity.npc.AbstractVillager || e instanceof net.minecraft.world.entity.animal.IronGolem
@@ -1497,8 +1525,8 @@ public final class SpecTicks {
                 dw, (nsParallel - lastPar) / 1e6 / dw, (nsPhase - lastPhase) / 1e6 / dw, (nsCommit - lastCommit) / 1e6 / dw, runs - lastRuns));
         lastPhase = nsPhase; lastCommit = nsCommit; lastPar = nsParallel; lastWalksPar = walksParallel; lastRuns = runs;
         if (FAST && fastBlocks > 0) {
-            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d, gathered %d; pushes summed %d (applied %d), moves in their section %d; frozen grids %d, queries %d, visited %d",
-                    fastBlocks, fastGroups, fastGroups / (double) fastBlocks, fastBlockSum / (double) fastBlocks, fastBigSum / (double) fastBlocks, fastMaxGroup, fastTargets, fastDeferredWorld, fastGathered, FastPush.pushes, FastPush.applied, sameSectionMoves, FrozenGrid.builds, FrozenGrid.queries, FrozenGrid.visited));
+            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d, gathered %d; pushes summed %d (applied %d), moves in their section %d; frozen grids %d, queries %d, visited %d; paths %.1f a tick, denied %.1f a tick",
+                    fastBlocks, fastGroups, fastGroups / (double) fastBlocks, fastBlockSum / (double) fastBlocks, fastBigSum / (double) fastBlocks, fastMaxGroup, fastTargets, fastDeferredWorld, fastGathered, FastPush.pushes, FastPush.applied, sameSectionMoves, FrozenGrid.builds, FrozenGrid.queries, FrozenGrid.visited, pathsMade / (double) Math.max(1, pathTicks), pathsDenied / (double) Math.max(1, pathTicks)));
             fastMaxGroup = 0;
         }
         System.out.println(String.format(java.util.Locale.ROOT,

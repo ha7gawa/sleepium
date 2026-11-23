@@ -28,6 +28,7 @@
     "ServerParallelItemsChunkListenersAccessor",
     "ServerParallelItemsPushMixin",
     "ServerParallelItemsPoiLockMixin",
+    "ServerParallelItemsPathBudgetMixin",
     "ServerParallelItemsReputationMixin",
     "ServerParallelItemsCreeperMixin",
     "ServerParallelItemsPushAccMixin",
