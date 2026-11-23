@@ -4,6 +4,28 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.3 - 2026-11-23
+
+- **Fixed: a server with parallel entity ticks or Maximum speed could stop while new chunks generated** (since 1.3.6,
+  both options are off by default). World generation that places a structure with mobs (a village's cat) asked for a
+  chunk the way a parallel entity tick does and stopped the server with "a run tick needs chunk ... that is not
+  loaded".
+- **Fixed: a rare `ConcurrentModificationException` with parallel entity ticks or Maximum speed** when dropped items
+  merged in parallel (two threads filled a chunk section's per-class entity list at once).
+- **Fixed (1.20.1): parallel entity ticks ran mods' LivingTickEvent listeners on worker threads.** With such a mod
+  installed the exact parallel ticks now tick the usual way.
+- **Maximum speed with mods:** a mod listening to entity tick events no longer turns the parallel ticks off. Mods'
+  event listeners run one at a time under a lock while the mobs around them tick in parallel. Tested with a listener
+  that is not thread-safe on purpose: 50 million calls, no overlap.
+- **Maximum speed, crowds:** pushes between crowded mobs are summed on the worker threads instead of being applied one
+  by one afterwards, and crowded chunk sections get a spatial grid for each tick instead of a full scan for every
+  mob's neighbour query - pig pens (5,000) on a 4-core Xeon 41 -> 25 ms a tick; mobs that move inside their chunk
+  section cost nothing extra; on 1.21.1 entities nobody can see skip the per-tick network update; after a server stall, a
+  player's queued movement is no longer rubber-banded (1.21.1).
+
+The exact modes are unchanged otherwise: the exactness suite stays identical to vanilla by default and with parallel
+entity ticks on.
+
 ## 1.4.2 - 2026-11-23
 
 - **Fixed: the game stopped at start with Maximum speed on (1.4.1, clients only).** Choosing the worker threads looked

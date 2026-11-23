@@ -77,6 +77,15 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.4.3: fixes for the experimental modes, Maximum speed with mods and crowds
+
+**Fixed:** a server with parallel entity ticks or Maximum speed on could stop while generating new chunks (since
+1.3.6); a rare crash when dropped items merged in parallel; on 1.20.1 the exact parallel ticks ran mods' LivingTickEvent
+listeners off the main thread. Both options are off by default - the default game was never affected.
+
+**Maximum speed** now keeps ticking in parallel with mods that listen to entity ticks (their listeners run one at a
+time), and crowds are much cheaper: **pig pens (5,000) on a 4-core Xeon 41 -> 25 ms a tick**.
+
 ## New in 1.4.1: Maximum speed on all your cores, a cores budget
 
 **Maximum speed** now uses every core but one (two in single-player): **30,000 pigs on an 8-core desktop 85 -> 50 ms
