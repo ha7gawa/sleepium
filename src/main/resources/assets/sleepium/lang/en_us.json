@@ -241,5 +241,14 @@
   "sleepium.ui.mods.kind.clientEvent": "Its event handlers (client)",
   "sleepium.ui.mods.kind.clientEvent.tip": "Time in its listeners of game events on the client per frame (HUD, rendering hooks...).",
   "sleepium.ui.mods.kind.blockDraw": "Drawing its blocks",
-  "sleepium.ui.mods.kind.blockDraw.tip": "Time drawing its block entities per frame (animated machines, chests, signs...)."
+  "sleepium.ui.mods.kind.blockDraw.tip": "Time drawing its block entities per frame (animated machines, chests, signs...).",
+  "sleepium.ui.cores.summary": "Cores: %s. Worker threads - server %s, client %s, background %s (%s in all)",
+  "sleepium.ui.cores.summary.tip": "Sleepium's worker threads share the cores with the game's own threads (the server tick and the render thread). The pools rarely work at the same moment - the client's during a frame, the server's during a tick, the background one while chunks generate - so their sum may exceed the cores. Shown in gold when it does. Lower a pool if the game stutters while another program runs, or to leave cores to something else.",
+  "sleepium.ui.cores.server": "Server worker threads",
+  "sleepium.ui.cores.server.tip": "Parallel entity ticks and Maximum speed, the entity tracker, dropped items. Auto: up to 4 (every core but one with Maximum speed, two in single-player). Needs a restart.",
+  "sleepium.ui.cores.client": "Client worker threads",
+  "sleepium.ui.cores.client.tip": "Parallel rendering of mobs and block entities, client entity ticks, particles. Auto: up to 4. Needs a restart.",
+  "sleepium.ui.cores.background": "Background worker threads",
+  "sleepium.ui.cores.background.tip": "World generation and the game's other background work. Auto: 4 (half the cores, 4 to 8, with parallel world generation). Needs a restart.",
+  "sleepium.ui.cores.auto": "Auto (%s)"
 }
