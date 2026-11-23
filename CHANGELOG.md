@@ -4,6 +4,13 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.2 - 2026-11-23
+
+- **Fixed: the game stopped at start with Maximum speed on (1.4.1, clients only).** Choosing the worker threads looked
+  up whether the game has a client in a way that loaded game classes too early (`MixinTargetAlreadyLoadedException`
+  on `BlockableEventLoop`). Dedicated servers were not affected. If 1.4.1 stopped at start for you, update; or set
+  `lab.fast=false` in `config/sleepium.properties`.
+
 ## 1.4.1 - 2026-11-23
 
 - **Maximum speed uses all your cores.** It ran on at most 4 worker threads, like the exact modes; now it takes every

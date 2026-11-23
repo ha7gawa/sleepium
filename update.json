@@ -1,6 +1,7 @@
 {
   "homepage": "https://modrinth.com/mod/sleepium",
   "1.21.1": {
+    "1.4.2": "Fix: the game stopped at start with Maximum speed on (1.4.1, clients only).",
     "1.4.1": "A cores budget per pool in the settings; Maximum speed on all cores (30k pigs 85 -> 50 ms on 8 cores, 20 TPS), parallel in mixed worlds, less overhead; view-edge chunks kept on 1.21.1.",
     "1.4.0": "Maximum speed (experimental, not exact): mobs ticked in parallel without vanilla's strict order - 30k pigs 315 -> 104 ms, farms 56 -> 30 ms; dropped items in the exact parallel ticks too; a parallel ticks crash fixed.",
     "1.3.6": "Parallel entity ticks (experimental, exact: 30k pigs 315 -> 192 ms), decoupled frames working with other mods, HUD size and new widgets, faster wall checks, farm slowdown fixed, world creation hang fixed.",
@@ -35,12 +36,13 @@
     "1.0.0": "The first public release."
   },
   "promos": {
-    "1.21.1-latest": "1.4.1",
-    "1.21.1-recommended": "1.4.1",
-    "1.20.1-latest": "1.4.1",
-    "1.20.1-recommended": "1.4.1"
+    "1.21.1-latest": "1.4.2",
+    "1.21.1-recommended": "1.4.2",
+    "1.20.1-latest": "1.4.2",
+    "1.20.1-recommended": "1.4.2"
   },
   "1.20.1": {
+    "1.4.2": "Fix: the game stopped at start with Maximum speed on (1.4.1, clients only).",
     "1.4.1": "A cores budget per pool in the settings; Maximum speed on all cores (30k pigs 85 -> 50 ms on 8 cores, 20 TPS), parallel in mixed worlds, less overhead; view-edge chunks kept on 1.21.1.",
     "1.4.0": "Maximum speed (experimental, not exact): mobs ticked in parallel without vanilla's strict order - 30k pigs 315 -> 104 ms, farms 56 -> 30 ms; dropped items in the exact parallel ticks too; a parallel ticks crash fixed.",
     "1.3.6": "Parallel entity ticks (experimental, exact: 30k pigs 315 -> 192 ms), decoupled frames working with other mods, HUD size and new widgets, faster wall checks, farm slowdown fixed, world creation hang fixed.",
