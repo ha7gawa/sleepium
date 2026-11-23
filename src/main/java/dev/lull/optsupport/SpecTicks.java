@@ -290,7 +290,7 @@ public final class SpecTicks {
         return true;
     }
 
-    static long fastDeferredWorld, fastGroups, fastTargets;
+    static long fastDeferredWorld, fastGroups, fastTargets, fastMaxGroup, fastBigSum, fastBlockSum, fastBlocks;
 
     /**
      * a mob driven by goals only: its brain holds no memories (a brain's behaviors, sensors and memory values are objects
@@ -462,6 +462,14 @@ public final class SpecTicks {
         }
         groupStart[g] = pos;
         nGroups = g;
+        if (FAST) {   // (stats: the largest group of a block - one thread ticks it all)
+            int big = 0;
+            for (int i = 0; i < g; i++) big = Math.max(big, groupStart[i + 1] - groupStart[i]);
+            fastMaxGroup = Math.max(fastMaxGroup, big);
+            fastBigSum += big;
+            fastBlockSum += m;
+            fastBlocks++;
+        }
         int[] fill = count;
         for (int i = 0; i < g; i++) fill[i] = groupStart[i];   // (count no longer needed: next free place per group)
         for (int i = 0; i < m; i++) {
@@ -1367,6 +1375,11 @@ public final class SpecTicks {
         if (dw > 0) System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] last %d parallel walks: walk %.2f ms, of it the runs' parallel phase %.2f ms, their commit %.2f ms (%d runs)",
                 dw, (nsParallel - lastPar) / 1e6 / dw, (nsPhase - lastPhase) / 1e6 / dw, (nsCommit - lastCommit) / 1e6 / dw, runs - lastRuns));
         lastPhase = nsPhase; lastCommit = nsCommit; lastPar = nsParallel; lastWalksPar = walksParallel; lastRuns = runs;
+        if (FAST && fastBlocks > 0) {
+            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d",
+                    fastBlocks, fastGroups, fastGroups / (double) fastBlocks, fastBlockSum / (double) fastBlocks, fastBigSum / (double) fastBlocks, fastMaxGroup, fastTargets, fastDeferredWorld));
+            fastMaxGroup = 0;
+        }
         System.out.println(String.format(java.util.Locale.ROOT,
                 "[sleep/spec] walks %d: runs %d, entities in runs %d (%.0f a walk); serial walk %.3f ms (%d), parallel walk %.3f ms (%d); deferred moves %d, removes %d, effects %d; path overlay entries %d, chunk misses %d; workers %d",
                 walks, runs, inRuns, walks == 0 ? 0 : inRuns / (double) walks, walksSerial == 0 ? 0 : nsSerial / 1e6 / walksSerial, walksSerial,
