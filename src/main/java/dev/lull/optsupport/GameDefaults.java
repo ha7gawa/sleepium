@@ -78,7 +78,16 @@ public final class GameDefaults {
         // Minecraft here (even uninitialised) loads its superclasses before the mixins are applied (1.4.1: a client with
         // Maximum speed on stopped at start, MixinTargetAlreadyLoadedException on BlockableEventLoop)
         boolean client = GameDefaults.class.getClassLoader().getResource("net/minecraft/client/Minecraft.class") != null;
-        String[] set = {"lab.sreactor.threads=" + Math.max(1, cpus - (client ? 2 : 1))};
+        java.util.List<String> want = new java.util.ArrayList<>(java.util.List.of("lab.sreactor.threads=" + Math.max(1, cpus - (client ? 2 : 1))));
+        // the client's built non-exact parts (1.3.x research): the face buckets (N100 terrain GPU 6.1 -> 3.6 ms; ~270 leaf
+        // pixels of equal depth in another order), items' translucent layers in any order, living client entities ticked on
+        // the workers, tick-rate poses (tolerance 0.1 block), the render cache's replays on the workers;
+        // -Dlab.fast.client=true only: measured as a set on the host (client_entities, no decoupled frames) it cost fps -
+        // 2050 / 2031 -> 1469 / 1298, CPU 2.2 -> 4.2 cores (built for the decoupled frame thread)
+        if (Boolean.getBoolean("lab.fast.client"))
+            want.addAll(java.util.List.of("lab.chunkmd.faceCull=true", "lab.partbatch.itemsAnyOrder=true", "lab.pentities.living=true",
+                    "lab.prender.tickPoses=true", "lab.prender.tickPoses.tolerance=0.1", "lab.prender.cachedOnWorkers=true"));
+        String[] set = want.toArray(new String[0]);
         java.util.List<String> applied = new java.util.ArrayList<>();
         for (String kv : set) {
             int eq = kv.indexOf('=');

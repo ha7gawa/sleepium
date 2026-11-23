@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class ParallelEntityTicksMoveMixin {
     @Redirect(method = "setPosRaw", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/entity/EntityInLevelCallback;onMove()V"))
     private void sleep$onMove(EntityInLevelCallback cb) {
-        if (!dev.lull.optsupport.SpecTicks.deferMove(cb) && !dev.lull.optsupport.ParallelEntities.deferMove(cb) && !dev.lull.optsupport.ServerParallelItems.deferMove((Entity) (Object) this, cb)) cb.onMove();
+        if (!dev.lull.optsupport.SpecTicks.deferMove((Entity) (Object) this, cb) && !dev.lull.optsupport.ParallelEntities.deferMove(cb) && !dev.lull.optsupport.ServerParallelItems.deferMove((Entity) (Object) this, cb)) cb.onMove();
     }
 
     @Redirect(method = "setRemoved", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/entity/EntityInLevelCallback;onRemove(Lnet/minecraft/world/entity/Entity$RemovalReason;)V"))

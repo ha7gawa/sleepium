@@ -26,6 +26,7 @@ public final class SleepMod {
         for (com.mojang.math.OctahedralGroup g : com.mojang.math.OctahedralGroup.values())
             for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) g.rotate(d);
         if (Boolean.getBoolean("lab.opt.HeapReturn")) LOGGER.info("sleep: {}", dev.lull.optsupport.HeapReturn.apply());   // memory back to the OS after bursts
+        if (Boolean.getBoolean("sleep.test.tickListener")) dev.compatprobe.TickListenerProbe.register();   // test: a thread-unsafe tick listener (Maximum speed's run lock)
         if (Boolean.getBoolean("lab.opt.TrackFast")) dev.lull.optsupport.TrackFast.register();   // A/B switch and counters with /sleep bots
         if (dev.lull.net.NetReactor.ENABLED) dev.lull.net.NetReactor.registerAb();   // /sleep bots ab flushlater
         if (dev.lull.optsupport.NetOrderVerify.ON) dev.lull.optsupport.NetOrderVerify.register();   // measurement only: the order check with /sleep bots measure

@@ -22,6 +22,12 @@ public abstract class ServerParallelItemsPushMixin {
     @Inject(method = "doPush", at = @At("HEAD"), cancellable = true)
     private void sleep$fastPush(Entity other, CallbackInfo ci) {
         if (!dev.lull.optsupport.SpecTicks.FAST) return;
+        Entity self = (Entity) (Object) this;
+        if (dev.lull.optsupport.SpecTicks.inRun() && dev.lull.optsupport.FastPush.plain(self, other)) {   // (vanilla's push on both: the impulses summed - FastPush)
+            dev.lull.optsupport.FastPush.push(self, other);
+            ci.cancel();
+            return;
+        }
         if (dev.lull.optsupport.SpecTicks.deferWorld(() -> doPush(other))) ci.cancel();
     }
 }
