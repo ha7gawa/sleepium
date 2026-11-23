@@ -13,6 +13,7 @@
     "ServerParallelItemsChunkMapAccessor",
     "ServerParallelItemsPortalAccessor",
     "ServerParallelItemsPushMixin",
+    "ServerParallelItemsCreeperMixin",
     "ServerParallelItemsPushAccMixin",
     "ServerParallelItemsSectionKeyAccessor",
     "ServerParallelItemsLevelRandomMixin",

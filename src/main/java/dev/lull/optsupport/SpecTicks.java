@@ -317,7 +317,7 @@ public final class SpecTicks {
 
     /** lab.fast: not the mobs whose ticks reach shared state with no guard yet (points of interest, explosions); entity sleep's own ticks stay on the server thread */
     static boolean fastOk(Entity e) {
-        return !(e instanceof net.minecraft.world.entity.monster.Creeper) && dev.lull.optsupport.sleep.EntitySleep.plainNext(e);
+        return dev.lull.optsupport.sleep.EntitySleep.plainNext(e);   // (creepers too: their explosion waits for the run's end - ServerParallelItemsCreeperMixin)
     }
 
     /** lab.fast: the mobs that use points of interest (one shared, unguarded manager): all of a block on one thread */
