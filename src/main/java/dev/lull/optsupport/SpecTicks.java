@@ -371,7 +371,7 @@ public final class SpecTicks {
     }
 
     static boolean eligible(Entity e) {
-        return kindOk(e) && !e.isRemoved() && !e.isPassenger() && !e.isVehicle() && e.getClass().getName().startsWith("net.minecraft.")
+        return kindOk(e) && !e.isRemoved() && !e.isPassenger() && !e.isVehicle() && (e.getClass().getName().startsWith("net.minecraft.") || FAST_MOD_MOBS)
                 && (!EXACT || dev.lull.optsupport.sleep.EntitySleep.plainNext(e) && noBrain(e)) && (!FAST || fastOk(e)) && (TYPES == null || TYPES.contains(e.getType().toShortString()));
     }
 
@@ -461,6 +461,8 @@ public final class SpecTicks {
      * interest (villagers, iron golems, bees) and creepers (explosions) tick the usual way.
      */
     public static final boolean FAST = Boolean.getBoolean("lab.fast");
+    /** lab.fast.modMobs (off, its own settings row): mods' mobs in runs too - their own code may share state with no guard */
+    static final boolean FAST_MOD_MOBS = FAST && Boolean.getBoolean("lab.fast.modMobs");
     /** lab.fast: the POI manager under one lock during runs (ServerParallelItemsPoiLockMixin) - villagers / golems not one group */
     public static final boolean POI_LOCK = FAST && !"false".equals(System.getProperty("lab.fast.poiLock"));
     public static final Object POI = new Object();
