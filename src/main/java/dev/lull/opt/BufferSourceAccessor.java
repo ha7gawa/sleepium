@@ -15,4 +15,13 @@ public interface BufferSourceAccessor {
 
     @Accessor("fixedBuffers")
     java.util.SequencedMap<RenderType, com.mojang.blaze3d.vertex.ByteBufferBuilder> sleep$fixed();
+
+    @Accessor("sharedBuffer")
+    com.mojang.blaze3d.vertex.ByteBufferBuilder sleep$shared();
+
+    @Accessor("lastSharedType")
+    RenderType sleep$lastShared();
+
+    @Accessor("lastSharedType")
+    void sleep$setLastShared(RenderType t);
 }

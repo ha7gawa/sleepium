@@ -250,5 +250,6 @@
   "sleepium.ui.cores.client.tip": "Parallel rendering of mobs and block entities, client entity ticks, particles. Auto: up to 4. Needs a restart.",
   "sleepium.ui.cores.background": "Background worker threads",
   "sleepium.ui.cores.background.tip": "World generation and the game's other background work. Auto: 4 (half the cores, 4 to 8, with parallel world generation). Needs a restart.",
-  "sleepium.ui.cores.auto": "Auto (%s)"
+  "sleepium.ui.cores.auto": "Auto (%s)",
+  "sleepium.ui.rcache.safe": "Sleepium: the render cache draws %s (%s) the safe way - it draws past the buffers it is given. Nothing to do; any others are listed in Options > Sleepium... > Mods. If you see flicker, tell us."
 }
