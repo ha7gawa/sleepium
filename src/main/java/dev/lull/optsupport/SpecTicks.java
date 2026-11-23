@@ -35,6 +35,8 @@ public final class SpecTicks {
     static final int MIN = Integer.getInteger("lab.spec.min", 64);
     static final int CHUNK = Integer.getInteger("lab.spec.chunk", 16);
     static final boolean ALTERNATE = Boolean.getBoolean("lab.spec.alternate");
+    /** -Dlab.spec.items=false: dropped items tick serially in SpecTicks' walk (ServerParallelItems' runs off) */
+    static final boolean ITEMS = !"false".equals(System.getProperty("lab.spec.items"));
 
     static {
         // (the transaction code out of line: inlined into vanilla's hot methods while runs tick, it slows the plain
@@ -78,7 +80,16 @@ public final class SpecTicks {
                 return;
             }
             int i = 0;
+            // (dropped items: ServerParallelItems' windows inside this walk - lab.spec.items, default on)
+            boolean items = ITEMS && !serial && ServerParallelItems.enabled && lvl.getProfiler() == net.minecraft.util.profiling.InactiveProfiler.INSTANCE;
+            if (items) ServerParallelItems.walkFrom(all, n);
             while (i < n) {
+                if (items && all[i] instanceof net.minecraft.world.entity.item.ItemEntity) {
+                    int j = i;
+                    while (j < n && all[j] instanceof net.minecraft.world.entity.item.ItemEntity) j++;
+                    i = ServerParallelItems.itemsWindow(i, j, consumer, lvl);
+                    continue;
+                }
                 if (serial || !eligible(all[i])) {
                     consumer.accept(all[i++]);
                     continue;
