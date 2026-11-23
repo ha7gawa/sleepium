@@ -10,8 +10,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** part of SpecTicks (lab): a speculative tick must not write the world or spawn - it stops there and runs again in order. */
 @Mixin(ServerLevel.class)
 public abstract class ServerParallelItemsAbortMixin {
-    @Inject(method = "addFreshEntity", at = @At("HEAD"))
+    @Inject(method = "addFreshEntity", at = @At("HEAD"), cancellable = true)
     private void sleep$specSpawn(Entity e, CallbackInfoReturnable<Boolean> cir) {
+        if (dev.lull.optsupport.SpecTicks.FAST) {   // (lab.fast: spawned at the run's end, in walk order)
+            ServerLevel self = (ServerLevel) (Object) this;
+            if (dev.lull.optsupport.SpecTicks.deferWorld(() -> self.addFreshEntity(e))) cir.setReturnValue(true);
+            return;
+        }
         if (dev.lull.optsupport.SpecTicks.EXACT && dev.lull.optsupport.sleep.WB.TX) dev.lull.optsupport.SpecTicks.abortIfSpeculative("spawns " + e.getType().toShortString());
     }
 }
