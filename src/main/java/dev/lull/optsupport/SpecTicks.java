@@ -60,7 +60,10 @@ public final class SpecTicks {
     record Removal(EntityInLevelCallback cb, Entity.RemovalReason why) {}
 
     public static void forEach(net.minecraft.world.level.entity.EntityTickList list, Consumer<Entity> consumer, ServerLevel lvl) {
-        if (ParallelEntities.tickListenersActing()) {   // (an active profiler is fine: workers get the inactive one)
+        // (exact: a mod listening to LivingTickEvent - posted by LivingEntity.tick on the worker - keeps the walk serial: its
+        // code would run off the main thread, its writes outside the barrier; lab.fast: listeners run under the bus's run
+        // lock, CompositeEventBus.RUN_POSTS)
+        if (!FAST && (ParallelEntities.tickListenersActing() || ParallelEntities.livingTickListened())) {   // (an active profiler is fine: workers get the inactive one)
             list.forEach(consumer);
             return;
         }

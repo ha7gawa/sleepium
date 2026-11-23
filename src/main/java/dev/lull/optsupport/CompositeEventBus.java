@@ -186,8 +186,26 @@ public final class CompositeEventBus extends EventBus {
     /** posts that took the full path (somebody listens, or not known): MoveMemo's "no event with listeners" */
     public static long fullPosts;
 
-    /** Full post: listener changes, dispatch, fallbacks and statistics. */
+    /**
+     * lab.fast (Maximum speed): while mobs or items tick on the workers, a post somebody listens to runs under this one
+     * lock - mods' listeners (LivingTickEvent, damage, effects ...) never run on two threads at once, the ticks around
+     * them stay parallel. Posts nobody listens to took the fast path above and never get here.
+     */
+    private static final Object RUN_POSTS = new Object();
+    public static long lockedPosts;
+
     private boolean postFull(Event event) {
+        if (SpecTicks.FAST && (SpecTicks.running() || ServerParallelItems.running())) {
+            synchronized (RUN_POSTS) {
+                lockedPosts++;
+                return postFull0(event);
+            }
+        }
+        return postFull0(event);
+    }
+
+    /** Full post: listener changes, dispatch, fallbacks and statistics. */
+    private boolean postFull0(Event event) {
         fullPosts++;
         if (!live || CHECK_TYPES) {
             if (STATS) count(live ? 4 : 3, null);

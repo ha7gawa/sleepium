@@ -147,7 +147,7 @@ public final class ParallelEntities {
      * living entity ticked on a worker would run a mod's code there: living entities stay on the main thread then (a bus
      * not ours: unknown, the same)
      */
-    private static boolean livingTickListened() {
+    static boolean livingTickListened() {
         var bus = net.minecraftforge.common.MinecraftForge.EVENT_BUS;
         return !(bus instanceof CompositeEventBus cb) || cb.hasListeners(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent.class);
     }
