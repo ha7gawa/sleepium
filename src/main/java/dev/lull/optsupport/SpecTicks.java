@@ -340,6 +340,10 @@ public final class SpecTicks {
     }
 
     /** lab.fast: the mobs that use points of interest (one shared, unguarded manager): all of a block on one thread */
+    @SuppressWarnings("unchecked")
+    private static final net.minecraft.world.entity.ai.memory.MemoryModuleType<? extends Entity>[] PARTNERS = new net.minecraft.world.entity.ai.memory.MemoryModuleType[] {
+            net.minecraft.world.entity.ai.memory.MemoryModuleType.INTERACTION_TARGET, net.minecraft.world.entity.ai.memory.MemoryModuleType.BREED_TARGET};
+
     static boolean usesPoi(Entity e) {
         return e instanceof net.minecraft.world.entity.npc.AbstractVillager || e instanceof net.minecraft.world.entity.animal.IronGolem
                 || e instanceof net.minecraft.world.entity.animal.Bee;
@@ -393,6 +397,9 @@ public final class SpecTicks {
      * interest (villagers, iron golems, bees) and creepers (explosions) tick the usual way.
      */
     public static final boolean FAST = Boolean.getBoolean("lab.fast");
+    /** lab.fast: the POI manager under one lock during runs (ServerParallelItemsPoiLockMixin) - villagers / golems not one group */
+    public static final boolean POI_LOCK = FAST && !"false".equals(System.getProperty("lab.fast.poiLock"));
+    public static final Object POI = new Object();
     /** lab.fast: Sleepium's own random streams (FastRandom) for server entities and per thread for the level (-Dlab.fast.random=false: vanilla's, the level's behind a lock) */
     public static final boolean FAST_RANDOM = FAST && !"false".equals(System.getProperty("lab.fast.random"));
     /** lab.fast.entityRandom (off): server entities' own random as FastRandom too - no CAS per draw, but mob sleep cannot look ahead in it (it predicts vanilla's LCG) and refuses those mobs */
@@ -486,7 +493,7 @@ public final class SpecTicks {
         if (FAST) {   // (the users of points of interest: one thread for all of them)
             int p0 = -1;
             for (int i = 0; i < m; i++)
-                if (usesPoi(all[b0 + i])) {
+                if (POI_LOCK ? all[b0 + i] instanceof net.minecraft.world.entity.animal.Bee : usesPoi(all[b0 + i])) {   // (with the POI lock: bees only - their hives' occupant lists)
                     if (p0 < 0) p0 = i;
                     else {
                         int ra = find(i), rb = find(p0);
@@ -494,6 +501,24 @@ public final class SpecTicks {
                     }
                 }
         }
+        if (POI_LOCK)   // (brain partners write into each other - gossip, trades, breeding: both on one thread)
+            for (int i = 0; i < m; i++)
+                if (all[b0 + i] instanceof net.minecraft.world.entity.LivingEntity le && le.getBrain() != null) {
+                    var br = le.getBrain();
+                    for (var mt : PARTNERS) {
+                        if (!br.hasMemoryValue(mt)) continue;
+                        Object o = br.getMemory(mt).orElse(null);
+                        if (!(o instanceof Entity t)) continue;
+                        int j = ((SpecSlot) t).sleep$specSlot(ep);
+                        if (j >= 0 && j < m && all[b0 + j] == t) {
+                            int ra = find(i), rb = find(j);
+                            if (ra != rb) {
+                                parent[Math.max(ra, rb)] = Math.min(ra, rb);
+                                fastTargets++;
+                            }
+                        }
+                    }
+                }
         if (FAST)   // (a mob hits / pushes what it targets: both on one thread)
             for (int i = 0; i < m; i++)
                 if (all[b0 + i] instanceof net.minecraft.world.entity.Mob mob && mob.getTarget() != null) {
