@@ -23,6 +23,6 @@ public abstract class RenderCallJournalMixin {
      */
     @Overwrite(remap = false)
     public static void recordRenderCall(RenderCall renderCall) {
-        if (!dev.lull.optsupport.ParallelRender.journal(renderCall)) recordingQueue.add(renderCall);
+        if (!dev.lull.optsupport.ParallelRender.journal(renderCall)) recordingQueue.add(dev.lull.optsupport.FrameThread.tracked(renderCall));
     }
 }
