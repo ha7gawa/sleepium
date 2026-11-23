@@ -102,6 +102,8 @@ public final class ClientLightAsync {
     public static void join() {
         if (running) {
             waits++;
+            boolean co = FrameCoop.releaseForWait();   // (cooperative mode: a frame may be drawn while the main thread waits here)
+            try {
             synchronized (LOCK) {
                 while (running) {
                     try {
@@ -114,6 +116,9 @@ public final class ClientLightAsync {
                         break;
                     }
                 }
+            }
+            } finally {
+                FrameCoop.reacquireAfterWait(co);
             }
         }
         replay();

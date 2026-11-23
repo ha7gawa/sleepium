@@ -29,6 +29,10 @@ public final class FrameCoop {
     /** the main thread holds L (its busy stretch) */
     private static boolean mainIn;
     public static long yields, frameTakes, frameWaits, frameWaitNs, maxFrameWaitNs;
+    private static final boolean TRACE = Boolean.getBoolean("lab.frameThread.coopTrace");
+    private static final java.util.concurrent.ConcurrentHashMap<String, Integer> LONG = new java.util.concurrent.ConcurrentHashMap<>();
+    /** the main thread (for the trace's samples) */
+    static volatile Thread main;
 
     static void decide() {
         if (decided) return;
@@ -59,6 +63,7 @@ public final class FrameCoop {
     /** the main thread starts its queued tasks or its client tick */
     public static void mainEnter() {
         if (!on || mainIn) return;
+        main = Thread.currentThread();
         L.lock();
         mainIn = true;
     }
@@ -103,7 +108,24 @@ public final class FrameCoop {
         // frames, one after another, starved the main thread's re-lock at its safe point: a hung client, 11-23)
         boolean busy = L.isLocked() || L.hasQueuedThreads();
         long t0 = busy ? System.nanoTime() : 0;
-        L.lock();
+        if (busy && TRACE && main != null) {
+            // (-Dlab.frameThread.coopTrace: a wait past 5 ms samples where the main thread is - a stretch with no safe point)
+            try {
+                if (!L.tryLock(5, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    StackTraceElement[] st = main.getStackTrace();
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0, n = 0; i < st.length && n < 6; i++) {
+                        String c = st[i].getClassName();
+                        if (c.startsWith("java.") || c.startsWith("jdk.")) continue;
+                        sb.append(n++ > 0 ? " <- " : "").append(c.substring(c.lastIndexOf('.') + 1)).append('.').append(st[i].getMethodName());
+                    }
+                    LONG.merge(sb.toString(), 1, Integer::sum);
+                    L.lock();
+                }
+            } catch (InterruptedException e) {
+                L.lock();
+            }
+        } else L.lock();
         if (busy) {
             long w = System.nanoTime() - t0;
             frameWaits++;
@@ -119,6 +141,10 @@ public final class FrameCoop {
 
     public static String stats() {
         return on ? String.format(java.util.Locale.ROOT, "cooperative: %d frame takes, %d waited (%.2f ms mean, %.2f max), %d main yields", frameTakes, frameWaits,
-                frameWaits == 0 ? 0 : frameWaitNs / 1e6 / frameWaits, maxFrameWaitNs / 1e6, yields) : "cooperative off";
+                frameWaits == 0 ? 0 : frameWaitNs / 1e6 / frameWaits, maxFrameWaitNs / 1e6, yields) + (TRACE ? "; waits past 5 ms where the main thread was: " + top() : "") : "cooperative off";
+    }
+
+    private static String top() {
+        return LONG.entrySet().stream().sorted((x, y) -> y.getValue() - x.getValue()).limit(8).map(e -> e.getValue() + "x " + e.getKey()).toList().toString();
     }
 }
