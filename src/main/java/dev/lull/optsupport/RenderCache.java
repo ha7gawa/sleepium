@@ -271,6 +271,13 @@ public final class RenderCache {
     private static final String[] TIME_ANIMATED_LIBS = {"software.bernie.geckolib.renderer.GeoRenderer"};
 
     private static boolean livingListenSaid;
+    /**
+     * -Dlab.rcache.listenerVanilla=true: no recording of living renderers at all while a mod listens to their render
+     * events. Off: they are recorded, and a recording that writes past the recorder (such a listener drawing into the
+     * frame's own buffers) sends its class the vanilla way at once - well-behaved listeners keep the cache (host
+     * client_entities with such a mod: 1995 fps cached, ~470 not).
+     */
+    static final boolean LISTENER_VANILLA = Boolean.getBoolean("lab.rcache.listenerVanilla");
 
     /** RenderLivingEvent.Pre / Post have a listener (a bus not ours: unknown - yes) */
     static boolean livingRenderListened() {
@@ -288,7 +295,7 @@ public final class RenderCache {
         // a mod listening to the living render events draws there - often into the frame's own buffers instead of the
         // ones it is given (health bars, name tags): recorded, those writes escaped the recording in its identity pose
         // (issue #11: stretched textures, a dark screen). Such renderers are drawn the vanilla way while a listener is there.
-        if (net.minecraft.client.renderer.entity.LivingEntityRenderer.class.isAssignableFrom(rendererClass) && livingRenderListened()) {
+        if (LISTENER_VANILLA && net.minecraft.client.renderer.entity.LivingEntityRenderer.class.isAssignableFrom(rendererClass) && livingRenderListened()) {
             cs[5] = 1;
             if (!livingListenSaid) {
                 livingListenSaid = true;
@@ -924,7 +931,9 @@ public final class RenderCache {
                 for (Class<?> i : k.getInterfaces()) writer |= i.getName().equals("net.caffeinemc.mods.sodium.api.vertex.buffer.VertexBufferWriter");
             if (!writer) return NO_VIEW;
             for (java.lang.reflect.Method m : c.getMethods())
-                if (m.getParameterCount() == 0 && m.getReturnType() == BufferBuilder.class && !java.lang.reflect.Modifier.isStatic(m.getModifiers()))
+                // (issue #11: only Embeddium's known view - getOriginalBufferBuilder, its own endBatch's unwrap; any other
+                // wrapper gets vertex calls through its own API: it may transform or batch what it is given)
+                if (m.getName().equals("getOriginalBufferBuilder") && m.getParameterCount() == 0 && m.getReturnType() == BufferBuilder.class && !java.lang.reflect.Modifier.isStatic(m.getModifiers()))
                     try {
                         return java.lang.invoke.MethodHandles.publicLookup().unreflect(m).asType(java.lang.invoke.MethodType.methodType(Object.class, VertexConsumer.class));
                     } catch (Throwable e) {

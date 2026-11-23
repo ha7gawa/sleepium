@@ -17,13 +17,28 @@ public final class EscapeProbe {
 
     public static long lines;
     static final boolean CACHED = Boolean.getBoolean("sleep.test.escape.cached");
+    static final boolean GOOD = Boolean.getBoolean("sleep.test.escape.good");
+
+    /** a small quad above the entity (the good listener's drawing: a format the cache records) */
+    static void quad(VertexConsumer b, PoseStack.Pose p, int light) {
+        float[][] v = {{-0.1f, 2.6f, 0f}, {0.1f, 2.6f, 0f}, {0.1f, 2.8f, 0f}, {-0.1f, 2.8f, 0f}};
+        for (float[] q : v)
+            b.vertex(p.pose(), q[0], q[1], q[2]).color(255, 0, 0, 255).uv(0f, 0f).overlayCoords(net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY).uv2(light).normal(p.normal(), 0f, 0f, 1f).endVertex();
+    }
     static net.minecraft.client.renderer.MultiBufferSource.BufferSource held;
 
     public static void register() {
         MinecraftForge.EVENT_BUS.addListener((RenderLivingEvent.Post<?, ?> e) -> {
             // (-Dsleep.test.escape.cached=true: the source kept from the first event on, as a mod holding it in a field)
             if (CACHED && held == null) held = Minecraft.getInstance().renderBuffers().bufferSource();
-            VertexConsumer buf = (CACHED ? held : Minecraft.getInstance().renderBuffers().bufferSource()).getBuffer(RenderType.lines());
+            // (.good=true: into the event's own source - a well-behaved listener)
+            VertexConsumer buf = GOOD ? e.getMultiBufferSource().getBuffer(RenderType.entityCutoutNoCull(net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS))
+                    : (CACHED ? held : Minecraft.getInstance().renderBuffers().bufferSource()).getBuffer(RenderType.lines());
+            if (GOOD) {
+                quad(buf, e.getPoseStack().last(), e.getPackedLight());
+                lines++;
+                return;
+            }
             PoseStack.Pose p = e.getPoseStack().last();
             buf.vertex(p.pose(), 0f, 2.6f, 0f).color(255, 0, 0, 255).normal(p.normal(), 0f, 1f, 0f).endVertex();
             buf.vertex(p.pose(), 0f, 3.2f, 0f).color(255, 0, 0, 255).normal(p.normal(), 0f, 1f, 0f).endVertex();
