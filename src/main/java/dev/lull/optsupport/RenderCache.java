@@ -270,12 +270,31 @@ public final class RenderCache {
      */
     private static final String[] TIME_ANIMATED_LIBS = {"software.bernie.geckolib.renderer.GeoRenderer"};
 
+    private static boolean livingListenSaid;
+
+    /** RenderLivingEvent.Pre / Post have a listener (a bus not ours: unknown - yes) */
+    static boolean livingRenderListened() {
+        var bus = net.minecraftforge.common.MinecraftForge.EVENT_BUS;
+        if (!(bus instanceof CompositeEventBus cb)) return true;
+        return cb.hasListeners(net.minecraftforge.client.event.RenderLivingEvent.Pre.class) || cb.hasListeners(net.minecraftforge.client.event.RenderLivingEvent.Post.class);
+    }
+
     private static long[] classCounters(Class<?> rendererClass) {
         long[] cs = new long[7];
         for (String lib : TIME_ANIMATED_LIBS) if (ParallelRender.implementsNamed(rendererClass, lib)) cs[5] = 1;
         // players: few, always moving, and mods replace their rendering inside PlayerRenderer (RenderPlayerEvent, e.g. a
         // GeckoLib model driven by a controller) where the probe would move that animation's state too
         if (net.minecraft.client.renderer.entity.player.PlayerRenderer.class.isAssignableFrom(rendererClass)) cs[5] = 1;
+        // a mod listening to the living render events draws there - often into the frame's own buffers instead of the
+        // ones it is given (health bars, name tags): recorded, those writes escaped the recording in its identity pose
+        // (issue #11: stretched textures, a dark screen). Such renderers are drawn the vanilla way while a listener is there.
+        if (net.minecraft.client.renderer.entity.LivingEntityRenderer.class.isAssignableFrom(rendererClass) && livingRenderListened()) {
+            cs[5] = 1;
+            if (!livingListenSaid) {
+                livingListenSaid = true;
+                System.out.println("[sleep/opt] render cache: a mod listens to the living render events - mobs drawn the vanilla way while it does");
+            }
+        }
         return cs;
     }
 
@@ -392,6 +411,30 @@ public final class RenderCache {
         return n;
     }
 
+    /** issue #11: recordings a renderer wrote past (into the frame's own buffers) - its class then goes the safe way */
+    public static long escapes, rollbackMisses;
+
+    /** issue #11 fallback: a renderer the cache could not record whole is drawn the vanilla way - said in the mod report and once in the chat */
+    private static boolean safeModeSaid;
+
+    private static void safeMode(Class<?> rendererClass) {
+        String mod = ModProfile.modOf(rendererClass);
+        String id = mod != null ? mod : "minecraft";
+        ModReport.mixin(id, "render cache: " + rendererClass.getSimpleName() + " draws past the buffers it is given - drawn the vanilla way (safe mode)");
+        if (safeModeSaid) return;   // (one chat line a session - the rest in the mod report and the log)
+        try {
+            var mc = Minecraft.getInstance();
+            if (mc.gui != null) {
+                mc.gui.getChat().addMessage(net.minecraft.network.chat.Component.translatable("sleepium.ui.rcache.safe", rendererClass.getSimpleName(), id)
+                        .withStyle(net.minecraft.ChatFormatting.GRAY));
+                safeModeSaid = true;
+            }
+        } catch (Throwable t) {
+            // (no chat yet)
+        }
+    }
+
+
     private static int record0(Draw d, float pt, Rec rec) {
         RECORDER.reset();
         long before = realVerticesTimed();
@@ -406,7 +449,12 @@ public final class RenderCache {
             recordDepth--;
         }
         if (realVerticesTimed() != before) {
-            RECORDER.finish(rec);
+            // it wrote past the recorder (issue #11): those vertices are in the recording's space - taken back out of
+            // the real buffers; the caller draws it the vanilla way and its class is not recorded again
+            // (not rolled back: taking a builder back while the source ended / began batches meanwhile left it
+            // inconsistent in tests - one frame of stray vertices, then its class is drawn the safe way)
+            escapes++;
+            RECORDER.reset();
             return BYPASS;
         }
         if (RECORDER.unsupported) {
@@ -548,8 +596,13 @@ public final class RenderCache {
             rec.skipUntil = tick + VOLATILE_TICKS;
             unsupported++;
             cs[3]++;
-            if (r == BYPASS) replay(rec, buffers, pose);   // its other part is already in the real source
-            else d.draw(pose, buffers, pt);
+            if (r == BYPASS && cs[5] == 0) {   // (issue #11: a renderer writing past the recorder - its class drawn the vanilla way from now on)
+                cs[5] = 1;
+                rec.skipUntil = Long.MAX_VALUE;
+                System.out.println("[sleep/opt] render cache: " + rendererClass.getSimpleName() + " writes past its recorder: drawn the vanilla way from now on");
+                safeMode(rendererClass);
+            }
+            d.draw(pose, buffers, pt);
             return;
         }
         records++;
@@ -956,7 +1009,7 @@ public final class RenderCache {
                 .forEach(e -> sb.append("render cache not resident: ").append(e.getValue()[0]).append("x ").append(e.getKey()).append('\n'));
         if (WHY_GENERIC) GENERIC_WHY.forEach((k, v) -> sb.append("render cache per-vertex way: ").append(v[0]).append("x ").append(k.length() > 200 ? k.substring(0, 200) : k).append('\n'));
         sb.append(String.format(java.util.Locale.ROOT,
-                "render cache: hits %d, records %d, animated %d, empty %d, unsupported %d, vanilla %d, deferred to next frames %d, replayed vertices %d%s%s", hits, records,
+                "render cache: hits %d, records %d, animated %d, empty %d, unsupported %d (escapes " + escapes + ", not taken back " + rollbackMisses + "), vanilla %d, deferred to next frames %d, replayed vertices %d%s%s", hits, records,
                 animated, empty, unsupported, vanilla, deferred, replayedVertices, VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "",
                 StateHash.LEARN ? ", same after a state change " + sameAfterChange + ", fields left out " + StateHash.learned : ""));
         if (TIME && tFrames > 0) {

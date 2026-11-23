@@ -374,6 +374,7 @@
     "BufferBuilderAccessor",
     "BufferSourceAccessor",
     "ParallelEntitiesMixin",
+    "ParallelEntitiesFrameBufferGuardMixin",
     "ParallelReloadMixin",
     "SkullSetShareMixin",
     "ItemRendererSetBewlrMixin",

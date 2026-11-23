@@ -113,6 +113,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.TrackParMixin");
         if (simple.startsWith("ServerParallelItems") && !simple.equals("ServerParallelItemsMixin"))   // parts of the server's parallel item runs (lab)
             on = Boolean.getBoolean("lab.opt.ServerParallelItemsMixin");
+        if (simple.equals("ParallelEntitiesFrameBufferGuardMixin"))   // (issue #11: a job writing into the frame's own buffers is refused)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntitiesMixin");
         if (simple.startsWith("ParallelEntityTicks") && !simple.equals("ParallelEntityTicksMixin"))   // parts of the parallel entity runs
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntityTicksMixin")
                     || simple.equals("ParallelEntityTicksMoveMixin") && Boolean.getBoolean("lab.opt.ServerParallelItemsMixin");   // (its deferral serves the server's runs too)

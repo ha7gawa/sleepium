@@ -37,6 +37,12 @@ public interface BufferBuilderAccessor {
     @Accessor("mode")
     VertexFormat.Mode sleep$mode();
 
+    @Accessor("renderedBufferCount")
+    int sleep$renderedCount();
+
+    @Accessor("renderedBufferPointer")
+    int sleep$renderedPointer();
+
     @Accessor("building")
     boolean sleep$building();
 
