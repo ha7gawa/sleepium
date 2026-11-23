@@ -51,13 +51,32 @@ public final class SpecTicks {
     private static Entity[] fastRest = new Entity[4096];
     static long fastGathered;
     private static int n;
-    private static final ThreadLocal<int[]> CUR = ThreadLocal.withInitial(() -> new int[] {-1});
+    /**
+     * this thread's SpecTicks state in one object - on our pool's threads a field of the thread (ThreadSlots.SPEC_LOCAL),
+     * else a ThreadLocal: five ThreadLocal lookups per hook were 6 % of the run workers' samples (host JFR 11-23)
+     */
+    static final class Local {
+        final int[] cur = {-1};
+        final int[] job = new int[1];
+        final Object[] lastChunks = new Object[8];
+        final long[] lastPos = {Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, 0, -1};
+    }
+
+    private static final ThreadLocal<Local> LOCAL = ThreadLocal.withInitial(Local::new);
+
+    static Local local() {
+        if (Thread.currentThread() instanceof dev.lab.runtime.LabRuntime.LabThread t) {
+            Object o = t.slots[ThreadSlots.SPEC_LOCAL];
+            if (o == null) t.slots[ThreadSlots.SPEC_LOCAL] = o = new Local();
+            return (Local) o;
+        }
+        return LOCAL.get();
+    }
     /** depth of SpecTicks' pool jobs on this thread: the chunk hook serves these threads only (not other work on other pools) */
-    private static final ThreadLocal<int[]> JOB = ThreadLocal.withInitial(() -> new int[1]);
 
     static java.util.function.IntConsumer job(java.util.function.IntConsumer body) {
         return i -> {
-            int[] d = JOB.get();
+            int[] d = local().job;
             d[0]++;
             try {
                 body.accept(i);
@@ -69,11 +88,11 @@ public final class SpecTicks {
 
     /** this thread runs a SpecTicks job of a run (a worker's chunk lookups go to the run's published chunk map) */
     public static boolean inJob() {
-        return running && JOB.get()[0] > 0;
+        return running && local().job[0] > 0;
     }
 
     static boolean jobThread() {
-        return JOB.get()[0] > 0;
+        return local().job[0] > 0;
     }
     /** per walk index: what its tick deferred, in its order - an EntityInLevelCallback (a storage move), a Removal, a Runnable (an effect) */
     private static Object[][] deferred = new Object[4096][];
@@ -187,7 +206,7 @@ public final class SpecTicks {
         undoParts += S0.parts();
         undoContents += S0.contents();
         if (described == null) System.out.println("[sleep/spec] undo test: a " + e.getType().toShortString() + "'s state: " + (described = dev.lull.optsupport.sleep.SpecUndo.describe(S0)));
-        int[] cur = CUR.get();
+        int[] cur = local().cur;
         testing = true;
         cur[0] = k;
         try {
@@ -241,7 +260,7 @@ public final class SpecTicks {
             deferredN = java.util.Arrays.copyOf(deferredN, len);
         }
         dev.lull.optsupport.sleep.SpecUndo.take(e, S0);
-        int[] cur = CUR.get();
+        int[] cur = local().cur;
         testing = true;
         cur[0] = k;
         TX0.begin(e, k, false);
@@ -802,7 +821,7 @@ public final class SpecTicks {
         Entity e = all[k];
         dev.lull.optsupport.sleep.SpecTx tx = txs[q];
         net.minecraft.world.phys.AABB bb = e.getBoundingBox();
-        int[] cur = CUR.get();
+        int[] cur = local().cur;
         cur[0] = k;
         tx.begin(e, k, false);
         tx.group = groupOf[q];
@@ -1014,7 +1033,7 @@ public final class SpecTicks {
         int k = b0 + i;
         Entity e = all[k];
         dev.lull.optsupport.sleep.SpecTx tx = txs[i];
-        int[] cur = CUR.get();
+        int[] cur = local().cur;
         for (int round = 0; ; round++) {
             reruns++;
             tx.begin(e, k, true);
@@ -1170,7 +1189,7 @@ public final class SpecTicks {
                     groups(b0, m);
                     fastGroups += nGroups;
                     pool.forRange(nGroups, 4, pool.workerCount(), job(g -> {
-                        int[] cur = CUR.get();
+                        int[] cur = local().cur;
                         for (int a = groupStart[g]; a < groupStart[g + 1]; a++) {
                             int k = b0 + order[a];
                             cur[0] = k;
@@ -1184,7 +1203,7 @@ public final class SpecTicks {
                 }
             } else pool.forRange(to - from, CHUNK, pool.workerCount(), job(q -> {
                 int k = from + q;
-                int[] cur = CUR.get();
+                int[] cur = local().cur;
                 cur[0] = k;
                 try {
                     consumer.accept(all[k]);
@@ -1240,7 +1259,7 @@ public final class SpecTicks {
 
     /** the walk index this thread is ticking in a run, or -1 */
     private static int current() {
-        return running || testing ? CUR.get()[0] : -1;
+        return running || testing ? local().cur[0] : -1;
     }
 
     // ------------------------------------------------------------------ hooks
@@ -1256,7 +1275,7 @@ public final class SpecTicks {
     /** Entity.setPosRaw's levelCallback.onMove() during a run: kept for after it (a repeat of the last one dropped) */
     /** a run tick on this thread (lab.fast's hooks) */
     public static boolean inRun() {
-        return running && CUR.get()[0] >= 0;
+        return running && local().cur[0] >= 0;
     }
 
     /** lab.fast: a move that stays in its section - vanilla's onMove does nothing for it (no deferral, no call) */
@@ -1300,8 +1319,6 @@ public final class SpecTicks {
 
     /** a worker's chunk lookup during a run: the published chunk map, no blocking, no shared lookup cache */
     /** per worker: its last chunks (position, chunk) - the server thread's lookup cache is its own */
-    private static final ThreadLocal<Object[]> LAST_CHUNKS = ThreadLocal.withInitial(() -> new Object[8]);
-    private static final ThreadLocal<long[]> LAST_POS = ThreadLocal.withInitial(() -> new long[] {Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, 0, -1});
     /** a new value per run: a worker's remembered chunks are good for one run only (chunks unload between ticks) */
     private static volatile long chunkEpoch;
 
@@ -1312,8 +1329,8 @@ public final class SpecTicks {
 
     public static LevelChunk chunk(ServerChunkCache cache, int x, int z, boolean require) {
         long key = ChunkPos.asLong(x, z);
-        long[] lp = LAST_POS.get();
-        Object[] lc0 = LAST_CHUNKS.get();
+        long[] lp = local().lastPos;
+        Object[] lc0 = local().lastChunks;
         long ep = chunkEpoch;
         if (lp[5] != ep) {
             lp[0] = lp[1] = lp[2] = lp[3] = Long.MIN_VALUE;
