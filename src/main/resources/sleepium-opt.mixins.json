@@ -26,6 +26,7 @@
     "PipeScoutPlayerMixin",
     "ServerParallelItemsMixin",
     "ServerParallelItemsPushMixin",
+    "ServerParallelItemsLevelRandomMixin",
     "ServerParallelItemsPickupMixin",
     "ServerParallelItemsMultiMapMixin",
     "ServerParallelItemsInBlockMixin",
