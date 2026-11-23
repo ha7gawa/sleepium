@@ -77,6 +77,18 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.4.0: Maximum speed (experimental, not exact)
+
+**Maximum speed** (Options -> Sleepium... -> threads, off by default) is the first part of a mode that gives up
+vanilla's exact order for speed: mobs - animals, monsters, villagers and other brain-driven mobs - are ticked on worker
+threads, and their moves, block changes, spawns, pushes and item pickups are applied at the end of each batch. The
+world stays plausible and farms keep working, but it is no longer tick-for-tick vanilla. **30,000 pigs on a 4-core
+Xeon: 315 -> 104 ms a tick; pig pens 90 -> 42; a mixed farm 56 -> 30 (87 -> 47 on an Intel N100).** More parts of this
+mode come in the next 1.4.x releases.
+
+The exact modes are unchanged; parallel entity ticks (exact) now also tick dropped items, and a possible crash with
+them on is fixed.
+
 ## New in 1.3.6: parallel entity ticks, decoupled frames with mods, a bigger HUD
 
 **Parallel entity ticks** (experimental, exact; Options -> Sleepium... -> threads, off by default): the server's animals

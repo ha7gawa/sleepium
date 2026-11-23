@@ -4,6 +4,29 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.0 - 2026-11-23
+
+**A note from the author:** for health reasons I'll be away for about a year - see the
+[README](https://github.com/ha7gawa/sleepium#a-note-from-the-author). More releases come out this week; if there's
+something you'd like to see in them, tell me in an issue or a comment in the next few days.
+
+- **New: Maximum speed (experimental, NOT exact).** A new option in Options -> Sleepium... (threads), off by default:
+  mobs - animals, monsters, villagers and other brain-driven mobs - are ticked on worker threads without vanilla's
+  strict order. Moves, block changes, spawns, pushes and item pickups made by those ticks are applied at the end of
+  each batch, in order. The world stays plausible and farms keep working, but it is no longer tick-for-tick vanilla:
+  pushes between crowded mobs and the order of events inside a tick differ. Server milliseconds per tick, engine
+  alone -> Maximum speed: 30,000 pigs on a 4-core Xeon 315 -> 104; pig pens (5,000) 90 -> 42; a mixed farm with
+  villagers, zombies and iron golems 56 -> 30 (87 -> 47 on an Intel N100). Measured with the thread count set to 7
+  on the 4-core machines (3 on the N100); with the default count the 30,000 pigs take 118. Checked for crashes and for
+  mobs lost or duplicated on 23 test scenes and in 8-12 minute runs of large scenes on both versions and on ARM.
+  Creepers still tick the usual way.
+- **Parallel entity ticks (exact)** now also tick dropped items in parallel (they ticked one by one with the option on).
+- **Fixed:** a possible crash with parallel entity ticks on (`NullPointerException` in `quietGameEvent`): mob steps
+  checked for game event listeners in a way that wrote to the chunk from several threads at once.
+
+The exact modes are unchanged: the exactness suite stays identical to vanilla by default and with parallel entity
+ticks on.
+
 ## 1.3.6 - 2026-11-23
 
 **A note from the author:** for health reasons I'll be away for about a year - see the
