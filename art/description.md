@@ -77,6 +77,30 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.3.6: parallel entity ticks, decoupled frames with mods, a bigger HUD
+
+**Parallel entity ticks** (experimental, exact; Options -> Sleepium... -> threads, off by default): the server's animals
+and monsters are ticked on worker threads. Every tick is checked and committed in vanilla's order, and a tick that met
+another is undone and run again in turn, so the world stays exactly vanilla's - checked with world hashes on four
+machines (Intel, AMD, ARM) on both versions. **30,000 pigs on a 4-core Xeon: 315 -> 192 ms a tick; 10,000 pigs on an
+Intel N100: 161 -> 116 ms.** Crowded pens and farms tick the usual way, because that's cheaper there. Not covered yet:
+villagers and other brain-driven mobs, modded entities.
+
+**Decoupled frames with other mods:** with other mods installed, a frame is drawn at a safe point of the tick instead
+of alongside it, so mods' render code never runs at the same time as their tick code, and frames still don't wait for
+a long tick to finish. Fixes `ConcurrentModificationException` crashes from mods' render handlers and `Image is not
+allocated` crashes from textures freed before the frame used them.
+
+**HUD:** a Size setting (50-200 %) and four new widgets for any corner - Position (coordinates, facing, biome), System
+(CPU and RAM), Network (ping, packets) and Clock (game and real time).
+
+**Faster and fixed:** mobs check whether they're stuck in a wall without scanning blocks when nothing solid is around
+them (**-4 %** server tick time with 30,000 mobs); the farm slowdown of 1.3.5 (+11 %) is down to about +3 %; a tick's
+packets leave in one batch at its end; a rare hang when creating a world is fixed.
+
+Still exactly vanilla's game: 23 test scenes give identical worlds with and without Sleepium on real servers with the
+released jars, both versions - by default and with parallel entity ticks on.
+
 ## New in 1.3.5: servers with many players, modded factories, less disk, faster generation
 
 **100 players on one server** (bots flying in a normal world, 1.21.1): every movement packet makes the server check
