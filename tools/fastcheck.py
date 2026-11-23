@@ -32,6 +32,7 @@ ap.add_argument('--ticks', type=int, default=2400)
 ap.add_argument('--flags', default='')
 ap.add_argument('--refresh', action='store_true')
 ap.add_argument('--no-mobsleep', action='store_true')
+ap.add_argument('--counts', action='store_true', help='not exact modes (lab.fast): the on run entity and block entity counts against the off run, no hash')
 a = ap.parse_args()
 scenes = a.scenes or SCENES
 OFF = os.path.join(ROOT, 'run', 'fastcheck-off.txt')
@@ -75,7 +76,10 @@ def run(copy, port, scene, mode, flags):
     out = r.stdout + r.stderr
     for l in out.splitlines():
         if l.startswith(mode) and 'region hash' in l:
-            return l.split('region hash')[1].split()[0]
+            h = l.split('region hash')[1].split()[0]
+            import re as _re
+            m = _re.search(r'block entities (\d+), entities (\d+)', l)
+            return h + (':%s:%s' % (m.group(1), m.group(2)) if m else ':?:?')
     return None
 
 
@@ -90,6 +94,8 @@ def worker(i, jobs):
             return
         t0 = time.time()
         off_key = key + ('|mobsleep' if MOBSLEEP in flags else '')
+        if off_key in offs and ':' not in offs[off_key]:   # (an older cache line: no counts)
+            del offs[off_key]
         if off_key not in offs:
             h = run(copy, port, scene, 'off', '')
             with lock:
@@ -98,7 +104,10 @@ def worker(i, jobs):
                     f.write('%s %s\n' % (off_key, h))
         on = run(copy, port, scene, 'on', flags)
         off = offs[off_key]
-        verdict = 'EXACT' if on and off and on == off else 'DIFFERENT' if on and off else 'FAILED'
+        if a.counts:
+            verdict = 'COUNTS SAME' if on and off and on.split(':')[1:] == off.split(':')[1:] else 'COUNTS DIFFER' if on and off else 'FAILED'
+        else:
+            verdict = 'EXACT' if on and off and on.split(':')[0] == off.split(':')[0] else 'DIFFERENT' if on and off else 'FAILED'
         line('%-10s %-10s off %s on %s  %s  [%.0f s, w%d]' % (scene, 'mob sleep' if MOBSLEEP in flags else '', off, on, verdict, time.time() - t0, i))
 
 
