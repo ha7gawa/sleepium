@@ -49,6 +49,8 @@ public final class SpecTicks {
     private static volatile boolean running;
     private static Thread main;
     private static Entity[] all = new Entity[4096];
+    private static Entity[] fastRest = new Entity[4096];
+    static long fastGathered;
     private static int n;
     private static final ThreadLocal<int[]> CUR = ThreadLocal.withInitial(() -> new int[] {-1});
     /** per walk index: what its tick deferred, in its order - an EntityInLevelCallback (a storage move), a Removal, a Runnable (an effect) */
@@ -81,6 +83,25 @@ public final class SpecTicks {
                 return;
             }
             int i = 0;
+            if (FAST && !serial) {
+                // lab.fast: the walk's eligible mobs gathered into one run (vanilla's order is not kept anyway): a dropped
+                // item, an arrow or a creeper between them no longer cuts the run short of MIN - mixed worlds tick in
+                // parallel too. The rest after it, in walk order (a stable partition through fastRest).
+                if (fastRest.length < n) fastRest = new Entity[Math.max(n, fastRest.length * 2)];
+                int e = 0, r = 0;
+                for (int k = 0; k < n; k++) {
+                    Entity x = all[k];
+                    if (eligible(x)) all[e++] = x;
+                    else fastRest[r++] = x;
+                }
+                System.arraycopy(fastRest, 0, all, e, r);
+                java.util.Arrays.fill(fastRest, 0, r, null);
+                if (e >= MIN) {
+                    run(0, e, consumer, lvl);
+                    fastGathered += e;
+                    i = e;
+                }
+            }
             // (dropped items: ServerParallelItems' windows inside this walk - lab.spec.items, default on)
             boolean items = ITEMS && !serial && ServerParallelItems.enabled && lvl.getProfiler() == net.minecraft.util.profiling.InactiveProfiler.INSTANCE;
             if (items) ServerParallelItems.walkFrom(all, n);
@@ -290,7 +311,7 @@ public final class SpecTicks {
         return true;
     }
 
-    static long fastDeferredWorld, fastGroups, fastTargets;
+    static long fastDeferredWorld, fastGroups, fastTargets, fastMaxGroup, fastBigSum, fastBlockSum, fastBlocks;
 
     /**
      * a mob driven by goals only: its brain holds no memories (a brain's behaviors, sensors and memory values are objects
@@ -328,9 +349,18 @@ public final class SpecTicks {
      * interest (villagers, iron golems, bees) and creepers (explosions) tick the usual way.
      */
     public static final boolean FAST = Boolean.getBoolean("lab.fast");
+    /** lab.fast.aiLod=N (prototype): mobs far from players pick goals / sense every N-th tick (ServerParallelItemsAiLodMixin) */
+    public static final int AI_LOD = FAST ? Integer.getInteger("lab.fast.aiLod", 0) : 0;
+    public static volatile long aiLodSkips;
+    /** lab.fast: Sleepium's own random streams (FastRandom) for server entities and per thread for the level (-Dlab.fast.random=false: vanilla's, the level's behind a lock) */
+    public static final boolean FAST_RANDOM = FAST && !"false".equals(System.getProperty("lab.fast.random"));
+    /** lab.fast.entityRandom (off): server entities' own random as FastRandom too - no CAS per draw, but mob sleep cannot look ahead in it (it predicts vanilla's LCG) and refuses those mobs */
+    public static final boolean FAST_ENTITY_RANDOM = FAST_RANDOM && Boolean.getBoolean("lab.fast.entityRandom");
     /** -Dlab.fast.contact=true: lab.fast keeps touching mobs on one thread too (groups by contact, as exact mode does) */
     static final boolean FAST_CONTACT = Boolean.getBoolean("lab.fast.contact");
     public static final boolean EXACT = !Boolean.getBoolean("lab.spec.unsafe") && !FAST;
+    /** the write barrier is woven in (lab.opt.WriteBarrier): WB may be touched - without it WB's class cannot load (no watch word); lab.fast runs without it */
+    public static final boolean WB_ON = ON && Boolean.getBoolean("lab.opt.WriteBarrier");
     static final int BLOCK = Math.min(4096, Integer.getInteger("lab.spec.block", 2048));   // (the grid packs a slot in 12 bits)
     private static dev.lull.optsupport.sleep.SpecTx[] txs = new dev.lull.optsupport.sleep.SpecTx[0];
     private static double[] sweep = new double[0];   // per slot: the swept box (6)
@@ -455,6 +485,14 @@ public final class SpecTicks {
         }
         groupStart[g] = pos;
         nGroups = g;
+        if (FAST) {   // (stats: the largest group of a block - one thread ticks it all)
+            int big = 0;
+            for (int i = 0; i < g; i++) big = Math.max(big, groupStart[i + 1] - groupStart[i]);
+            fastMaxGroup = Math.max(fastMaxGroup, big);
+            fastBigSum += big;
+            fastBlockSum += m;
+            fastBlocks++;
+        }
         int[] fill = count;
         for (int i = 0; i < g; i++) fill[i] = groupStart[i];   // (count no longer needed: next free place per group)
         for (int i = 0; i < m; i++) {
@@ -566,7 +604,7 @@ public final class SpecTicks {
     private static void serialBlock(int b0, int b1, Consumer<Entity> consumer) {
         serialBlocks++;
         var ctx = dev.lull.optsupport.sleep.SpecTx.current();
-        if (dev.lull.optsupport.sleep.WB.TX || ctx != null && ctx.active) {
+        if (WB_ON && dev.lull.optsupport.sleep.WB.TX || ctx != null && ctx.active) {
             if (plainWithTx++ < 3) System.out.println("[sleep/spec] a plain block with transactions on: TX " + dev.lull.optsupport.sleep.WB.TX + ", running " + running
                     + ", the thread's transaction " + (ctx == null ? "none" : "active " + ctx.active + " serial " + ctx.serial + " index " + ctx.index) + ", " + Thread.currentThread().getName());
         }
@@ -1360,6 +1398,11 @@ public final class SpecTicks {
         if (dw > 0) System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] last %d parallel walks: walk %.2f ms, of it the runs' parallel phase %.2f ms, their commit %.2f ms (%d runs)",
                 dw, (nsParallel - lastPar) / 1e6 / dw, (nsPhase - lastPhase) / 1e6 / dw, (nsCommit - lastCommit) / 1e6 / dw, runs - lastRuns));
         lastPhase = nsPhase; lastCommit = nsCommit; lastPar = nsParallel; lastWalksPar = walksParallel; lastRuns = runs;
+        if (FAST && fastBlocks > 0) {
+            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d, gathered %d",
+                    fastBlocks, fastGroups, fastGroups / (double) fastBlocks, fastBlockSum / (double) fastBlocks, fastBigSum / (double) fastBlocks, fastMaxGroup, fastTargets, fastDeferredWorld, fastGathered));
+            fastMaxGroup = 0;
+        }
         System.out.println(String.format(java.util.Locale.ROOT,
                 "[sleep/spec] walks %d: runs %d, entities in runs %d (%.0f a walk); serial walk %.3f ms (%d), parallel walk %.3f ms (%d); deferred moves %d, removes %d, effects %d; path overlay entries %d, chunk misses %d; workers %d",
                 walks, runs, inRuns, walks == 0 ? 0 : inRuns / (double) walks, walksSerial == 0 ? 0 : nsSerial / 1e6 / walksSerial, walksSerial,

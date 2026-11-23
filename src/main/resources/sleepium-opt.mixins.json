@@ -28,6 +28,8 @@
     "ServerParallelItemsChunkListenersAccessor",
     "ServerParallelItemsPushMixin",
     "ServerParallelItemsLevelRandomMixin",
+    "ServerParallelItemsEntityRandomMixin",
+    "ServerParallelItemsAiLodMixin",
     "ServerParallelItemsPickupMixin",
     "ServerParallelItemsMultiMapMixin",
     "ServerParallelItemsInBlockMixin",
