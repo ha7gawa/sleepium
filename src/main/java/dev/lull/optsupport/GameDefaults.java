@@ -74,14 +74,19 @@ public final class GameDefaults {
      */
     private static void fastPreset() {
         int cpus = Runtime.getRuntime().availableProcessors();
-        boolean client;   // (a game with its own client: the render thread keeps a core too)
-        try {
-            Class.forName("net.minecraft.client.Minecraft", false, GameDefaults.class.getClassLoader());
-            client = true;
-        } catch (Throwable t) {
-            client = false;
-        }
-        String[] set = {"lab.sreactor.threads=" + Math.max(1, cpus - (client ? 2 : 1))};
+        // (a game with its own client: the render thread keeps a core too) - asked as a resource, never loaded: loading
+        // Minecraft here (even uninitialised) loads its superclasses before the mixins are applied (1.4.1: a client with
+        // Maximum speed on stopped at start, MixinTargetAlreadyLoadedException on BlockableEventLoop)
+        boolean client = GameDefaults.class.getClassLoader().getResource("net/minecraft/client/Minecraft.class") != null;
+        java.util.List<String> want = new java.util.ArrayList<>(java.util.List.of("lab.sreactor.threads=" + Math.max(1, cpus - (client ? 2 : 1))));
+        // the client's built non-exact parts (1.3.x research): the face buckets (N100 terrain GPU 6.1 -> 3.6 ms; ~270 leaf
+        // pixels of equal depth in another order), items' translucent layers in any order, living client entities ticked on
+        // the workers, tick-rate poses (tolerance 0.1 block), the render cache's replays on the workers;
+        // -Dlab.fast.client=false keeps the client as it was
+        if (!"false".equals(System.getProperty("lab.fast.client")))
+            want.addAll(java.util.List.of("lab.chunkmd.faceCull=true", "lab.partbatch.itemsAnyOrder=true", "lab.pentities.living=true",
+                    "lab.prender.tickPoses=true", "lab.prender.tickPoses.tolerance=0.1", "lab.prender.cachedOnWorkers=true"));
+        String[] set = want.toArray(new String[0]);
         java.util.List<String> applied = new java.util.ArrayList<>();
         for (String kv : set) {
             int eq = kv.indexOf('=');
