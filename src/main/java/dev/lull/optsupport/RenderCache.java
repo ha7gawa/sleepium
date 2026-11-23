@@ -247,6 +247,13 @@ public final class RenderCache {
     private static final String[] TIME_ANIMATED_LIBS = {"software.bernie.geckolib.renderer.GeoRenderer"};
 
     private static boolean livingListenSaid;
+    /**
+     * -Dlab.rcache.listenerVanilla=true: no recording of living renderers at all while a mod listens to their render
+     * events. Off: they are recorded, and a recording that writes past the recorder (such a listener drawing into the
+     * frame's own buffers) sends its class the vanilla way at once - well-behaved listeners keep the cache (host
+     * client_entities with such a mod: 1995 fps cached, ~470 not).
+     */
+    static final boolean LISTENER_VANILLA = Boolean.getBoolean("lab.rcache.listenerVanilla");
 
     /** RenderLivingEvent.Pre / Post have a listener (a bus not ours: unknown - yes) */
     static boolean livingRenderListened() {
@@ -264,7 +271,7 @@ public final class RenderCache {
         // a mod listening to the living render events draws there - often into the frame's own buffers instead of the
         // ones it is given (health bars, name tags): recorded, those writes escaped the recording in its identity pose
         // (issue #11: stretched textures, a dark screen). Such renderers are drawn the vanilla way while a listener is there.
-        if (net.minecraft.client.renderer.entity.LivingEntityRenderer.class.isAssignableFrom(rendererClass) && livingRenderListened()) {
+        if (LISTENER_VANILLA && net.minecraft.client.renderer.entity.LivingEntityRenderer.class.isAssignableFrom(rendererClass) && livingRenderListened()) {
             cs[5] = 1;
             if (!livingListenSaid) {
                 livingListenSaid = true;
