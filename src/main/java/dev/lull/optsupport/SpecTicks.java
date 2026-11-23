@@ -52,13 +52,42 @@ public final class SpecTicks {
     private static Entity[] fastRest = new Entity[4096];
     static long fastGathered;
     private static int n;
-    private static final ThreadLocal<int[]> CUR = ThreadLocal.withInitial(() -> new int[] {-1});
+    /**
+     * this thread's SpecTicks state in one object - on our pool's threads a field of the thread (ThreadSlots.SPEC_LOCAL),
+     * else a ThreadLocal: five ThreadLocal lookups per hook were 6 % of the run workers' samples (host JFR 11-23)
+     */
+    static final class Local {
+        final int[] cur = {-1};
+        final int[] job = new int[1];
+        final Object[] lastChunks = new Object[8];
+        final long[] lastPos = {Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, 0, -1};
+        Long2ObjectOpenHashMap<PathType> overlay;
+
+        Long2ObjectOpenHashMap<PathType> overlay() {
+            Long2ObjectOpenHashMap<PathType> m = overlay;
+            if (m == null) {
+                overlay = m = new Long2ObjectOpenHashMap<>();
+                OVERLAYS.add(m);
+            }
+            return m;
+        }
+    }
+
+    private static final ThreadLocal<Local> LOCAL = ThreadLocal.withInitial(Local::new);
+
+    static Local local() {
+        if (Thread.currentThread() instanceof dev.lab.runtime.LabRuntime.LabThread t) {
+            Object o = t.slots[ThreadSlots.SPEC_LOCAL];
+            if (o == null) t.slots[ThreadSlots.SPEC_LOCAL] = o = new Local();
+            return (Local) o;
+        }
+        return LOCAL.get();
+    }
     /** depth of SpecTicks' pool jobs on this thread: the chunk hook serves these threads only (not other work on other pools) */
-    private static final ThreadLocal<int[]> JOB = ThreadLocal.withInitial(() -> new int[1]);
 
     static java.util.function.IntConsumer job(java.util.function.IntConsumer body) {
         return i -> {
-            int[] d = JOB.get();
+            int[] d = local().job;
             d[0]++;
             try {
                 body.accept(i);
@@ -70,11 +99,11 @@ public final class SpecTicks {
 
     /** this thread runs a SpecTicks job of a run (a worker's chunk lookups go to the run's published chunk map) */
     public static boolean inJob() {
-        return running && JOB.get()[0] > 0;
+        return running && local().job[0] > 0;
     }
 
     static boolean jobThread() {
-        return JOB.get()[0] > 0;
+        return local().job[0] > 0;
     }
     /** per walk index: what its tick deferred, in its order - an EntityInLevelCallback (a storage move), a Removal, a Runnable (an effect) */
     private static Object[][] deferred = new Object[4096][];
@@ -186,7 +215,7 @@ public final class SpecTicks {
         undoParts += S0.parts();
         undoContents += S0.contents();
         if (described == null) System.out.println("[sleep/spec] undo test: a " + e.getType().toShortString() + "'s state: " + (described = dev.lull.optsupport.sleep.SpecUndo.describe(S0)));
-        int[] cur = CUR.get();
+        int[] cur = local().cur;
         testing = true;
         cur[0] = k;
         try {
@@ -240,7 +269,7 @@ public final class SpecTicks {
             deferredN = java.util.Arrays.copyOf(deferredN, len);
         }
         dev.lull.optsupport.sleep.SpecUndo.take(e, S0);
-        int[] cur = CUR.get();
+        int[] cur = local().cur;
         testing = true;
         cur[0] = k;
         TX0.begin(e, k, false);
@@ -316,10 +345,14 @@ public final class SpecTicks {
 
     /** lab.fast: not the mobs whose ticks reach shared state with no guard yet (points of interest, explosions); entity sleep's own ticks stay on the server thread */
     static boolean fastOk(Entity e) {
-        return !(e instanceof net.minecraft.world.entity.monster.Creeper) && dev.lull.optsupport.sleep.EntitySleep.plainNext(e);
+        return dev.lull.optsupport.sleep.EntitySleep.plainNext(e);   // (creepers too: their explosion waits for the run's end - ServerParallelItemsCreeperMixin)
     }
 
     /** lab.fast: the mobs that use points of interest (one shared, unguarded manager): all of a block on one thread */
+    @SuppressWarnings("unchecked")
+    private static final net.minecraft.world.entity.ai.memory.MemoryModuleType<? extends Entity>[] PARTNERS = new net.minecraft.world.entity.ai.memory.MemoryModuleType[] {
+            net.minecraft.world.entity.ai.memory.MemoryModuleType.INTERACTION_TARGET, net.minecraft.world.entity.ai.memory.MemoryModuleType.BREED_TARGET};
+
     static boolean usesPoi(Entity e) {
         return e instanceof net.minecraft.world.entity.npc.AbstractVillager || e instanceof net.minecraft.world.entity.animal.IronGolem
                 || e instanceof net.minecraft.world.entity.animal.Bee;
@@ -373,6 +406,11 @@ public final class SpecTicks {
      * interest (villagers, iron golems, bees) and creepers (explosions) tick the usual way.
      */
     public static final boolean FAST = Boolean.getBoolean("lab.fast");
+    /** lab.fast: the POI manager under one lock during runs (ServerParallelItemsPoiLockMixin) - villagers / golems not one group */
+    public static final boolean POI_LOCK = FAST && !"false".equals(System.getProperty("lab.fast.poiLock"));
+    public static final Object POI = new Object();
+    /** measurement only (unsafe: the POI manager is not thread-safe): -Dlab.fast.noPoiGroup=true */
+    static final boolean NO_POI_GROUP = Boolean.getBoolean("lab.fast.noPoiGroup");
     /** lab.fast.aiLod=N (prototype): mobs far from players pick goals / sense every N-th tick (ServerParallelItemsAiLodMixin) */
     public static final int AI_LOD = FAST ? Integer.getInteger("lab.fast.aiLod", 0) : 0;
     public static volatile long aiLodSkips;
@@ -383,6 +421,8 @@ public final class SpecTicks {
     /** -Dlab.fast.contact=true: lab.fast keeps touching mobs on one thread too (groups by contact, as exact mode does) */
     static final boolean FAST_CONTACT = Boolean.getBoolean("lab.fast.contact");
     public static final boolean EXACT = !Boolean.getBoolean("lab.spec.unsafe") && !FAST;
+    /** the shared path type cache's index mask: vanilla's 4096 entries, lab.fast 65536 (ServerParallelItemsPathMixin) */
+    public static final int PATH_MASK = FAST && Boolean.getBoolean("lab.fast.bigPathCache") ? 65535 : 4095;   // (opt-in: host pigs30k 34.2 / 36.0 vs 33.5 / 34.0 ms - no gain)
     /** the write barrier is woven in (lab.opt.WriteBarrier): WB may be touched - without it WB's class cannot load (no watch word); lab.fast runs without it */
     public static final boolean WB_ON = ON && Boolean.getBoolean("lab.opt.WriteBarrier");
     static final int BLOCK = Math.min(4096, Integer.getInteger("lab.spec.block", 2048));   // (the grid packs a slot in 12 bits)
@@ -466,10 +506,10 @@ public final class SpecTicks {
                 }
             }
         }
-        if (FAST) {   // (the users of points of interest: one thread for all of them)
+        if (FAST && !NO_POI_GROUP) {   // (the users of points of interest: one thread for all of them)
             int p0 = -1;
             for (int i = 0; i < m; i++)
-                if (usesPoi(all[b0 + i])) {
+                if (POI_LOCK ? all[b0 + i] instanceof net.minecraft.world.entity.animal.Bee : usesPoi(all[b0 + i])) {   // (with the POI lock: bees only - their hives' occupant lists)
                     if (p0 < 0) p0 = i;
                     else {
                         int ra = find(i), rb = find(p0);
@@ -477,6 +517,24 @@ public final class SpecTicks {
                     }
                 }
         }
+        if (POI_LOCK)   // (brain partners write into each other - gossip, trades, breeding: both on one thread)
+            for (int i = 0; i < m; i++)
+                if (all[b0 + i] instanceof net.minecraft.world.entity.LivingEntity le && le.getBrain() != null) {
+                    var br = le.getBrain();
+                    for (var mt : PARTNERS) {
+                        if (!br.hasMemoryValue(mt)) continue;
+                        Object o = br.getMemory(mt).orElse(null);
+                        if (!(o instanceof Entity t)) continue;
+                        int j = ((SpecSlot) t).sleep$specSlot(ep);
+                        if (j >= 0 && j < m && all[b0 + j] == t) {
+                            int ra = find(i), rb = find(j);
+                            if (ra != rb) {
+                                parent[Math.max(ra, rb)] = Math.min(ra, rb);
+                                fastTargets++;
+                            }
+                        }
+                    }
+                }
         if (FAST)   // (a mob hits / pushes what it targets: both on one thread)
             for (int i = 0; i < m; i++)
                 if (all[b0 + i] instanceof net.minecraft.world.entity.Mob mob && mob.getTarget() != null) {
@@ -805,7 +863,7 @@ public final class SpecTicks {
         Entity e = all[k];
         dev.lull.optsupport.sleep.SpecTx tx = txs[q];
         net.minecraft.world.phys.AABB bb = e.getBoundingBox();
-        int[] cur = CUR.get();
+        int[] cur = local().cur;
         cur[0] = k;
         tx.begin(e, k, false);
         tx.group = groupOf[q];
@@ -1017,7 +1075,7 @@ public final class SpecTicks {
         int k = b0 + i;
         Entity e = all[k];
         dev.lull.optsupport.sleep.SpecTx tx = txs[i];
-        int[] cur = CUR.get();
+        int[] cur = local().cur;
         for (int round = 0; ; round++) {
             reruns++;
             tx.begin(e, k, true);
@@ -1070,7 +1128,7 @@ public final class SpecTicks {
         PathType[] types = acc.sleep$pathTypes();
         for (int a = 0; a < tx.np; a++) {
             long key = tx.pathKey[a];
-            int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & 4095;
+            int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & PATH_MASK;
             PathType live = positions[idx] == key ? types[idx] : null;
             if (live != null) {
                 if (live != tx.pathVal[a]) return false;   // (vanilla would have used this one)
@@ -1190,7 +1248,7 @@ public final class SpecTicks {
                     groups(b0, m);
                     fastGroups += nGroups;
                     pool.forRange(nGroups, 4, pool.workerCount(), job(g -> {
-                        int[] cur = CUR.get();
+                        int[] cur = local().cur;
                         for (int a = groupStart[g]; a < groupStart[g + 1]; a++) {
                             int k = b0 + order[a];
                             cur[0] = k;
@@ -1204,7 +1262,7 @@ public final class SpecTicks {
                 }
             } else pool.forRange(to - from, CHUNK, pool.workerCount(), job(q -> {
                 int k = from + q;
-                int[] cur = CUR.get();
+                int[] cur = local().cur;
                 cur[0] = k;
                 try {
                     consumer.accept(all[k]);
@@ -1260,7 +1318,7 @@ public final class SpecTicks {
 
     /** the walk index this thread is ticking in a run, or -1 */
     private static int current() {
-        return running || testing ? CUR.get()[0] : -1;
+        return running || testing ? local().cur[0] : -1;
     }
 
     // ------------------------------------------------------------------ hooks
@@ -1276,7 +1334,7 @@ public final class SpecTicks {
     /** Entity.setPosRaw's levelCallback.onMove() during a run: kept for after it (a repeat of the last one dropped) */
     /** a run tick on this thread (lab.fast's hooks) */
     public static boolean inRun() {
-        return running && CUR.get()[0] >= 0;
+        return running && local().cur[0] >= 0;
     }
 
     /** lab.fast: a move that stays in its section - vanilla's onMove does nothing for it (no deferral, no call) */
@@ -1320,8 +1378,6 @@ public final class SpecTicks {
 
     /** a worker's chunk lookup during a run: the published chunk map, no blocking, no shared lookup cache */
     /** per worker: its last chunks (position, chunk) - the server thread's lookup cache is its own */
-    private static final ThreadLocal<Object[]> LAST_CHUNKS = ThreadLocal.withInitial(() -> new Object[8]);
-    private static final ThreadLocal<long[]> LAST_POS = ThreadLocal.withInitial(() -> new long[] {Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, 0, -1});
     /** a new value per run: a worker's remembered chunks are good for one run only (chunks unload between ticks) */
     private static volatile long chunkEpoch;
 
@@ -1332,8 +1388,8 @@ public final class SpecTicks {
 
     public static LevelChunk chunk(ServerChunkCache cache, int x, int z, boolean require) {
         long key = ChunkPos.asLong(x, z);
-        long[] lp = LAST_POS.get();
-        Object[] lc0 = LAST_CHUNKS.get();
+        long[] lp = local().lastPos;
+        Object[] lc0 = local().lastChunks;
         long ep = chunkEpoch;
         if (lp[5] != ep) {
             lp[0] = lp[1] = lp[2] = lp[3] = Long.MIN_VALUE;
@@ -1363,11 +1419,6 @@ public final class SpecTicks {
 
     private static net.minecraft.world.level.pathfinder.PathTypeCache pathCache;
     private static final List<Long2ObjectOpenHashMap<PathType>> OVERLAYS = new java.util.concurrent.CopyOnWriteArrayList<>();
-    private static final ThreadLocal<Long2ObjectOpenHashMap<PathType>> OVERLAY = ThreadLocal.withInitial(() -> {
-        Long2ObjectOpenHashMap<PathType> m = new Long2ObjectOpenHashMap<>();
-        OVERLAYS.add(m);
-        return m;
-    });
 
     /** PathTypeCache.getOrCompute during a run (any thread): this thread's computes, else the shared entry, else computed */
     public static PathType pathType(long[] positions, PathType[] types, BlockGetter level, BlockPos pos) {
@@ -1375,7 +1426,7 @@ public final class SpecTicks {
             long key = pos.asLong();
             dev.lull.optsupport.sleep.SpecTx tx = dev.lull.optsupport.sleep.SpecTx.current();
             if (tx == null || !tx.active) return dev.lull.opt.ServerParallelItemsWalkInvoker.sleep$pathTypeFromState(level, pos);   // (not a run tick)
-            int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & 4095;
+            int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & PATH_MASK;
             Object own = tx.ownSlot(idx, key);
             PathType t;
             if (own instanceof PathType ot) {   // (its own compute, still in the slot: vanilla's hit)
@@ -1392,10 +1443,10 @@ public final class SpecTicks {
             return t;
         }
         long key = pos.asLong();
-        Long2ObjectOpenHashMap<PathType> ov = OVERLAY.get();
+        Long2ObjectOpenHashMap<PathType> ov = local().overlay();
         PathType t = ov.get(key);
         if (t != null) return t;
-        int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & 4095;
+        int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & PATH_MASK;
         if (positions[idx] == key && (t = types[idx]) != null) return t;
         t = dev.lull.opt.ServerParallelItemsWalkInvoker.sleep$pathTypeFromState(level, pos);
         ov.put(key, t);
@@ -1411,7 +1462,7 @@ public final class SpecTicks {
         for (Long2ObjectOpenHashMap<PathType> ov : OVERLAYS) {
             for (Long2ObjectMap.Entry<PathType> en : ov.long2ObjectEntrySet()) {
                 long key = en.getLongKey();
-                int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & 4095;
+                int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & PATH_MASK;
                 positions[idx] = key;
                 types[idx] = en.getValue();
                 pathOverlay++;

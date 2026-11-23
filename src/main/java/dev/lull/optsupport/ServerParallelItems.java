@@ -332,6 +332,14 @@ public final class ServerParallelItems {
         } finally {
             running = false;
         }
+        // lab.fast: the window's moves out of a section, now (the server thread, workers idle)
+        if (!FAST_MOVES.isEmpty()) {
+            for (EntityInLevelCallback m : FAST_MOVES) {
+                deferredMoves++;
+                m.onMove();
+            }
+            FAST_MOVES.clear();
+        }
         // deferred work in the run's order: each item's wake events, then its removal from the storage
         for (int k = from; k < end; k++) {
             List<Runnable> d = deferred[k];
@@ -354,6 +362,9 @@ public final class ServerParallelItems {
     }
 
     // ------------------------------------------------------------------ hooks
+
+    /** lab.fast: items' storage moves out of their section during a window (applied after it) */
+    private static final java.util.ArrayList<EntityInLevelCallback> FAST_MOVES = new java.util.ArrayList<>();
 
     public static boolean inRun() {
         return running;
@@ -389,6 +400,14 @@ public final class ServerParallelItems {
 
     public static boolean deferMove(Entity e, EntityInLevelCallback cb) {
         if (!running) return false;
+        if (SpecTicks.FAST) {   // (lab.fast: no trap - a move in its section changes nothing, one out of it waits for the window's end)
+            if (cb instanceof dev.lull.opt.ServerParallelItemsSectionKeyAccessor a && a.sleep$sectionKey() == net.minecraft.core.SectionPos.asLong(e.blockPosition()))
+                return true;
+            synchronized (FAST_MOVES) {
+                FAST_MOVES.add(cb);
+            }
+            return true;
+        }
         // a run item cannot leave its section (its hull is inside one): a move here means the bound was wrong
         trap("storage move " + e.getClass().getSimpleName());
         return false;
