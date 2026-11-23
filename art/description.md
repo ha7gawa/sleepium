@@ -77,6 +77,13 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.4.4: villagers on all threads
+
+**Maximum speed** now ticks villagers and iron golems on every worker thread - the game's points-of-interest
+lookups (beds, job sites) run one at a time under a lock while the mobs around them tick in parallel. **A farm with
+villagers, zombies and iron golems on a 4-core Xeon: 29 -> 22 ms a tick.** Creepers tick in parallel too, and
+parallel dropped items no longer switch themselves off in long sessions.
+
 ## New in 1.4.3: fixes for the experimental modes, Maximum speed with mods and crowds
 
 **Fixed:** a server with parallel entity ticks or Maximum speed on could stop while generating new chunks (since

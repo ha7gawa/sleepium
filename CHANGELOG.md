@@ -4,6 +4,20 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.4 - 2026-11-24
+
+- **Maximum speed: villagers and iron golems tick on all threads.** They used to share one thread per batch, because
+  the game's points-of-interest manager (beds, job sites) is not thread-safe; now its lookups run one at a time under a
+  lock while the mobs around them tick in parallel. A farm with villagers, zombies and iron golems on a 4-core Xeon:
+  29 -> 22 ms a tick.
+- **Maximum speed: creepers tick in parallel** too; their explosion happens at the end of the batch.
+- **Maximum speed: parallel dropped items no longer switch themselves off** when an item crossed into another chunk
+  section in a long session.
+- **Less overhead** for the worker threads of parallel ticks (their per-thread state is a field of the thread).
+
+The exact modes are unchanged: the exactness suite stays identical to vanilla by default and with parallel entity
+ticks on.
+
 ## 1.4.3 - 2026-11-23
 
 - **Fixed: a server with parallel entity ticks or Maximum speed could stop while new chunks generated** (since 1.3.6,
