@@ -20,13 +20,15 @@ import net.neoforged.neoforge.common.NeoForge;
 public final class CompatProbe {
     private CompatProbe() {}
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger("compatprobe");
+
     private static final List<int[]> EFFECTS = new ArrayList<>();
     private static long ticks, walks, walked, images, imageUses;
 
     public static void register() {
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post e) -> tick());
         NeoForge.EVENT_BUS.addListener((RenderLevelStageEvent e) -> render(e));
-        System.out.println("[compatprobe] registered: a render handler walking a list the tick rebuilds; queued image uses with an immediate close");
+        LOG.info("[compatprobe] registered: a render handler walking a list the tick rebuilds; queued image uses with an immediate close");
     }
 
     private static void tick() {
@@ -47,7 +49,7 @@ public final class CompatProbe {
             img.close();
         }
         if (ticks % 200 == 0)
-            System.out.println("[compatprobe] ticks " + ticks + ", render walks " + walks + " (" + walked + " entries), images " + images + ", image uses " + imageUses);
+            LOG.info("[compatprobe] ticks " + ticks + ", render walks " + walks + " (" + walked + " entries), images " + images + ", image uses " + imageUses);
     }
 
     private static void use(NativeImage img) {

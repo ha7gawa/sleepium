@@ -19,7 +19,7 @@ public final class FrameCoop {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger("sleep");
     private static final String MODE = System.getProperty("lab.frameThread.coop", "auto");
-    private static final java.util.Set<String> OWN = java.util.Set.of("minecraft", "neoforge", "sleepium");
+    private static final java.util.Set<String> OWN = java.util.Set.of("minecraft", "neoforge", "sleepium", "mixinextras");
 
     /** decided once, at the frame thread's start */
     static volatile boolean on;
