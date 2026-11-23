@@ -271,9 +271,13 @@ public final class SpecTicks {
 
     /** lab.fast: not the mobs whose ticks reach shared state with no guard yet (points of interest, explosions); entity sleep's own ticks stay on the server thread */
     static boolean fastOk(Entity e) {
-        return !(e instanceof net.minecraft.world.entity.npc.AbstractVillager || e instanceof net.minecraft.world.entity.animal.IronGolem
-                || e instanceof net.minecraft.world.entity.animal.Bee || e instanceof net.minecraft.world.entity.monster.Creeper)
-                && dev.lull.optsupport.sleep.EntitySleep.plainNext(e);
+        return !(e instanceof net.minecraft.world.entity.monster.Creeper) && dev.lull.optsupport.sleep.EntitySleep.plainNext(e);
+    }
+
+    /** lab.fast: the mobs that use points of interest (one shared, unguarded manager): all of a block on one thread */
+    static boolean usesPoi(Entity e) {
+        return e instanceof net.minecraft.world.entity.npc.AbstractVillager || e instanceof net.minecraft.world.entity.animal.IronGolem
+                || e instanceof net.minecraft.world.entity.animal.Bee;
     }
 
     /** lab.fast: a run tick's world write / spawn kept for the run's end (true), or not in a run (false: do it now) */
@@ -324,6 +328,8 @@ public final class SpecTicks {
      * interest (villagers, iron golems, bees) and creepers (explosions) tick the usual way.
      */
     public static final boolean FAST = Boolean.getBoolean("lab.fast");
+    /** -Dlab.fast.contact=true: lab.fast keeps touching mobs on one thread too (groups by contact, as exact mode does) */
+    static final boolean FAST_CONTACT = Boolean.getBoolean("lab.fast.contact");
     public static final boolean EXACT = !Boolean.getBoolean("lab.spec.unsafe") && !FAST;
     static final int BLOCK = Math.min(4096, Integer.getInteger("lab.spec.block", 2048));   // (the grid packs a slot in 12 bits)
     private static dev.lull.optsupport.sleep.SpecTx[] txs = new dev.lull.optsupport.sleep.SpecTx[0];
@@ -385,7 +391,10 @@ public final class SpecTicks {
             ((SpecSlot) en).sleep$setSpecSlot(i, ep);
         });
         long gb = System.nanoTime();
-        buildGrid(m);
+        // (lab.fast: no groups by contact - a push between two threads' mobs is lost or doubled at worst, a plausible
+        // world; a pen of 500 animals would be one thread's whole work otherwise. Only a mob and its target stay together.)
+        if (!FAST || FAST_CONTACT) buildGrid(m);
+        else nUsed = 0;
         long gc = System.nanoTime();
         double[] s = sweep;
         for (int ub = 0; ub < nUsed; ub++) {
@@ -402,6 +411,17 @@ public final class SpecTicks {
                     }
                 }
             }
+        }
+        if (FAST) {   // (the users of points of interest: one thread for all of them)
+            int p0 = -1;
+            for (int i = 0; i < m; i++)
+                if (usesPoi(all[b0 + i])) {
+                    if (p0 < 0) p0 = i;
+                    else {
+                        int ra = find(i), rb = find(p0);
+                        if (ra != rb) parent[Math.max(ra, rb)] = Math.min(ra, rb);
+                    }
+                }
         }
         if (FAST)   // (a mob hits / pushes what it targets: both on one thread)
             for (int i = 0; i < m; i++)

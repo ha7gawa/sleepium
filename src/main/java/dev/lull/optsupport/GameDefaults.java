@@ -54,7 +54,7 @@ public final class GameDefaults {
      * notes/99). Each flag can still be given on its own (a given value wins).
      */
     private static void specPreset() {
-        if (!Boolean.getBoolean("lab.specTicks")) return;
+        if (!Boolean.getBoolean("lab.specTicks") && !Boolean.getBoolean("lab.fast")) return;   // (lab.fast: the same parts, ticked without transactions)
         String[] set = {"lab.opt.ServerParallelItemsMixin=true", "lab.opt.WriteBarrier=true", "lab.spec=true", "lab.spec.margin=0.3",
                 "lab.opt.TrackParMixin=true"};
         int n = 0;
