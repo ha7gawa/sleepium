@@ -25,8 +25,14 @@ public abstract class ServerParallelItemsQueryMixin {
         if (dev.lull.optsupport.SpecTicks.EXACT && dev.lull.optsupport.sleep.WB.TX) dev.lull.optsupport.sleep.SpecTx.queried(box);
     }
 
-    @Inject(method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z", at = @At("HEAD"))
+    @Inject(method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z", at = @At("HEAD"), cancellable = true)
     private void sleep$specSetBlock(net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.state.BlockState state, int flags, int left, CallbackInfoReturnable<Boolean> cir) {
+        if (dev.lull.optsupport.SpecTicks.FAST) {   // (lab.fast: the write at the run's end, in walk order - reported as done)
+            Level self = (Level) (Object) this;
+            net.minecraft.core.BlockPos p = pos.immutable();
+            if (dev.lull.optsupport.SpecTicks.deferWorld(() -> self.setBlock(p, state, flags, left))) cir.setReturnValue(true);
+            return;
+        }
         if (dev.lull.optsupport.SpecTicks.EXACT && dev.lull.optsupport.sleep.WB.TX) dev.lull.optsupport.SpecTicks.abortIfSpeculative("sets a block");
     }
 }

@@ -36,6 +36,8 @@ public final class SpecTicks {
     static final int MIN = Integer.getInteger("lab.spec.min", 64);
     static final int CHUNK = Integer.getInteger("lab.spec.chunk", 16);
     static final boolean ALTERNATE = Boolean.getBoolean("lab.spec.alternate");
+    /** -Dlab.spec.items=false: dropped items tick serially in SpecTicks' walk (ServerParallelItems' runs off) */
+    static final boolean ITEMS = !"false".equals(System.getProperty("lab.spec.items"));
 
     static {
         // (the transaction code out of line: inlined into vanilla's hot methods while runs tick, it slows the plain
@@ -79,7 +81,16 @@ public final class SpecTicks {
                 return;
             }
             int i = 0;
+            // (dropped items: ServerParallelItems' windows inside this walk - lab.spec.items, default on)
+            boolean items = ITEMS && !serial && ServerParallelItems.enabled && lvl.getProfiler() == net.minecraft.util.profiling.InactiveProfiler.INSTANCE;
+            if (items) ServerParallelItems.walkFrom(all, n);
             while (i < n) {
+                if (items && all[i] instanceof net.minecraft.world.entity.item.ItemEntity) {
+                    int j = i;
+                    while (j < n && all[j] instanceof net.minecraft.world.entity.item.ItemEntity) j++;
+                    i = ServerParallelItems.itemsWindow(i, j, consumer, lvl);
+                    continue;
+                }
                 if (serial || !eligible(all[i])) {
                     consumer.accept(all[i++]);
                     continue;
@@ -255,8 +266,31 @@ public final class SpecTicks {
 
     static boolean eligible(Entity e) {
         return kindOk(e) && !e.isRemoved() && !e.isPassenger() && !e.isVehicle() && e.getClass().getName().startsWith("net.minecraft.")
-                && (!EXACT || dev.lull.optsupport.sleep.EntitySleep.plainNext(e) && noBrain(e)) && (TYPES == null || TYPES.contains(e.getType().toShortString()));
+                && (!EXACT || dev.lull.optsupport.sleep.EntitySleep.plainNext(e) && noBrain(e)) && (!FAST || fastOk(e)) && (TYPES == null || TYPES.contains(e.getType().toShortString()));
     }
+
+    /** lab.fast: not the mobs whose ticks reach shared state with no guard yet (points of interest, explosions); entity sleep's own ticks stay on the server thread */
+    static boolean fastOk(Entity e) {
+        return !(e instanceof net.minecraft.world.entity.monster.Creeper) && dev.lull.optsupport.sleep.EntitySleep.plainNext(e);
+    }
+
+    /** lab.fast: the mobs that use points of interest (one shared, unguarded manager): all of a block on one thread */
+    static boolean usesPoi(Entity e) {
+        return e instanceof net.minecraft.world.entity.npc.AbstractVillager || e instanceof net.minecraft.world.entity.animal.IronGolem
+                || e instanceof net.minecraft.world.entity.animal.Bee;
+    }
+
+    /** lab.fast: a run tick's world write / spawn kept for the run's end (true), or not in a run (false: do it now) */
+    public static boolean deferWorld(Runnable r) {
+        if (!FAST || !running) return false;
+        int k = current();
+        if (k < 0) return false;
+        add(k, r);
+        fastDeferredWorld++;
+        return true;
+    }
+
+    static long fastDeferredWorld, fastGroups, fastTargets;
 
     /**
      * a mob driven by goals only: its brain holds no memories (a brain's behaviors, sensors and memory values are objects
@@ -287,7 +321,16 @@ public final class SpecTicks {
      * writes into a later tick's objects, it is undone with those later ticks and runs again. Exact by construction: a
      * committed tick read nothing another tick of the block changed, an invalid one runs in vanilla's order.
      */
-    public static final boolean EXACT = !Boolean.getBoolean("lab.spec.unsafe");
+    /**
+     * -Dlab.fast=true (1.4, notes/101, NOT exact): the runs ticked on the pool without transactions - groups of touching
+     * mobs (and a mob with the mob it targets) on one thread each, the runs' moves / removals / effects / block writes /
+     * spawns kept for the run's end in walk order; reads of other groups see them mid-tick. Mobs that use points of
+     * interest (villagers, iron golems, bees) and creepers (explosions) tick the usual way.
+     */
+    public static final boolean FAST = Boolean.getBoolean("lab.fast");
+    /** -Dlab.fast.contact=true: lab.fast keeps touching mobs on one thread too (groups by contact, as exact mode does) */
+    static final boolean FAST_CONTACT = Boolean.getBoolean("lab.fast.contact");
+    public static final boolean EXACT = !Boolean.getBoolean("lab.spec.unsafe") && !FAST;
     static final int BLOCK = Math.min(4096, Integer.getInteger("lab.spec.block", 2048));   // (the grid packs a slot in 12 bits)
     private static dev.lull.optsupport.sleep.SpecTx[] txs = new dev.lull.optsupport.sleep.SpecTx[0];
     private static double[] sweep = new double[0];   // per slot: the swept box (6)
@@ -348,7 +391,10 @@ public final class SpecTicks {
             ((SpecSlot) en).sleep$setSpecSlot(i, ep);
         });
         long gb = System.nanoTime();
-        buildGrid(m);
+        // (lab.fast: no groups by contact - a push between two threads' mobs is lost or doubled at worst, a plausible
+        // world; a pen of 500 animals would be one thread's whole work otherwise. Only a mob and its target stay together.)
+        if (!FAST || FAST_CONTACT) buildGrid(m);
+        else nUsed = 0;
         long gc = System.nanoTime();
         double[] s = sweep;
         for (int ub = 0; ub < nUsed; ub++) {
@@ -366,6 +412,30 @@ public final class SpecTicks {
                 }
             }
         }
+        if (FAST) {   // (the users of points of interest: one thread for all of them)
+            int p0 = -1;
+            for (int i = 0; i < m; i++)
+                if (usesPoi(all[b0 + i])) {
+                    if (p0 < 0) p0 = i;
+                    else {
+                        int ra = find(i), rb = find(p0);
+                        if (ra != rb) parent[Math.max(ra, rb)] = Math.min(ra, rb);
+                    }
+                }
+        }
+        if (FAST)   // (a mob hits / pushes what it targets: both on one thread)
+            for (int i = 0; i < m; i++)
+                if (all[b0 + i] instanceof net.minecraft.world.entity.Mob mob && mob.getTarget() != null) {
+                    net.minecraft.world.entity.LivingEntity t = mob.getTarget();
+                    int j = ((SpecSlot) t).sleep$specSlot(ep);
+                    if (j >= 0 && j < m && all[b0 + j] == t) {
+                        int ra = find(i), rb = find(j);
+                        if (ra != rb) {
+                            parent[Math.max(ra, rb)] = Math.min(ra, rb);
+                            fastTargets++;
+                        }
+                    }
+                }
         long gd = System.nanoTime();
         // group ids by first slot; slots ordered by group, walk order inside
         int[] count = groupIx;   // (reused: count per root, then the group index per slot)
@@ -521,6 +591,27 @@ public final class SpecTicks {
     private static int curM;
 
     /** a block speculated; false: not (most of its ticks in huge groups - nothing ran, the caller ticks it plainly) */
+    /** the per-slot arrays for a block of m */
+    private static void ensure(int m) {
+        curM = m;
+        if (txs.length >= m && sweep.length >= m * 6) return;
+        int old = txs.length;
+        if (txs.length < m) {
+            txs = java.util.Arrays.copyOf(txs, m);
+            for (int i = old; i < m; i++) txs[i] = new dev.lull.optsupport.sleep.SpecTx();
+        }
+        sweep = new double[m * 6];
+        invalid = new boolean[m];
+        done = new boolean[m];
+        groupOf = new int[m];
+        parent = new int[m];
+        order = new int[m];
+        groupStart = new int[m + 1];
+        groupIx = new int[m];
+        sectionMoved = new boolean[m];
+        hasPaths = new boolean[m];
+    }
+
     private static boolean block(int b0, int b1, Consumer<Entity> consumer) {
         int m = b1 - b0;
         curM = m;
@@ -995,7 +1086,13 @@ public final class SpecTicks {
             for (int z = z0; z <= z1; z++) {
                 LevelChunk c = level.getChunkSource().getChunkNow(x, z);
                 if (c == null) continue;
-                for (int y = y0; y <= y1; y++) if (!c.getListenerRegistry(y).isEmpty()) return false;
+                // (not getListenerRegistry: it creates a missing registry in the chunk's map - a write from many threads;
+                // a missing one is an empty one to vanilla's dispatch)
+                var regs = ((dev.lull.opt.ServerParallelItemsChunkListenersAccessor) c).sleep$listenerSections();
+                for (int y = y0; y <= y1; y++) {
+                    var reg = regs.get(y);
+                    if (reg != null && !reg.isEmpty()) return false;
+                }
             }
         quietEvents++;
         return true;
@@ -1024,7 +1121,26 @@ public final class SpecTicks {
         long t0 = System.nanoTime();
         running = true;
         try {
-            pool.forRange(to - from, CHUNK, pool.workerCount(), q -> {
+            if (FAST) {
+                for (int b = from; b < to; b += BLOCK) {
+                    int b0 = b, m = Math.min(to, b + BLOCK) - b;
+                    ensure(m);
+                    groups(b0, m);
+                    fastGroups += nGroups;
+                    pool.forRange(nGroups, 4, pool.workerCount(), g -> {
+                        int[] cur = CUR.get();
+                        for (int a = groupStart[g]; a < groupStart[g + 1]; a++) {
+                            int k = b0 + order[a];
+                            cur[0] = k;
+                            try {
+                                consumer.accept(all[k]);
+                            } finally {
+                                cur[0] = -1;
+                            }
+                        }
+                    });
+                }
+            } else pool.forRange(to - from, CHUNK, pool.workerCount(), q -> {
                 int k = from + q;
                 int[] cur = CUR.get();
                 cur[0] = k;
