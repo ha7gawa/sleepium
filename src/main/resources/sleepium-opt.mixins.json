@@ -9,6 +9,7 @@
   "mixins": [
     "InWallMaskMixin",
     "ServerParallelItemsMixin",
+    "ServerParallelItemsChunkListenersAccessor",
     "ServerParallelItemsChunkMapAccessor",
     "ServerParallelItemsPortalAccessor",
     "ServerParallelItemsPushMixin",
