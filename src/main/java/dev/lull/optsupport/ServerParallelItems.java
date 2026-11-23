@@ -108,6 +108,21 @@ public final class ServerParallelItems {
         }
     }
 
+    /**
+     * SpecTicks' walk (lab.spec): its array is this walk's - the item windows below read the walk through it (the
+     * collidable entities once per walk, the indexes, the hulls); called once a walk before its first item window.
+     */
+    static void walkFrom(Entity[] arr, int count) {
+        all = arr;
+        n = count;
+        walks++;
+    }
+
+    /** SpecTicks' walk: items [from, to) through this class's windows; returns where the walk goes on */
+    static int itemsWindow(int from, int to, Consumer<Entity> consumer, ServerLevel lvl) {
+        return window(from, to, consumer, lvl);
+    }
+
     /** items [from, to) of the walk: the longest prefix that may tick apart runs in parallel; returns where the walk goes on */
     private static int window(int from, int to, Consumer<Entity> consumer, ServerLevel lvl) {
         grow(to);
