@@ -2,6 +2,24 @@
 
 **A performance engine for Minecraft 1.21.1 (NeoForge) and 1.20.1 (Forge) that makes servers and clients cheaper to run without changing what the game computes.**
 
+## A note from the author
+
+For health reasons I'll be stepping away from Sleepium for a while, most likely about a year. This isn't the end of the project. I hope to be back once things are better, and I'd rather leave it in a good state than let it fade quietly.
+
+**This week is your chance to shape the last releases.** I'm putting out several updates over the next few days, including an experimental "maximum speed" mode for 1.4. If there's something you'd like to see (a feature, a setting, a mod it should work better with, a crash that bothers you), please tell me in the next few days in an issue or a comment. I'll do what I can before I go.
+
+While I'm away:
+
+- **The mod keeps working** on the versions it supports (1.21.1 NeoForge, 1.20.1 Forge). Every exact optimisation is checked against vanilla with world hashes, so it should stay safe to use.
+- **I'll try to find someone to look after it**: answering issues and making small fixes where they can. Big new features are unlikely until I'm back. If something breaks in the meantime, turning off the feature in *Options → Sleepium…* or using the *Off* preset is the quickest way around it.
+- **Please use it.** Play with it, study it, take ideas or code from it for your own projects. The source and the notes explain how each optimisation works and how it was measured. If any of it helps someone make Minecraft run better, that's exactly what I hoped for. It's under [LGPL-3.0](https://github.com/ha7gawa/sleepium/blob/main/LICENSE), so forks and reuse are welcome within that licence.
+
+Thank you to everyone who tested it, reported crashes and sent ideas, especially those who tried the experimental options in big modpacks. That's what made it better.
+
+See you, hopefully in a year.
+
+---
+
 > **Using C2ME? Use Sleepium 1.1.4 or newer, and check your world.** Before 1.1.4, Sleepium together with C2ME (or
 > another mod that saves chunks on its own threads) could save chunks with parts missing. That was my bug, found and
 > fixed in 1.1.4. Signs of it: `No key palette in MapLike[{}]` in the log, chunks that look hollow or do not appear.
