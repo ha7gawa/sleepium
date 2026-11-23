@@ -53,6 +53,29 @@ public final class SpecTicks {
     static long fastGathered;
     private static int n;
     private static final ThreadLocal<int[]> CUR = ThreadLocal.withInitial(() -> new int[] {-1});
+    /** depth of SpecTicks' pool jobs on this thread: the chunk hook serves these threads only (not other work on other pools) */
+    private static final ThreadLocal<int[]> JOB = ThreadLocal.withInitial(() -> new int[1]);
+
+    static java.util.function.IntConsumer job(java.util.function.IntConsumer body) {
+        return i -> {
+            int[] d = JOB.get();
+            d[0]++;
+            try {
+                body.accept(i);
+            } finally {
+                d[0]--;
+            }
+        };
+    }
+
+    /** this thread runs a SpecTicks job of a run (a worker's chunk lookups go to the run's published chunk map) */
+    public static boolean inJob() {
+        return running && JOB.get()[0] > 0;
+    }
+
+    static boolean jobThread() {
+        return JOB.get()[0] > 0;
+    }
     /** per walk index: what its tick deferred, in its order - an EntityInLevelCallback (a storage move), a Removal, a Runnable (an effect) */
     private static Object[][] deferred = new Object[4096][];
     private static int[] deferredN = new int[4096];
@@ -61,7 +84,8 @@ public final class SpecTicks {
     record Removal(EntityInLevelCallback cb, Entity.RemovalReason why) {}
 
     public static void forEach(net.minecraft.world.level.entity.EntityTickList list, Consumer<Entity> consumer, ServerLevel lvl) {
-        if (ParallelEntities.tickListenersActing()) {   // (an active profiler is fine: workers get the inactive one)
+        // (lab.fast: mods' tick listeners run under the bus's run lock - CompositeEventBus.RUN_POSTS - not a reason for a serial walk)
+        if (!FAST && ParallelEntities.tickListenersActing()) {   // (an active profiler is fine: workers get the inactive one)
             list.forEach(consumer);
             return;
         }
@@ -411,7 +435,7 @@ public final class SpecTicks {
         long ga = System.nanoTime();
         long ep = ++slotEpoch;
         // the start boxes and the entities' slots, in parallel (per slot, nothing shared)
-        ServerReactor.pool().forRange(m, 128, ServerReactor.pool().workerCount(), i -> {
+        ServerReactor.pool().forRange(m, 128, ServerReactor.pool().workerCount(), job(i -> {
             parent[i] = i;
             Entity en = all[b0 + i];
             net.minecraft.world.phys.AABB bb = en.getBoundingBox();
@@ -419,7 +443,7 @@ public final class SpecTicks {
             sweep[o] = bb.minX - MARGIN; sweep[o + 1] = bb.minY - MARGIN; sweep[o + 2] = bb.minZ - MARGIN;
             sweep[o + 3] = bb.maxX + MARGIN; sweep[o + 4] = bb.maxY + MARGIN; sweep[o + 5] = bb.maxZ + MARGIN;
             ((SpecSlot) en).sleep$setSpecSlot(i, ep);
-        });
+        }));
         long gb = System.nanoTime();
         // (lab.fast: no groups by contact - a push between two threads' mobs is lost or doubled at worst, a plausible
         // world; a pen of 500 animals would be one thread's whole work otherwise. Only a mob and its target stay together.)
@@ -695,9 +719,9 @@ public final class SpecTicks {
         dev.lull.optsupport.sleep.WB.TX = true;
         running = true;
         try {
-            pool.forRange(nGroups, 4, pool.workerCount(), g -> {
+            pool.forRange(nGroups, 4, pool.workerCount(), job(g -> {
                 for (int a = groupStart[g]; a < groupStart[g + 1]; a++) speculate(b0, order[a], consumer);
-            });
+            }));
         } finally {
             running = false;
             dev.lull.optsupport.sleep.WB.TX = false;
@@ -711,12 +735,12 @@ public final class SpecTicks {
         // were marked for rebuilding during the run, so the box re-set off the owner thread changes nothing there)
         if (!PAR_UNDO) for (int i = m - 1; i >= 0; i--) { if (invalid[i]) undo(b0, i); }
         else {
-            ServerReactor.pool().forRange(nGroups, 8, ServerReactor.pool().workerCount(), g -> {
+            ServerReactor.pool().forRange(nGroups, 8, ServerReactor.pool().workerCount(), job(g -> {
                 for (int a = groupStart[g + 1] - 1; a >= groupStart[g]; a--) {
                     int i = order[a];
                     if (invalid[i]) txs[i].restoreFields();
                 }
-            });
+            }));
             for (int i = m - 1; i >= 0; i--) if (invalid[i]) undoRest(b0, i);   // (contents in walk order, then the rest)
         }
         long t3 = System.nanoTime();
@@ -762,9 +786,9 @@ public final class SpecTicks {
         // the committed ticks' transactions released together (a re-run reads their words as stale: COMMITTED)
         if (LATE_RELEASE) {
             var rpool = ServerReactor.pool();
-            rpool.forRange(m, 64, rpool.workerCount(), i -> {
+            rpool.forRange(m, 64, rpool.workerCount(), job(i -> {
                 if (!invalid[i]) txs[i].release();
-            });
+            }));
         }
         commitCursor = 0;
         int inv = 0;
@@ -899,7 +923,7 @@ public final class SpecTicks {
         nsGrid += t1 - t0;
         if (spatial.length < m) spatial = new boolean[m];
         var pool = ServerReactor.pool();
-        pool.forRange(m, 64, pool.workerCount(), i -> {   // (read-only: the grid, the boxes, the query logs)
+        pool.forRange(m, 64, pool.workerCount(), job(i -> {   // (read-only: the grid, the boxes, the query logs)
             it.unimi.dsi.fastutil.ints.IntArrayList h = HITS.get();
             h.clear();
             touched(txs[i], i, -1, h);
@@ -911,7 +935,7 @@ public final class SpecTicks {
                 bad = groupOf[j] != groupOf[i] || j < i && sectionMoved[j];
             }
             spatial[i] = bad;
-        });
+        }));
         for (int i = 0; i < m; i++) {
             dev.lull.optsupport.sleep.SpecTx tx = txs[i];
             if (tx.conflict) {
@@ -1165,7 +1189,7 @@ public final class SpecTicks {
                     ensure(m);
                     groups(b0, m);
                     fastGroups += nGroups;
-                    pool.forRange(nGroups, 4, pool.workerCount(), g -> {
+                    pool.forRange(nGroups, 4, pool.workerCount(), job(g -> {
                         int[] cur = CUR.get();
                         for (int a = groupStart[g]; a < groupStart[g + 1]; a++) {
                             int k = b0 + order[a];
@@ -1176,9 +1200,9 @@ public final class SpecTicks {
                                 cur[0] = -1;
                             }
                         }
-                    });
+                    }));
                 }
-            } else pool.forRange(to - from, CHUNK, pool.workerCount(), q -> {
+            } else pool.forRange(to - from, CHUNK, pool.workerCount(), job(q -> {
                 int k = from + q;
                 int[] cur = CUR.get();
                 cur[0] = k;
@@ -1187,13 +1211,14 @@ public final class SpecTicks {
                 } finally {
                     cur[0] = -1;
                 }
-            });
+            }));
         } finally {
             running = false;
         }
         long t1 = System.nanoTime();
         nsPhase += t1 - t0;
         mergePaths();
+        if (FAST) FastPush.drain();
         commitDeferred(from, to);
         nsCommit += System.nanoTime() - t1;
     }
@@ -1249,6 +1274,23 @@ public final class SpecTicks {
     }
 
     /** Entity.setPosRaw's levelCallback.onMove() during a run: kept for after it (a repeat of the last one dropped) */
+    /** a run tick on this thread (lab.fast's hooks) */
+    public static boolean inRun() {
+        return running && CUR.get()[0] >= 0;
+    }
+
+    /** lab.fast: a move that stays in its section - vanilla's onMove does nothing for it (no deferral, no call) */
+    public static boolean deferMove(Entity e, EntityInLevelCallback cb) {
+        if (FAST && current() >= 0 && cb instanceof dev.lull.opt.ServerParallelItemsSectionKeyAccessor a
+                && a.sleep$sectionKey() == net.minecraft.core.SectionPos.asLong(e.blockPosition())) {
+            sameSectionMoves++;
+            return true;
+        }
+        return deferMove(cb);
+    }
+
+    static long sameSectionMoves;
+
     public static boolean deferMove(EntityInLevelCallback cb) {
         int k = current();
         if (k < 0) return false;
@@ -1282,6 +1324,11 @@ public final class SpecTicks {
     private static final ThreadLocal<long[]> LAST_POS = ThreadLocal.withInitial(() -> new long[] {Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, 0, -1});
     /** a new value per run: a worker's remembered chunks are good for one run only (chunks unload between ticks) */
     private static volatile long chunkEpoch;
+
+    /** a new value per run (FrozenGrid: a grid is good for its run) */
+    static long runEpoch() {
+        return chunkEpoch;
+    }
 
     public static LevelChunk chunk(ServerChunkCache cache, int x, int z, boolean require) {
         long key = ChunkPos.asLong(x, z);
@@ -1399,8 +1446,8 @@ public final class SpecTicks {
                 dw, (nsParallel - lastPar) / 1e6 / dw, (nsPhase - lastPhase) / 1e6 / dw, (nsCommit - lastCommit) / 1e6 / dw, runs - lastRuns));
         lastPhase = nsPhase; lastCommit = nsCommit; lastPar = nsParallel; lastWalksPar = walksParallel; lastRuns = runs;
         if (FAST && fastBlocks > 0) {
-            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d, gathered %d",
-                    fastBlocks, fastGroups, fastGroups / (double) fastBlocks, fastBlockSum / (double) fastBlocks, fastBigSum / (double) fastBlocks, fastMaxGroup, fastTargets, fastDeferredWorld, fastGathered));
+            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d, gathered %d; pushes summed %d (applied %d), moves in their section %d; frozen grids %d, queries %d, visited %d",
+                    fastBlocks, fastGroups, fastGroups / (double) fastBlocks, fastBlockSum / (double) fastBlocks, fastBigSum / (double) fastBlocks, fastMaxGroup, fastTargets, fastDeferredWorld, fastGathered, FastPush.pushes, FastPush.applied, sameSectionMoves, FrozenGrid.builds, FrozenGrid.queries, FrozenGrid.visited));
             fastMaxGroup = 0;
         }
         System.out.println(String.format(java.util.Locale.ROOT,

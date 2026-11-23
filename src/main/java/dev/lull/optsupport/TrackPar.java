@@ -37,7 +37,7 @@ public final class TrackPar {
     private static Object[][] cap = new Object[4096][];
     private static int[] capN = new int[4096];
     private static final List<ServerPlayer> moved = new ArrayList<>();
-    static long ticks, entities, parallelSends, packets, nsA, nsB, nsEmit;
+    static long ticks, entities, parallelSends, packets, nsA, nsB, nsEmit, unseenSkips;
 
     /**
      * ChunkMap.tick's first loop over entityMap.values(): done here when worth it (true: vanilla's loop gets nothing to
@@ -95,6 +95,12 @@ public final class TrackPar {
                     send[i] = dm.inEntityTickingRange(t.sleep$lastSection().chunk().toLong());   // (lastSection = its section now)
                 }
                 if (!send[i] || serial[i]) return;
+                // lab.fast: nobody sees it - no sendChanges (its packets would go to no one; a new viewer's pairing sends
+                // the whole entity, and the next sendChanges moves it from the last base it was sent from)
+                if (SpecTicks.FAST && ((dev.lull.opt.TrackParEntityAccessor) tracked[i]).sleep$seenBy().isEmpty()) {
+                    unseenSkips++;
+                    return;
+                }
                 int[] c = CUR.get();
                 c[0] = i;
                 try {
@@ -161,7 +167,7 @@ public final class TrackPar {
     }
 
     static void report() {
-        System.out.println(String.format(java.util.Locale.ROOT, "[sleep/trackpar] ticks %d, entities %.0f a tick; ms a tick: pairings %.2f, sendChanges %.2f, packets out %.2f; packets %d",
-                ticks, entities / (double) ticks, nsA / 1e6 / ticks, nsB / 1e6 / ticks, nsEmit / 1e6 / ticks, packets));
+        System.out.println(String.format(java.util.Locale.ROOT, "[sleep/trackpar] ticks %d, entities %.0f a tick; ms a tick: pairings %.2f, sendChanges %.2f, packets out %.2f; packets %d; unseen skipped %.0f a tick",
+                ticks, entities / (double) ticks, nsA / 1e6 / ticks, nsB / 1e6 / ticks, nsEmit / 1e6 / ticks, packets, unseenSkips / (double) ticks));
     }
 }

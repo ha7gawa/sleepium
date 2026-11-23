@@ -34,6 +34,11 @@ public abstract class EntitySectionIterMixin<T extends EntityAccess> {
     @SuppressWarnings("unchecked")
     public AbortableIterationConsumer.Continuation getEntities(AABB bounds, AbortableIterationConsumer<T> consumer) {
         List<T> list = ((ClassInstanceMultiMapAccessor<T>) storage).sleep$all();
+        if (dev.lull.optsupport.SpecTicks.FAST && list.size() >= dev.lull.optsupport.FrozenGrid.MIN && dev.lull.optsupport.SpecTicks.inJob()
+                && this instanceof dev.lull.optsupport.FrozenGrid.Holder) {   // (lab.fast: a run worker's query of a dense section - FrozenGrid)
+            AbortableIterationConsumer.Continuation c = dev.lull.optsupport.FrozenGrid.query(this, ((IndexedSection) this).sleep$key(), list, bounds, consumer);
+            if (c != null) return c;
+        }
         if (INDEX && list.size() >= INDEX_MIN) {
             AbortableIterationConsumer.Continuation c = sleep$indexed(list, bounds, consumer);
             if (c != null) return c;

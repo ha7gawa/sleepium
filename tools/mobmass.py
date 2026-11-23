@@ -329,7 +329,7 @@ def main():
         jvm += [] if a.off else ['-Dlab.opt.defaults=true']
     if a.jfr:
         rec = os.path.join(OUTDIR, LABEL + '.jfr').replace('\\', '/')
-        jvm += ['-XX:StartFlightRecording=name=mobmass,settings=profile,jdk.ExecutionSample#period=1ms,delay=%ds,duration=%ds,filename=%s' % (a.jfrdelay, a.jfr, rec),
+        jvm += ['-XX:StartFlightRecording=name=mobmass,settings=profile,jdk.ExecutionSample#period=1ms,jdk.JavaMonitorEnter#threshold=50us,jdk.ThreadPark#threshold=50us,delay=%ds,duration=%ds,filename=%s' % (a.jfrdelay, a.jfr, rec),
                 '-XX:FlightRecorderOptions=stackdepth=128']
     jvm += a.flags.split()
     S = Dev(jvm) if a.dev else Prod(jvm)

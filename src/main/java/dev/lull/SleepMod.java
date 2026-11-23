@@ -39,6 +39,7 @@ public final class SleepMod {
                 net.minecraft.server.MinecraftServer.class.getClassLoader());
         if (Boolean.getBoolean("lab.opt.HeapReturn")) LOGGER.info("sleep: {}", dev.lull.optsupport.HeapReturn.apply());   // memory back to the OS after bursts
         if (dev.lull.optsupport.PipeScout.ON) dev.lull.optsupport.PipeScout.register();   // measurement only: per-player tick work with /sleep bots measure
+        if (Boolean.getBoolean("sleep.test.tickListener")) dev.compatprobe.TickListenerProbe.register();   // test: a thread-unsafe tick listener (Maximum speed's run lock)
         if (Boolean.getBoolean("lab.opt.TrackFast")) dev.lull.optsupport.TrackFast.register();   // A/B switch and counters with /sleep bots
         if (Boolean.getBoolean("lab.opt.ChunkSendPar")) dev.lull.optsupport.ChunkSendPar.register();   // A/B switch and counters with /sleep bots
         if (dev.lull.optsupport.TrackIndex.ON) dev.lull.optsupport.TrackIndex.register();   // A/B switch and counters with /sleep bots

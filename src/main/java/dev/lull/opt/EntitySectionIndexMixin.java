@@ -18,8 +18,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * indices, and marks them dirty on add/remove (list positions shift).
  */
 @Mixin(EntitySection.class)
-public abstract class EntitySectionIndexMixin<T extends EntityAccess> implements IndexedSection {
+public abstract class EntitySectionIndexMixin<T extends EntityAccess> implements IndexedSection, dev.lull.optsupport.FrozenGrid.Holder {
     @Unique private long sleep$key = Long.MIN_VALUE;
+    @Unique private volatile Object sleep$frozen;
+
+    @Override public Object sleep$frozen() { return sleep$frozen; }
+    @Override public void sleep$setFrozen(Object g) { sleep$frozen = g; }
     @Unique private SectionIndex sleep$index;
     @Unique private IdentityHashMap<Class<?>, SectionIndex> sleep$typed;
 
