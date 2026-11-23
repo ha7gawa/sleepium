@@ -17,7 +17,9 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class ServerParallelItemsMultiMapMixin {
     @Redirect(method = "find", at = @At(value = "INVOKE", target = "Ljava/util/Map;computeIfAbsent(Ljava/lang/Object;Ljava/util/function/Function;)Ljava/lang/Object;"))
     private Object sleep$fastFill(Map<Object, Object> map, Object key, Function<Object, Object> f) {
-        if (dev.lull.optsupport.SpecTicks.FAST && dev.lull.optsupport.SpecTicks.running()) {
+        // (any run - entity runs or the dropped items' windows, exact or not: the lock changes nothing a list holds, only
+        // which thread makes it; itemwake 11-23: two items' merge queries met in the fill during an items window)
+        if (dev.lull.optsupport.SpecTicks.running() || dev.lull.optsupport.ServerParallelItems.running()) {
             synchronized (map) {
                 return map.computeIfAbsent(key, f);
             }
