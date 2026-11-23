@@ -133,6 +133,11 @@ public final class ParallelEntities {
      * Forge 1.20.1 posts no event around a non-living entity's tick (LivingTickEvent: living entities only, never in a
      * run): no listener can act on a run entity (NeoForge's EntityTickEvent is analysed on 1.21.1)
      */
+    /** ServerParallelItems: an EntityTickEvent listener would act on a dropped item (same analysis as the client's runs) */
+    static boolean tickListenersActing() {
+        return tickListeners();
+    }
+
     private static boolean tickListeners() {
         return false;
     }

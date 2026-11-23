@@ -20,4 +20,10 @@ public abstract class NetReactorTickMixin {
     private void sleep$flush(BooleanSupplier hasTimeLeft, CallbackInfo ci) {
         NetReactor.onServerTick();
     }
+
+    /** NetFlushLater: the tick's batches leave at the end of tickChildren (before the autosave and the post-tick event) */
+    @Inject(method = "tickChildren", at = @At("RETURN"))
+    private void sleep$childrenEnd(BooleanSupplier hasTimeLeft, CallbackInfo ci) {
+        NetReactor.onChildrenEnd();
+    }
 }

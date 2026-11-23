@@ -84,7 +84,7 @@ public abstract class NetReactorConnectionMixin implements NetReactor.Batched {
                     boolean full, mark;
                     synchronized (this.sleep$lock) {
                         this.sleep$filling.add(entry);
-                        full = this.sleep$filling.size() >= NetReactor.MAX_BATCH && !this.sleep$scheduled;
+                        full = !NetReactor.flushLater && this.sleep$filling.size() >= NetReactor.MAX_BATCH && !this.sleep$scheduled;
                         mark = !this.sleep$dirty;
                         this.sleep$dirty = true;
                     }
@@ -149,6 +149,8 @@ public abstract class NetReactorConnectionMixin implements NetReactor.Batched {
     /** vanilla's doSendPacket for a packet of the channel's own protocol (no switch), without the flush */
     @Unique
     private void sleep$write(Packet<?> packet, @Nullable PacketSendListener sendListener) {
+        if (dev.lull.optsupport.NetOrderVerify.ON && (Object) this instanceof dev.lull.optsupport.NetOrderVerify.Holder h)
+            h.sleep$orderState().out(packet);   // (the batch drain writes without doSendPacket)
         ChannelFuture f = this.channel.write(packet);
         if (sendListener != null) {
             f.addListener(r -> {
@@ -166,6 +168,7 @@ public abstract class NetReactorConnectionMixin implements NetReactor.Batched {
     /** the connection's tick (it flushes the channel itself) is a flush point (1.20.1 has no flushChannel) */
     @Inject(method = "tick", at = @At("HEAD"))
     private void sleep$tick(CallbackInfo ci) {
+        if (NetReactor.flushLater && NetReactor.batching()) return;   // inside the tick: the tick's end flushes (NetReactor.flushLater)
         this.sleep$flush();
     }
 

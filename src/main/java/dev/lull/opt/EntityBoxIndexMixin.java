@@ -23,6 +23,10 @@ public abstract class EntityBoxIndexMixin {
             EntitySection<?> s = cb.sleep$section();
             if (s != null) {
                 IndexedSection is = (IndexedSection) s;
+                if (dev.lull.optsupport.SpecTicks.running()) {   // (a parallel run: rebuilt at the next query - a box may also be undone)
+                    is.sleep$markAllDirty();
+                    return;
+                }
                 SectionIndex idx = is.sleep$index();
                 if (idx != null && idx.owner == Thread.currentThread()) idx.update(this, bb);
                 is.sleep$forEachTyped(this, bb);

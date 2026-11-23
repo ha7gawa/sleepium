@@ -46,6 +46,11 @@ public abstract class EntitySectionIndexMixin<T extends EntityAccess> implements
         for (SectionIndex i : sleep$typed.values()) if (i.owner == t) i.update(entity, bb);
     }
 
+    @Override
+    public void sleep$markAllDirty() {
+        sleep$dirty();
+    }
+
     @Unique
     private void sleep$dirty() {
         if (sleep$index != null) sleep$index.markDirty();

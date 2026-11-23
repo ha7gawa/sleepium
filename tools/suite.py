@@ -1,4 +1,4 @@
-"""The exactness suite with several servers at once: each worker is a copy of this project (../work-p<N>: sources and
+"""The exactness suite with several servers at once: each worker is a copy of this project (../work-n<N>: sources and
 tools synced from here, its own build and run folders, its own port), the scenes are shared out between them.
 Per scene as tools/exactness_all.sh: optimisations off vs on; a scene that differs runs off vs off too (the scene's
 own nondeterminism); mobs and calmzoo also with the mob sleep flags. Summary lines go to run/exactness-summary.txt
@@ -24,6 +24,9 @@ ap = argparse.ArgumentParser()
 ap.add_argument('scenes', nargs='*')
 ap.add_argument('--workers', type=int, default=3)
 ap.add_argument('--ticks', type=int, default=2400)
+ap.add_argument('--copies', default='work-n', help='the worker copies: ../<copies><N> (a suite of another tree at the same time: its own name)')
+ap.add_argument('--port', type=int, default=25580, help='worker N listens on port + N')
+ap.add_argument('--flags', default='', help='more JVM flags for every "on" run (lab features to check)')
 a = ap.parse_args()
 scenes = a.scenes or SCENES
 summary = os.path.join(ROOT, 'run', 'exactness-summary.txt')
@@ -61,16 +64,17 @@ def exact(copy, port, scene, extra):
 
 
 def worker(i, jobs):
-    copy = os.path.join(os.path.dirname(ROOT), 'work-p%d' % i)
+    copy = os.path.join(os.path.dirname(ROOT), '%s%d' % (a.copies, i))
     sync(copy)
-    port = 25570 + i
+    port = a.port + i
     while True:
         try:
             scene = jobs.get_nowait()
         except queue.Empty:
             return
         mon = ['--monsters'] if scene == 'zoo' else []
-        runs = [('defaults', mon)] + ([('defaults+mob sleep', ['--flags', MOBSLEEP])] if scene in ('mobs', 'calmzoo') else [])
+        fl = ['--flags=' + a.flags] if a.flags else []   # (= : a value starting with -D is not an option)
+        runs = [('defaults' + (' + ' + a.flags if a.flags else ''), mon + fl)] + ([('defaults+mob sleep', ['--flags=' + (MOBSLEEP + ' ' + a.flags).strip()])] if scene in ('mobs', 'calmzoo') else [])
         for label, extra in runs:
             t0 = time.time()
             ok, tail = exact(copy, port, scene, extra)

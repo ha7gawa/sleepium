@@ -108,6 +108,8 @@
 -Dlab.opt.NetReactorConnectionMixin=true
 -Dlab.opt.NetReactorTickMixin=true
 -Dlab.opt.NetReactorWaitMixin=true
+# NetReactor's hand-overs at the end of tickChildren only (vanilla's flush point), on a pool thread (notes/91)
+-Dlab.opt.NetFlushLater=true
 -Dlab.opt.OverworldFogMixin=true
 -Dlab.opt.ParallelEntitiesMixin=true
 -Dlab.opt.ParallelReloadMixin=true
@@ -282,3 +284,5 @@
 # 1.3.5 (the user 11-22): villagers' job-site rival check by a count, standing mobs' moves remembered (exact)
 -Dlab.opt.JobSiteIndex=true
 -Dlab.opt.MoveMemo=true
+# isInWall without its stream where the collision masks show no colliding block at the eyes (exact; Xeons 30k pigs -4.3 %, 11-23)
+-Dlab.opt.InWallMaskMixin=true

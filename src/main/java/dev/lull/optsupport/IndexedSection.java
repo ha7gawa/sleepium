@@ -10,6 +10,9 @@ public interface IndexedSection {
 
     void sleep$setIndex(SectionIndex index);
 
+    /** every index of the section marked for rebuilding (SpecTicks: boxes changed off the owner thread, or undone) */
+    void sleep$markAllDirty();
+
     /** Index over the typed list of {@code baseClass} (getEntitiesOfClass queries); null if none yet. */
     SectionIndex sleep$typedIndex(Class<?> baseClass);
 
