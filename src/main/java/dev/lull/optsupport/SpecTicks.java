@@ -452,7 +452,9 @@ public final class SpecTicks {
     static final boolean ADAPT = !"false".equals(System.getProperty("lab.spec.adapt"));
     private static final int KEYS = 256;
     private static final float[] specNs = new float[KEYS], serNs = new float[KEYS];
-    private static final int[] sinceTry = new int[KEYS], tryEvery = new int[KEYS];
+    /** per key: when the loser is tried next (nanoTime), the interval to the try after it */
+    private static final long[] tryAt = new long[KEYS], tryEvery = new long[KEYS];
+    private static final long TRY_FIRST = 10_000_000_000L, TRY_MAX = 640_000_000_000L;
     /** per key: the last block was a re-try of the loser; the winner before it */
     private static final boolean[] retry = new boolean[KEYS], wasSerial = new boolean[KEYS];
     static long serialTicks, serialBlocks, denseBlocks;
@@ -470,14 +472,17 @@ public final class SpecTicks {
         if (sp == 0) return false;                      // (speculation measured first)
         if (se == 0) return lastInvalidShare > 0.25f;   // (plain ticks measured once speculation undid much)
         boolean ser = se < sp;
-        // the loser re-tried after 16 walks, then twice as late after each re-try it lost again (up to 2048 walks):
-        // a re-try costs the gap once - a long tick where speculation loses badly
+        // the loser re-tried 10 s later, then twice as late after each re-try it lost again (up to ~10 min): a re-try
+        // costs the gap once - a long tick where speculation loses badly (by walks it came 3x as often: every level's
+        // walk counts; the farm paid ~3 % for its re-tries, 11-23)
+        long now = System.nanoTime();
         if (retry[key]) {
             retry[key] = false;
-            tryEvery[key] = ser == wasSerial[key] ? Math.min(4096, Math.max(64, tryEvery[key] * 2)) : 64;
+            tryEvery[key] = ser == wasSerial[key] ? Math.min(TRY_MAX, Math.max(TRY_FIRST, tryEvery[key] * 2)) : TRY_FIRST;
+            tryAt[key] = now + tryEvery[key];
         }
-        if (++sinceTry[key] >= Math.max(64, tryEvery[key])) {
-            sinceTry[key] = 0;
+        if (tryAt[key] == 0) tryAt[key] = now + TRY_FIRST;
+        if (now >= tryAt[key]) {
             retry[key] = true;
             wasSerial[key] = ser;
             return !ser;
