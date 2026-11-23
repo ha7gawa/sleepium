@@ -64,6 +64,7 @@ public final class CollideKernel {
 
     public static CollideKernel of(Level level) {
         if (ParticleWorkers.inWorker()) return WORKERS.get();
+        if (SPEC_KERNELS && SpecTicks.running() && !level.isClientSide()) return SPEC.get();
         return level.isClientSide() ? CLIENT : SERVER;
     }
 
@@ -74,6 +75,23 @@ public final class CollideKernel {
         return k;
     });
     private boolean worker;
+
+    /**
+     * SpecTicks' runs (every thread of the run, the server thread too): a kernel each; shapes the usual way, section
+     * masks only when current (none built during a run); -Dlab.opt.specKernels=false: vanilla's walk in runs
+     */
+    public static final boolean SPEC_KERNELS = ON && !"false".equals(System.getProperty("lab.opt.specKernels"));
+    private static final ThreadLocal<CollideKernel> SPEC = ThreadLocal.withInitial(() -> {
+        CollideKernel k = new CollideKernel();
+        k.readOnlyMasks = true;
+        return k;
+    });
+    private boolean readOnlyMasks;
+
+    /** a server level's run tick may take its thread's kernel (SpecTicks) */
+    public static boolean specRun(Level level) {
+        return SPEC_KERNELS && SpecTicks.running() && !level.isClientSide();
+    }
 
     // the collected shapes, in order: kind 0 a VoxelShape (shapes[i]), kind 1 a full block at (ox, oy, oz)[i]
     private byte[] kind = new byte[64];
@@ -383,7 +401,7 @@ public final class CollideKernel {
             maskSy = sy;
             int idx = lc.getSectionIndexFromSectionY(sy);
             LevelChunkSection s = idx >= 0 && idx < lc.getSections().length ? lc.getSection(idx) : null;
-            mask = s instanceof CollisionMask.Holder h ? (worker ? h.sleep$maskIfCurrent() : h.sleep$mask()) : null;
+            mask = s instanceof CollisionMask.Holder h ? (worker || readOnlyMasks ? h.sleep$maskIfCurrent() : h.sleep$mask()) : null;
         }
         long[] m = mask;
         if (m == null) return false;

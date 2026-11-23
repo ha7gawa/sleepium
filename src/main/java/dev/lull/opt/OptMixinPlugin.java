@@ -120,8 +120,13 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
                     || Boolean.getBoolean("lab.opt.ParticleGpuMixin");
         else if (simple.equals("EntityShapeMemoMixin"))   // part of the tick shape memo (its measurement, the entity tick)
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParticleShapeMemoMixin");
+        if (simple.startsWith("TrackPar"))   // the tracker's sendChanges on the pool (TrackPar, lab)
+            on = Boolean.getBoolean("lab.opt.TrackParMixin");
+        if (simple.startsWith("ServerParallelItems") && !simple.equals("ServerParallelItemsMixin"))   // parts of the server's parallel item runs (lab)
+            on = Boolean.getBoolean("lab.opt.ServerParallelItemsMixin");
         if (simple.startsWith("ParallelEntityTicks") && !simple.equals("ParallelEntityTicksMixin"))   // parts of the parallel entity runs
-            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntityTicksMixin");
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelEntityTicksMixin")
+                    || simple.equals("ParallelEntityTicksMoveMixin") && Boolean.getBoolean("lab.opt.ServerParallelItemsMixin");   // (its deferral serves the server's runs too)
         if (simple.equals("NeighbourWakeMixin"))   // part of ObservedModSleep (no cost without it)
             on = Boolean.getBoolean("lab.sleep.ObservedModSleep");
         if (simple.equals("QuadGpuMixin"))   // draws through PartBatch's item queues, shader patch and draw hooks
@@ -230,6 +235,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.TicketReleaseAtFull");
         if (simple.startsWith("NetReactor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor");
+        if (simple.equals("NetOrderVerifyMixin"))   // measurement only (optsupport/NetOrderVerify), on NetReactor's batches
+            on = (Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NetReactor")) && Boolean.getBoolean("lab.opt.NetOrderVerify");
         if (simple.equals("NetReactorWaitMixin"))   // MainReactor's waitForTasks overwrite flushes by itself
             on = on && !(Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.MainReactor"));
         if (simple.equals("StructurePlaceLockMixin"))

@@ -82,6 +82,7 @@ ap.add_argument('--summary', default=os.path.join(ROOT, 'run', 'box-summary.txt'
 ap.add_argument('--setup', action='store_true', help='make the machines\' server folders (the host\'s copy sent over) and stop')
 ap.add_argument('--check', action='store_true', help='only report which machines are free and ready')
 ap.add_argument('--no-mobsleep', action='store_true', help='without the extra mob sleep runs of mobs / calmzoo')
+ap.add_argument('--flags', default='', help='more JVM flags for every "on" run (a lab feature on top of the jar defaults)')
 a = ap.parse_args()
 
 V = a.version
@@ -277,12 +278,21 @@ def setup(m):
 RESULT = re.compile(r'^(off|on)\s+region hash|^entities compared|^(EXACT|DIFFERENT)$')
 
 
+def with_flags(extra):
+    """--flags added to the job's "on" run (merged with a job's own --flags=, e.g. the mob sleep runs'; none for offoff)"""
+    if not a.flags or '--mode' in extra:
+        return extra
+    own = [x for x in extra if x.startswith('--flags=')]
+    rest = [x for x in extra if not x.startswith('--flags=')]
+    return rest + ['--flags=' + ' '.join([x[len('--flags='):] for x in own] + [a.flags]).strip()]
+
+
 def run_job(m, slot, scene, label, extra, tag):
     """box_exact.py on machine m: (rc, the result lines, all lines)"""
     server = m.cfg['servers'][V][slot]
     args = [scene, '--server', server, '--jar', m.path('sleepium-%s.jar' % V), '--datapack', m.path('sleep-scenes-%s.zip' % V),
             '--java', m.cfg['java'][V], '--port', str(m.cfg['port'] + slot), '--ticks', str(a.ticks), '--heap', m.cfg['heap'],
-            '--out', m.path('out'), '--tag', tag] + extra
+            '--out', m.path('out'), '--tag', tag] + with_flags(extra)
     logf = m.path('out', tag + '.log')
     if not m.remote:
         lines = []
@@ -536,4 +546,5 @@ def main():
 
 
 PACK = None
-main()
+if __name__ == "__main__":
+    main()

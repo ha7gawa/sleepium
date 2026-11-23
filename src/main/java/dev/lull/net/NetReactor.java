@@ -94,13 +94,24 @@ public final class NetReactor {
             Batched[] all = DIRTY.toArray(new Batched[0]);
             DIRTY.clear();
             HANDOFFS.increment();
+            // the TICK lane: ahead of the pool's queued chunk-save encodes (CHUNK lane) - an autosave's backlog must not
+            // hold a tick's packets back
             dev.lull.optsupport.ServerReactor.pool().execute(() -> {
                 for (Batched b : all) b.sleep$flush();
-            });
+            }, dev.lab.runtime.LabRuntime.Lane.TICK);
             return;
         }
         for (int i = 0; i < DIRTY.size(); i++) DIRTY.get(i).sleep$flush();
         DIRTY.clear();
+    }
+
+    /**
+     * server thread, the end of MinecraftServer.tickChildren - vanilla's own flush point ("send chunks" resumes each
+     * player's flushing there), before the autosave and the tick's post event (mods' end-of-tick work): with
+     * NetFlushLater the tick's batches leave here, not after those (sends made after it still go at the tick's end)
+     */
+    public static void onChildrenEnd() {
+        if (flushLater && batching()) flushAll();
     }
 
     /** the end of a server tick (MinecraftServer.tickServer) */

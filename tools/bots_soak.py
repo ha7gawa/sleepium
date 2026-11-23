@@ -39,7 +39,7 @@ with Server([j for j in jvm if j], props, log) as s:
         s.cmd('sleep bots measure 58 soak%d' % (i + 1))
         m = s.wait_for(r"sleep: (bots measure 'soak%d'.*)" % (i + 1), timeout=200, start=start)
         line = m.group(1)
-        keep = [p for p in line.split(' | ') if p.startswith(('bots measure', 'trackfast', 'chunksend', 'trackindex', 'trackdeliver', 'net reactor'))]
+        keep = [p for p in line.split(' | ') if p.startswith(('bots measure', 'trackfast', 'chunksend', 'trackindex', 'trackdeliver', 'net reactor', 'netorder'))]
         print('  ' + '\n    '.join(k[:420] for k in keep), flush=True)
         time.sleep(1)
     st = s.ask('sleep bots stats', r'sleep: (bots stats: .*)', timeout=30)

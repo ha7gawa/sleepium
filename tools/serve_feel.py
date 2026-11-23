@@ -37,6 +37,9 @@ ap.add_argument('--setup', help='commands after the join, run at the player ("|"
 ap.add_argument('--mods', help='a folder of mod jars copied into both run/mods (server and client copy) for this run')
 ap.add_argument('--client-dir', default=os.path.join(os.path.dirname(ROOT), 'work-dscli'))
 ap.add_argument('--client-heap', default='2G')
+ap.add_argument('--no-cows', action='store_true', help='no cows summoned next to the player (they can stand where the blocks are placed)')
+ap.add_argument('--bots', type=int, default=0, help='N bot players (BotLoad, dev) around the player, moving ("mix"): a loaded server')
+ap.add_argument('--cmd-at', help='S:COMMAND - a server console command S seconds into the window (e.g. 15:save-all)')
 a = ap.parse_args()
 port = os.environ.setdefault('MC_PORT', '25611')
 
@@ -88,9 +91,24 @@ with Server(sjvm, {'enforce-secure-profile': 'false', 'view-distance': '8'}, log
                 s.cmd('tp Dev %s %s %s' % (o[0] + o[3], o[1], o[2]))
             for c in (a.setup.split('|') if a.setup else []):
                 s.cmd('execute at Dev run ' + c.strip())
-            for i in range(8):   # something that moves near the player: the world's update cadence as the client sees it
+            if a.bots:   # other players around this one: the tick's sends (tracker, block updates) to many connections
+                m = s.ask('data get entity Dev Pos', r'Dev has the following entity data: \[(-?[\d.]+)d, (-?[\d.]+)d, (-?[\d.]+)d\]', timeout=30)
+                s.ask('sleep bots add %d %d %d 32' % (a.bots, int(float(m.group(1))), int(float(m.group(3)))), r'bots: \d+ joined', timeout=300)
+                s.cmd('sleep bots move mix')
+            for i in range(0 if a.no_cows else 8):   # something that moves near the player: the world's update cadence as the client sees it
                 s.cmd('execute at Dev run summon minecraft:cow ~%d ~ ~%d {NoAI:0b}' % (4 + i % 4, -3 + i))
         threading.Thread(target=op, daemon=True).start()
+        if a.cmd_at:
+            sec2, command = a.cmd_at.split(':', 1)
+
+            def later():
+                s.wait_for(r'joined the game', timeout=600)
+                if a.bots:
+                    s.wait_for(r'bots: \d+ joined', timeout=600)
+                time.sleep(a.settle + 3 + int(sec2))
+                print('command: %s' % command, flush=True)
+                s.cmd(command)
+            threading.Thread(target=later, daemon=True).start()
         if a.stall_at:
             sec, ms = a.stall_at.split(':')
 
@@ -113,7 +131,13 @@ with Server(sjvm, {'enforce-secure-profile': 'false', 'view-distance': '8'}, log
     res = ['== %s %s slow=%d jitter=%d off=%s scene=%s stall=%s orbit=%s' % (time.strftime('%F %T'), a.label, a.slow, a.jitter, a.off, a.scene, a.stall_at, a.orbit),
            feel.group(0) if feel else 'client: no serveFeel line (see %s)' % cout,
            re.sub(r'.*?(serve: )', r'\1', srv[-1]) if srv and 'serve:' in srv[-1] else 'server: no serve line']
-    holes = re.search(r'holes \d+: .*', out)
+    holes = re.search(r'holes: [^;]*', out)
+    if holes:
+        res.append('client ' + holes.group(0))
+    if a.bots:
+        with s.lock:
+            bl = [l for l in s.lines if 'bots: ' in l and 'joined' in l]
+        res.append('bots: %s' % (bl[-1].split('sleep: ')[-1][:120] if bl else '?'))
     print('\n'.join(res), flush=True)
     with open(os.path.join(ROOT, 'run', 'serve-feel.txt'), 'a', encoding='utf-8') as f:
         f.write('\n'.join(res) + '\n')

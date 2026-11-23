@@ -215,6 +215,8 @@ public final class FrameThread {
         org.lwjgl.opengl.GL.setCapabilities(null);
         sideOn();
         setRenderThread(thread);
+        FrameCoop.decide();
+        if (Boolean.getBoolean("sleep.test.compatProbe")) dev.compatprobe.CompatProbe.register();
         active = true;
         thread.start();
         LOG.info("[sleep/opt] frame thread: the GL context and the frame's drawing on a thread of their own (stage A1b)");
@@ -632,6 +634,33 @@ public final class FrameThread {
     }
 
     /** this is the main thread while the frame thread runs (a plain identity check: no isSameThread on hot paths) */
+    public static long deferredCloses;
+
+    /** render calls the main thread queued that have not finished yet (waiting, or running on the frame thread now) */
+    private static final java.util.concurrent.atomic.AtomicInteger QUEUED_FROM_MAIN = new java.util.concurrent.atomic.AtomicInteger();
+
+    /** RenderSystem.recordRenderCall: a call the main thread queues is counted until it has run */
+    public static com.mojang.blaze3d.pipeline.RenderCall tracked(com.mojang.blaze3d.pipeline.RenderCall c) {
+        if (!active || Thread.currentThread() != mainThread) return c;
+        QUEUED_FROM_MAIN.incrementAndGet();
+        return () -> {
+            try {
+                c.execute();
+            } finally {
+                QUEUED_FROM_MAIN.decrementAndGet();
+            }
+        };
+    }
+
+    /** NativeImage.close on the main thread with render work it queued not finished: the close queued after it (FrameThreadImageCloseMixin) */
+    public static boolean deferClose(com.mojang.blaze3d.platform.NativeImage img) {
+        if (!active || Thread.currentThread() != mainThread || com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()) return false;
+        if (QUEUED_FROM_MAIN.get() == 0) return false;   // (the queue's own emptiness misses a call taken out and running)
+        deferredCloses++;
+        com.mojang.blaze3d.systems.RenderSystem.recordRenderCall(img::close);
+        return true;
+    }
+
     public static boolean onMainThread() {
         return active && Thread.currentThread() == mainThread;
     }
@@ -1029,6 +1058,15 @@ public final class FrameThread {
     private static volatile boolean mainWaiting;
 
     private static void waitPumping(java.util.function.BooleanSupplier until) {
+        boolean co = FrameCoop.releaseForWait();   // (cooperative mode: the frame waited for may need the main thread's lock)
+        try {
+            waitPumping0(until);
+        } finally {
+            FrameCoop.reacquireAfterWait(co);
+        }
+    }
+
+    private static void waitPumping0(java.util.function.BooleanSupplier until) {
         if (inGlfw || Thread.currentThread() != mainThread) {   // (inside a GLFW callback, or not the main thread: parked)
             while (!until.getAsBoolean()) LockSupport.parkNanos(100_000L);
             return;
@@ -1107,6 +1145,7 @@ public final class FrameThread {
                     frameHolds = true;
                 }
                 drawing = true;
+                boolean co = false;
                 try {
                     // the main thread's queued GL work first (vanilla's atlas tick queues itself when not on the render
                     // thread): before the frame, where vanilla's tick had it - flipFrame's replay would be a frame late
@@ -1116,6 +1155,7 @@ public final class FrameThread {
                     if (sf != 0) org.lwjgl.opengl.GL32C.glWaitSync(sf, 0, org.lwjgl.opengl.GL32C.GL_TIMEOUT_IGNORED);
                     long q1 = System.nanoTime();
                     tSideWait += q1 - q0;
+                    co = FrameCoop.frameEnter();   // (cooperative mode: mods' queued work and the drawing at the tick's safe point)
                     UploadRing.frameBegin();   // (runTick HEAD's on the main thread: GL - the frames-in-flight fence and wait)
                     com.mojang.blaze3d.systems.RenderSystem.replayQueue();
                     long q2 = System.nanoTime();
@@ -1144,7 +1184,9 @@ public final class FrameThread {
                         if (iv > 0 && w > 0) {
                             prepAhead++;
                             drawGen = Long.MAX_VALUE;   // (nothing of the world read while asleep: the tick's gate need not wait)
+                            FrameCoop.frameLeave(co);   // (not held while asleep)
                             while ((w = nextDue - System.nanoTime()) > 0 && !borrowAsked && !mainHolding) paceSleep(w);
+                            co = FrameCoop.frameEnter();
                             drawGen = gen;
                             waited = System.nanoTime() - q3;
                         }
@@ -1168,6 +1210,7 @@ public final class FrameThread {
                     }
                 } finally {
                     drawing = false;
+                    FrameCoop.frameLeave(co);
                 }
             } catch (Throwable t) {
                 failure = t;
@@ -1331,10 +1374,12 @@ public final class FrameThread {
         }
         tasksSeen++;
         if (active) LockSupport.unpark(thread);
+        FrameCoop.mainEnter();
     }
 
     public static void tasksEnd() {
         mainTicking = false;
+        FrameCoop.mainLeave();
     }
 
     // ------------------------------------------------------------------ frames in the middle of a client tick
@@ -1385,6 +1430,7 @@ public final class FrameThread {
         if (idle()) ticksWhileIdle++;
         else ticksWhileFrameBusy++;
         if (active) LockSupport.unpark(thread);
+        FrameCoop.mainEnter();
     }
 
     /**
@@ -1398,6 +1444,7 @@ public final class FrameThread {
         long until = System.nanoTime() + (long) (TEST_TICK_MS * 1e6);
         while (System.nanoTime() < until) {
             pumpMotion();
+            FrameCoop.safepoint();
             Thread.onSpinWait();
         }
     }
@@ -1408,6 +1455,7 @@ public final class FrameThread {
         if (active && mc != null && Thread.currentThread() == mainThread) publishParticles();
         tickEndNs = System.nanoTime();
         inClientTick = false;   // (after the new tick end: the frames' partial tick starts from 0 again)
+        FrameCoop.mainLeave();
     }
 
     private static volatile boolean mainHolding;
@@ -1528,6 +1576,12 @@ public final class FrameThread {
             extraRunning = false;
             return false;
         }
+        boolean co = FrameCoop.frameEnter();
+        if (co && (taken != handed || borrowAsked || mainHolding || levelGone || !(self || mainTicking))) {   // (waited for the lock: a job, a hold or the tick's end came meanwhile)
+            FrameCoop.frameLeave(co);
+            extraRunning = false;
+            return false;
+        }
         drawGen = gen;
         long t0 = System.nanoTime();
         if (self) paced(t0, capInterval());
@@ -1549,6 +1603,7 @@ public final class FrameThread {
         } finally {
             extraNow = false;
             drawing = false;
+            FrameCoop.frameLeave(co);
         }
         extraFrames++;
         extraNs += System.nanoTime() - t0;
@@ -1672,6 +1727,7 @@ public final class FrameThread {
         long fr = Math.max(1, frames);
         b.append(pollGaps());
         b.append("; entities drawn at their last tick's end (mid-tick) ").append(midTickDraws);
+        b.append("; ").append(FrameCoop.stats()).append(", closes queued after their image's use ").append(deferredCloses);
         if (cpuMain0 >= 0 && thread != null) {
             var mx = java.lang.management.ManagementFactory.getThreadMXBean();
             double secs = (System.nanoTime() - cpuAt0) / 1e9;

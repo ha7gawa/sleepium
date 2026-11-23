@@ -29,7 +29,10 @@ import net.minecraft.client.gui.GuiGraphics;
 public final class Hud {
     private Hud() {}
 
-    static final String[] WIDGETS = {"fps", "graph", "stutters", "server", "gc", "threads", "memory", "mods", "sleep", "world"};
+    static final String[] WIDGETS = {"fps", "graph", "stutters", "server", "gc", "threads", "memory", "mods", "sleep", "world", "position", "system", "network", "clock"};
+    /** the HUD's size against the game's GUI scale (players asked for it, 11-23) */
+    static final float[] SCALES = {0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f};
+    static float scale = 1f;
     static final String[] CORNERS = {"off", "tl", "tr", "bl", "br"};
     private static final Map<String, String> CORNER = new LinkedHashMap<>();
     static int refreshMs = 250;
@@ -57,6 +60,7 @@ public final class Hud {
                 String k = line.substring(0, eq).trim(), v = line.substring(eq + 1).trim().toLowerCase(Locale.ROOT);
                 if (k.startsWith("hud.") && CORNER.containsKey(k.substring(4)) && java.util.Arrays.asList(CORNERS).contains(v)) CORNER.put(k.substring(4), v);
                 if (k.equals("hud.refreshMs")) refreshMs = Math.max(50, Math.min(2000, Integer.parseInt(v)));
+                if (k.equals("hud.scale")) scale = Math.max(0.25f, Math.min(4f, Float.parseFloat(v)));
             }
         } catch (Exception e) {
             System.out.println("[sleep/hud] " + f + ": " + e);
@@ -64,10 +68,11 @@ public final class Hud {
     }
 
     static synchronized void save() {
-        StringBuilder sb = new StringBuilder("# Sleepium's HUD: each widget's corner (off, tl, tr, bl, br) and how often it is redrawn.\n"
+        StringBuilder sb = new StringBuilder("# Sleepium's HUD: each widget's corner (off, tl, tr, bl, br), how often it is redrawn, its size (hud.scale).\n"
                 + "# The settings screen (Options -> Sleepium -> HUD) writes this file; a modpack may ship its own.\n");
         for (var e : CORNER.entrySet()) sb.append("hud.").append(e.getKey()).append('=').append(e.getValue()).append('\n');
         sb.append("hud.refreshMs=").append(refreshMs).append('\n');
+        sb.append("hud.scale=").append(scale).append('\n');
         try {
             Files.createDirectories(file().getParent());
             Files.writeString(file(), sb, StandardCharsets.UTF_8);
@@ -382,16 +387,29 @@ public final class Hud {
                 case "world" -> {
                     for (String s : SleepStats.world()) items.add(new Item(s, DIM));
                 }
+                case "position" -> {
+                    for (String s : HudInfo.position()) items.add(new Item(s, TEXT));
+                }
+                case "system" -> items.add(new Item(HudInfo.system(), DIM));
+                case "network" -> items.add(new Item(HudInfo.network(), DIM));
+                case "clock" -> items.add(new Item(HudInfo.clock(), DIM));
                 default -> {
                 }
             }
         }
         int top = dev.lull.shaders.ShaderPipeline.preparing() != null ? 14 : 2;
+        // the size: the corners laid out in a scaled space (the GUI's width / scale), drawn scaled; the boxes the texture
+        // keeps are in the GUI's own coordinates
+        float s = scale;
+        int gw = (int) (g.guiWidth() / s), gh = (int) (g.guiHeight() / s);
+        g.pose().pushPose();
+        g.pose().scale(s, s, 1f);
+        try {
         for (var e : byCorner.entrySet()) {
             List<Item> items = e.getValue();
             if (items.isEmpty()) continue;
             String c = e.getKey();
-            int w = 0, h = 0, max = Math.max(GRAPH_W, g.guiWidth() / 2 - 12);
+            int w = 0, h = 0, max = Math.max(GRAPH_W, gw / 2 - 12);
             for (int i = 0; i < items.size(); i++) {
                 Item it = items.get(i);
                 if (it.text() != null && font.width(it.text()) > max)
@@ -399,10 +417,10 @@ public final class Hud {
                 w = Math.max(w, it.text() == null ? GRAPH_W : font.width(it.text()));
                 h += it.text() == null ? GRAPH_H + 2 : 10;
             }
-            int x = c.endsWith("l") ? 4 : g.guiWidth() - 4 - w;
-            int y = c.startsWith("t") ? top + 2 : g.guiHeight() - 4 - h;
+            int x = c.endsWith("l") ? 4 : gw - 4 - w;
+            int y = c.startsWith("t") ? top + 2 : gh - 4 - h;
             g.fill(x - 3, y - 2, x + w + 3, y + h + 1, BOX);
-            rects.add(new int[] {x - 3, y - 2, x + w + 3, y + h + 1});
+            rects.add(new int[] {(int) Math.floor((x - 3) * s), (int) Math.floor((y - 2) * s), (int) Math.ceil((x + w + 3) * s), (int) Math.ceil((y + h + 1) * s)});
             for (Item it : items) {
                 if (it.text() == null) {
                     graph(g, x + (c.endsWith("r") ? w - GRAPH_W : 0), y);
@@ -412,6 +430,9 @@ public final class Hud {
                     y += 10;
                 }
             }
+        }
+        } finally {
+            g.pose().popPose();
         }
     }
 

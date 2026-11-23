@@ -139,6 +139,11 @@ public final class ParallelEntities {
      * instance of a living class (runs hold no living entity) - e.g. Immersive Engineering's onLivingUpdate (Player);
      * any other listener, or one whose code cannot be read (a lambda), counts as acting.
      */
+    /** ServerParallelItems: an EntityTickEvent listener would act on a dropped item (same analysis as the client's runs) */
+    static boolean tickListenersActing() {
+        return tickListeners();
+    }
+
     private static boolean tickListeners() {
         if (IGNORE_LISTENERS) return false;
         var bus = net.neoforged.neoforge.common.NeoForge.EVENT_BUS;

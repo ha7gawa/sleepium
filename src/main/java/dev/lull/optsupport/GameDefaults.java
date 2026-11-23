@@ -46,11 +46,34 @@ public final class GameDefaults {
         System.out.println("[sleep/opt] decoupled mode (lab.decoupled): " + n + " flags set");
     }
 
+    /**
+     * -Dlab.specTicks=true (1.3.6, exact): the server's entity ticks in parallel in one switch - SpecTicks (speculative
+     * ticks on the pool, each checked and committed in vanilla's order, undone and run again where they met; adaptive
+     * blocks: dense crowds tick plainly), the write barrier its transactions stand on, the item runs and the tracker's
+     * per-entity work on the pool (TrackPar). The world stays exactly vanilla's (production suites on four machines,
+     * notes/99). Each flag can still be given on its own (a given value wins).
+     */
+    private static void specPreset() {
+        if (!Boolean.getBoolean("lab.specTicks")) return;
+        String[] set = {"lab.opt.ServerParallelItemsMixin=true", "lab.opt.WriteBarrier=true", "lab.spec=true", "lab.spec.margin=0.3",
+                "lab.opt.TrackParMixin=true"};
+        int n = 0;
+        for (String kv : set) {
+            int eq = kv.indexOf('=');
+            if (System.getProperty(kv.substring(0, eq)) == null) {
+                System.setProperty(kv.substring(0, eq), kv.substring(eq + 1));
+                n++;
+            }
+        }
+        System.out.println("[sleep/opt] parallel entity ticks (lab.specTicks): " + n + " flags set");
+    }
+
     public static synchronized void ensure() {
         if (done) return;
         done = true;
         SleepConfig.load();   // the player's settings first: they win over the defaults
         decoupledPreset();
+        specPreset();
         try {
             defaults();
         } finally {

@@ -50,11 +50,11 @@ public abstract class EntitySectionIterMixin<T extends EntityAccess> {
         IndexedSection is = (IndexedSection) this;
         SectionIndex idx = is.sleep$index();
         Thread t = Thread.currentThread();
-        if (idx == null && is.sleep$key() != Long.MIN_VALUE && t == serverThread()) {
+        if (idx == null && is.sleep$key() != Long.MIN_VALUE && t == serverThread() && !dev.lull.optsupport.SpecTicks.running()) {
             idx = new SectionIndex(is.sleep$key());
             is.sleep$setIndex(idx);
         }
-        if (idx == null || idx.owner != t) return null;
+        if (idx == null || idx.owner != t || dev.lull.optsupport.SpecTicks.running()) return null;   // (a run: boxes move off the owner thread)
         if (INDEX_CHECK) sleep$check(idx, list, bounds);
         return idx.query(list, bounds, consumer);
     }
@@ -65,11 +65,11 @@ public abstract class EntitySectionIterMixin<T extends EntityAccess> {
         Class<?> base = test.getBaseClass();
         SectionIndex idx = is.sleep$typedIndex(base);
         Thread th = Thread.currentThread();
-        if (idx == null && is.sleep$key() != Long.MIN_VALUE && th == serverThread()) {
+        if (idx == null && is.sleep$key() != Long.MIN_VALUE && th == serverThread() && !dev.lull.optsupport.SpecTicks.running()) {
             idx = new SectionIndex(is.sleep$key());
             is.sleep$putTypedIndex(base, idx);
         }
-        if (idx == null || idx.owner != th) return null;
+        if (idx == null || idx.owner != th || dev.lull.optsupport.SpecTicks.running()) return null;
         if (INDEX_CHECK) sleep$checkTyped(idx, list, bounds, test);
         return idx.queryTyped(list, bounds, test, consumer);
     }

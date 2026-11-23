@@ -20,4 +20,10 @@ public abstract class NetReactorTickMixin {
     private void sleep$flush(BooleanSupplier hasTimeLeft, CallbackInfo ci) {
         NetReactor.onServerTick();
     }
+
+    /** NetFlushLater: the tick's batches leave where vanilla flushes ("send chunks", the end of tickChildren) */
+    @Inject(method = "tickChildren", at = @At("RETURN"))
+    private void sleep$childrenEnd(BooleanSupplier hasTimeLeft, CallbackInfo ci) {
+        NetReactor.onChildrenEnd();
+    }
 }

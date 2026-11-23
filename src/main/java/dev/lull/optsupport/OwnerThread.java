@@ -19,6 +19,8 @@ public final class OwnerThread {
         Thread t = Thread.currentThread();
         if (level.isClientSide()) return CLIENT_LOGIC && t == client;
         var server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
-        return server != null && t == server.getRunningThread();
+        // (SpecTicks: while a parallel run ticks, the server thread ticks run entities as one of its workers - no
+        // owner-thread caches then, they would see the run's ticks in no particular order)
+        return server != null && t == server.getRunningThread() && !SpecTicks.running();
     }
 }

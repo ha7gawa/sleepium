@@ -27,6 +27,12 @@ public final class SleepMod {
 
     public SleepMod(IEventBus modBus, net.neoforged.fml.ModContainer container) {
         IEventBus gameBus = NeoForge.EVENT_BUS;
+        // vanilla race (1.20.1 and 1.21.1): OctahedralGroup.rotate(Direction) publishes its lazily built rotatedDirections map before
+        // filling it, so a second worldgen thread rotating a jigsaw at the same time reads null (NPE in FrontAndTop: "Exception
+        // generating new chunk" on a fresh world; parallel structure generation makes it likely). Filled here once, on one
+        // thread: the same values vanilla computes, no race left (notes/91).
+        for (com.mojang.math.OctahedralGroup g : com.mojang.math.OctahedralGroup.values())
+            for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) g.rotate(d);
         // Which layer/loader owns the bus? Mixin can only transform classes of the GAME layer (TransformingClassLoader).
         LOGGER.info("sleep: bus class {} module {} loader {}; game class loader {}", gameBus.getClass().getName(),
                 gameBus.getClass().getModule(), gameBus.getClass().getClassLoader(),
@@ -37,6 +43,7 @@ public final class SleepMod {
         if (Boolean.getBoolean("lab.opt.ChunkSendPar")) dev.lull.optsupport.ChunkSendPar.register();   // A/B switch and counters with /sleep bots
         if (dev.lull.optsupport.TrackIndex.ON) dev.lull.optsupport.TrackIndex.register();   // A/B switch and counters with /sleep bots
         if (dev.lull.optsupport.TrackDeliver.ON) dev.lull.optsupport.TrackDeliver.register();   // A/B switch and counters with /sleep bots
+        if (dev.lull.optsupport.NetOrderVerify.ON) dev.lull.optsupport.NetOrderVerify.register();   // measurement only: the order check with /sleep bots measure
         // classes the game loads only while played, learned and preloaded in the background (lab.opt.ClassPreload)
         gameBus.addListener(net.neoforged.neoforge.event.server.ServerAboutToStartEvent.class, e -> dev.lull.optsupport.ClassPreload.preload());
         gameBus.addListener(net.neoforged.neoforge.event.server.ServerStartedEvent.class, e -> dev.lull.optsupport.ClassPreload.started());

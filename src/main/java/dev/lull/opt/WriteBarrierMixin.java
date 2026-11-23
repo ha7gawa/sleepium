@@ -9,6 +9,10 @@ import org.spongepowered.asm.mixin.Mixin;
  * applies it after every other mixin, so their merged handlers get the barrier too.
  */
 @Mixin(targets = {
+        "net.minecraft.network.syncher.SynchedEntityData",
+        "net.minecraft.network.syncher.SynchedEntityData$DataItem",
+        "net.minecraft.world.level.levelgen.MarsagliaPolarGaussian",
+        "net.minecraft.world.level.levelgen.LegacyRandomSource",
         "net.minecraft.network.protocol.game.VecDeltaCodec",
         "net.minecraft.server.level.ServerEntity",
         "net.minecraft.server.level.ServerLevel",
