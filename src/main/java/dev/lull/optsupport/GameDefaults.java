@@ -90,8 +90,9 @@ public final class GameDefaults {
         // the client's built non-exact parts (1.3.x research, the decoupled preset's frame-independent ones): no leaf faces
         // deep in canopies (N100 cutout -27 %), items' translucent layers in any order, living client entities ticked on
         // the workers, tick-rate poses (tolerance 0.1 block), the render cache's replays on the workers;
-        // -Dlab.fast.client=false keeps the client as it was
-        if (!"false".equals(System.getProperty("lab.fast.client")))
+        // -Dlab.fast.client=true only: measured as a set on the host (client_entities, no decoupled frames) it cost fps -
+        // 2050 / 2031 -> 1469 / 1298, CPU 2.2 -> 4.2 cores (built for the decoupled frame thread)
+        if (Boolean.getBoolean("lab.fast.client"))
             want.addAll(java.util.List.of("lab.leaves.cull=2", "lab.partbatch.itemsAnyOrder=true", "lab.pentities.living=true",
                     "lab.prender.tickPoses=true", "lab.prender.tickPoses.tolerance=0.1", "lab.prender.cachedOnWorkers=true"));
         String[] set = want.toArray(new String[0]);
