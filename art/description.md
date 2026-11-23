@@ -77,6 +77,16 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.4.1: Maximum speed on all your cores, a cores budget
+
+**Maximum speed** now uses every core but one (two in single-player): **30,000 pigs on an 8-core desktop 85 -> 50 ms
+a tick - 20 TPS**; it ticks in parallel in mixed worlds too (dropped items and arrows between mobs no longer cut the
+parallel batch) and carries less overhead. On 1.21.1 chunks at the view edge stay loaded a little longer, so moving
+along the edge no longer reloads and resends them.
+
+**A cores budget** (Options -> Sleepium... -> threads): how many worker threads the server, the client and the
+background work take - Auto or a number, with a summary of what each takes on your machine.
+
 ## New in 1.4.0: Maximum speed (experimental, not exact)
 
 **Maximum speed** (Options -> Sleepium... -> threads, off by default) is the first part of a mode that gives up

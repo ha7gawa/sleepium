@@ -4,6 +4,27 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.1 - 2026-11-23
+
+- **Maximum speed uses all your cores.** It ran on at most 4 worker threads, like the exact modes; now it takes every
+  core but one (two in single-player, where the game draws frames too). 30,000 pigs, server milliseconds per tick:
+  an 8-core desktop 85 -> 50 (20 TPS), a 4-core Xeon 118 -> 103. The cores budget below chooses another count.
+- **New: a cores budget** in Options -> Sleepium... -> threads: how many worker threads each of Sleepium's pools takes -
+  the server (parallel entity ticks, Maximum speed), the client (parallel rendering, client entities, particles) and
+  the background (world generation) - Auto or a number, with a summary of what each pool takes on your machine.
+  Applied at the next start.
+- **Maximum speed in mixed worlds.** Mobs were ticked in parallel only in long unbroken stretches of the tick order; a
+  dropped item, an arrow or a creeper between them cut the stretch. Now all the mobs it can take are gathered into one
+  parallel batch each tick, and the rest tick after them.
+- **Maximum speed: less overhead.** It no longer carries the exact mode's write tracking (-8 % of the parallel work with
+  30,000 pigs), and the level's random numbers come from a stream per thread instead of one stream behind a lock.
+- **Maximum speed on 1.21.1: chunks at the view edge stay loaded** a little longer (2 chunks past the view distance),
+  so walking or flying back and forth along the edge no longer unloads, saves, loads and resends the same chunks.
+  Server side only; works with vanilla clients.
+
+The exact modes are unchanged: the exactness suite stays identical to vanilla by default and with parallel entity
+ticks on.
+
 ## 1.4.0 - 2026-11-23
 
 **A note from the author:** for health reasons I'll be away for about a year - see the
