@@ -4,6 +4,35 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.3.6 - 2026-11-23
+
+**A note from the author:** for health reasons I'll be away for about a year - see the
+[README](https://github.com/ha7gawa/sleepium#a-note-from-the-author). Several more releases come out this week; if
+there's something you'd like to see in them, tell me in an issue or a comment in the next few days.
+
+- **New: parallel entity ticks (experimental, exact).** A new option in Options -> Sleepium... (threads): the server's
+  animals and monsters are ticked on worker threads. Every tick is checked and committed in vanilla's order, and a
+  tick that met another is undone and run again in turn, so the world stays exactly as vanilla's (checked with world
+  hashes on four machines - Intel, AMD and ARM - on both Minecraft versions). Crowded pens and farms tick the usual
+  way, because that's cheaper there. Not covered yet: villagers and other brain-driven mobs, modded entities. Off by
+  default; needs a restart. 30,000 pigs on a 4-core Xeon: 315 -> 192 ms a tick; 10,000 pigs on an Intel N100: 161 ->
+  116 ms.
+- **Decoupled frames with other mods.** The experimental Decoupled frames option now works with mods that expect
+  rendering and game ticks to run on one thread: with other mods installed, a frame is drawn at a safe point of the
+  tick instead of alongside it, so mods' render code never runs at the same time as their tick code; frames still
+  don't wait for a long tick to finish. Fixes `ConcurrentModificationException` crashes from mods' render handlers
+  (furnace_open) and `Image is not allocated` crashes from textures queued and freed before the frame used them.
+  Thanks to Topirh for testing it in large modpacks.
+- **HUD.** A Size setting (50-200 %) in Options -> Sleepium... -> HUD, and four new widgets for any corner: Position
+  (coordinates, facing, biome), System (CPU and RAM), Network (ping, packets) and Clock (game and real time).
+- **Faster:** mobs check whether they're stuck in a wall without scanning blocks when nothing solid is around them
+  (-4 % server tick time with 30,000 mobs); the mob movement memo backs off for mobs it rarely helps (the farm
+  slowdown of 1.3.5, +11 %, is down to about +3 %); a tick's packets leave in one batch at its end.
+- **Fixed:** a rare hang when creating a world (a race in parallel structure generation).
+
+Exactly vanilla: the exactness suite - 23 scenes identical to vanilla - on production servers with the released jars,
+both versions, by default and with parallel entity ticks on.
+
 ## 1.3.5 - 2026-11-22
 
 Servers with players, modded factories, chunk saving and world generation - and still exactly vanilla's game.
