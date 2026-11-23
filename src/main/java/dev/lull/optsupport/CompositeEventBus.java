@@ -190,7 +190,25 @@ public final class CompositeEventBus extends EventBus {
     /** posts that took the full path (somebody listens, or not known): MoveMemo's "no event with listeners" */
     public static long fullPosts;
 
+    /**
+     * lab.fast (Maximum speed): while mobs or items tick on the workers, a post somebody listens to runs under this one
+     * lock - mods' listeners (entity tick events, damage, effects ...) never run on two threads at once, the ticks
+     * around them stay parallel. Posts nobody listens to took the fast path above and never get here.
+     */
+    private static final Object RUN_POSTS = new Object();
+    public static long lockedPosts;
+
     private <T extends Event> T postFull(T event) {
+        if (SpecTicks.FAST && (SpecTicks.running() || ServerParallelItems.running())) {
+            synchronized (RUN_POSTS) {
+                lockedPosts++;
+                return postFull0(event);
+            }
+        }
+        return postFull0(event);
+    }
+
+    private <T extends Event> T postFull0(T event) {
         fullPosts++;
         // ParallelRender: a mod renderer posting an event somebody listens to (GeckoLib's GeoRenderEvent) from a worker job:
         // the listener must not run there; the job goes to the render thread and the type stays there
