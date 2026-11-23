@@ -1086,7 +1086,13 @@ public final class SpecTicks {
             for (int z = z0; z <= z1; z++) {
                 LevelChunk c = level.getChunkSource().getChunkNow(x, z);
                 if (c == null) continue;
-                for (int y = y0; y <= y1; y++) if (!c.getListenerRegistry(y).isEmpty()) return false;
+                // (not getListenerRegistry: it creates a missing registry in the chunk's map - a write from many threads;
+                // a missing one is an empty one to vanilla's dispatch)
+                var regs = ((dev.lull.opt.ServerParallelItemsChunkListenersAccessor) c).sleep$listenerSections();
+                for (int y = y0; y <= y1; y++) {
+                    var reg = regs.get(y);
+                    if (reg != null && !reg.isEmpty()) return false;
+                }
             }
         quietEvents++;
         return true;

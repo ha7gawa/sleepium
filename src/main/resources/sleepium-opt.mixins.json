@@ -25,6 +25,7 @@
     "PipeScoutGameMixin",
     "PipeScoutPlayerMixin",
     "ServerParallelItemsMixin",
+    "ServerParallelItemsChunkListenersAccessor",
     "ServerParallelItemsPushMixin",
     "ServerParallelItemsLevelRandomMixin",
     "ServerParallelItemsPickupMixin",
