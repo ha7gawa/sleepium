@@ -328,6 +328,13 @@ public final class SpecTicks {
      * interest (villagers, iron golems, bees) and creepers (explosions) tick the usual way.
      */
     public static final boolean FAST = Boolean.getBoolean("lab.fast");
+    /** lab.fast.aiLod=N (prototype): mobs far from players pick goals / sense every N-th tick (ServerParallelItemsAiLodMixin) */
+    public static final int AI_LOD = FAST ? Integer.getInteger("lab.fast.aiLod", 0) : 0;
+    public static volatile long aiLodSkips;
+    /** lab.fast: Sleepium's own random streams (FastRandom) for server entities and per thread for the level (-Dlab.fast.random=false: vanilla's, the level's behind a lock) */
+    public static final boolean FAST_RANDOM = FAST && !"false".equals(System.getProperty("lab.fast.random"));
+    /** lab.fast.entityRandom (off): server entities' own random as FastRandom too - no CAS per draw, but mob sleep cannot look ahead in it (it predicts vanilla's LCG) and refuses those mobs */
+    public static final boolean FAST_ENTITY_RANDOM = FAST_RANDOM && Boolean.getBoolean("lab.fast.entityRandom");
     /** -Dlab.fast.contact=true: lab.fast keeps touching mobs on one thread too (groups by contact, as exact mode does) */
     static final boolean FAST_CONTACT = Boolean.getBoolean("lab.fast.contact");
     public static final boolean EXACT = !Boolean.getBoolean("lab.spec.unsafe") && !FAST;
