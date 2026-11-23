@@ -74,13 +74,10 @@ public final class GameDefaults {
      */
     private static void fastPreset() {
         int cpus = Runtime.getRuntime().availableProcessors();
-        boolean client;   // (a game with its own client: the render thread keeps a core too)
-        try {
-            Class.forName("net.minecraft.client.Minecraft", false, GameDefaults.class.getClassLoader());
-            client = true;
-        } catch (Throwable t) {
-            client = false;
-        }
+        // (a game with its own client: the render thread keeps a core too) - asked as a resource, never loaded: loading
+        // Minecraft here (even uninitialised) loads its superclasses before the mixins are applied (1.4.1: a client with
+        // Maximum speed on stopped at start, MixinTargetAlreadyLoadedException on BlockableEventLoop)
+        boolean client = GameDefaults.class.getClassLoader().getResource("net/minecraft/client/Minecraft.class") != null;
         String[] set = {"lab.sreactor.threads=" + Math.max(1, cpus - (client ? 2 : 1))};
         java.util.List<String> applied = new java.util.ArrayList<>();
         for (String kv : set) {
