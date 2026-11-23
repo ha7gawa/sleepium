@@ -12,6 +12,7 @@
     "ServerParallelItemsChunkMapAccessor",
     "ServerParallelItemsPortalAccessor",
     "ServerParallelItemsPushMixin",
+    "ServerParallelItemsLevelRandomMixin",
     "ServerParallelItemsPickupMixin",
     "ServerParallelItemsMultiMapMixin",
     "ServerParallelItemsInBlockMixin",
