@@ -1305,6 +1305,11 @@ public final class SpecTicks {
     /** a new value per run: a worker's remembered chunks are good for one run only (chunks unload between ticks) */
     private static volatile long chunkEpoch;
 
+    /** a new value per run (FrozenGrid: a grid is good for its run) */
+    static long runEpoch() {
+        return chunkEpoch;
+    }
+
     public static LevelChunk chunk(ServerChunkCache cache, int x, int z, boolean require) {
         long key = ChunkPos.asLong(x, z);
         long[] lp = LAST_POS.get();
@@ -1372,8 +1377,8 @@ public final class SpecTicks {
                 dw, (nsParallel - lastPar) / 1e6 / dw, (nsPhase - lastPhase) / 1e6 / dw, (nsCommit - lastCommit) / 1e6 / dw, runs - lastRuns));
         lastPhase = nsPhase; lastCommit = nsCommit; lastPar = nsParallel; lastWalksPar = walksParallel; lastRuns = runs;
         if (FAST && fastBlocks > 0) {
-            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d, gathered %d; pushes summed %d (applied %d), moves in their section %d",
-                    fastBlocks, fastGroups, fastGroups / (double) fastBlocks, fastBlockSum / (double) fastBlocks, fastBigSum / (double) fastBlocks, fastMaxGroup, fastTargets, fastDeferredWorld, fastGathered, FastPush.pushes, FastPush.applied, sameSectionMoves));
+            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d, gathered %d; pushes summed %d (applied %d), moves in their section %d; frozen grids %d, queries %d, visited %d",
+                    fastBlocks, fastGroups, fastGroups / (double) fastBlocks, fastBlockSum / (double) fastBlocks, fastBigSum / (double) fastBlocks, fastMaxGroup, fastTargets, fastDeferredWorld, fastGathered, FastPush.pushes, FastPush.applied, sameSectionMoves, FrozenGrid.builds, FrozenGrid.queries, FrozenGrid.visited));
             fastMaxGroup = 0;
         }
         System.out.println(String.format(java.util.Locale.ROOT,
