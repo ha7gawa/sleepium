@@ -112,7 +112,19 @@ public final class MoveMemo {
         int attrEpoch, dataEpoch;
         long collidableEpoch = -1;
         double border0, border1, border2, border3;
+        // back-off (lab.movememo.backoff): misses in a row, and ticks left with no try (vanilla's move, no key taken)
+        int missRun, skip;
+        boolean recordedLast;   // the last try recorded (a back-off only after a try that had a record to hit)
     }
+
+    /**
+     * -Dlab.movememo.backoff (default true): a mob whose tries keep missing (a moving herd: dense farms were 4-9 % slower
+     * with the memo, 11-22) stops taking the key for a while - after BACKOFF_AFTER misses in a row it skips 2, 4, ... 64
+     * moves, then tries again (a hit resets it). A skipped move is vanilla's move: nothing to check for exactness.
+     */
+    static final boolean BACKOFF = !"false".equals(System.getProperty("lab.movememo.backoff"));
+    static final int BACKOFF_AFTER = Integer.getInteger("lab.movememo.backoffAfter", 3);
+    public static long backoffSkips;
 
     private static final Map<Class<?>, K> KINDS = new HashMap<>();
     /** MoveMemoMixin: the entity's record, on the entity itself (gone with it) */
@@ -154,6 +166,12 @@ public final class MoveMemo {
         if (k.refuse != null) return false;
         S s = (S) ((Holder) e).sleep$moveMemo();
         if (s == null) ((Holder) e).sleep$setMoveMemo(s = new S());
+        if (BACKOFF && s.skip > 0) {
+            s.skip--;
+            s.valid = false;
+            backoffSkips++;
+            return false;
+        }
         if (s.before == null) s.before = new long[k.f.length];
         k.snap.snap(e, s.before);
         if (s.valid && type == s.type && v.x == s.mx && v.y == s.my && v.z == s.mz && attrEpoch(e) == s.attrEpoch && dataEpoch(e) == s.dataEpoch && sameKey(k, s.before, s.key)
@@ -163,8 +181,10 @@ public final class MoveMemo {
                 verified++;
                 return false;   // the real move runs; after() compares
             }
+            if (dev.lull.optsupport.SpecTicks.ON && WB.TX) SpecTx.touch(e);   // (written past the barrier: the transaction copies the entity first; SpecTicks.ON first - WB needs the barrier)
             for (int i : s.diff) k.snap.put(e, i, s.after[i], s.afterRefs[i]);
             hits++;
+            s.missRun = 0;
             if (DIAG) {
                 tHit += System.nanoTime() - tStart;
                 nHit++;
@@ -189,6 +209,12 @@ public final class MoveMemo {
             MISS.computeIfAbsent(why, x -> new long[1])[0]++;
         }
         s.valid = false;
+        if (BACKOFF && ++s.missRun >= BACKOFF_AFTER && s.recordedLast) {
+            s.skip = 1 << Math.min(6, s.missRun - BACKOFF_AFTER + 1);   // 2, 4, ... 64 moves without a try
+            s.recordedLast = false;   // (the next try records, the one after may hit)
+            return false;
+        }
+        s.recordedLast = true;
         recording = e;
         s.type = type;
         s.mx = v.x;

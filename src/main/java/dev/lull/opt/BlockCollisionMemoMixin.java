@@ -104,7 +104,9 @@ public abstract class BlockCollisionMemoMixin implements CollisionGetter {
         }
         java.util.Optional<net.minecraft.core.BlockPos> r;
         r = null;
+        // (the server's kernel is the owner thread's; in SpecTicks' runs every thread takes its own - CollideKernel.specRun)
         if (dev.lull.optsupport.CollideKernel.SUPPORT && dev.lull.optsupport.CollideKernel.usable()
+                && (isClientSide() || BlockCollisionMemo.usable((Level) (Object) this) || dev.lull.optsupport.CollideKernel.specRun((Level) (Object) this))
                 && (r = dev.lull.optsupport.CollideKernel.of((Level) (Object) this).support(entity, box, (Level) (Object) this)) != null) {
             // the kernel's walk over the same blocks (BlockCollisions' cursor, checks, shapes): the nearest one, no iterator
             if (dev.lull.optsupport.CollideKernel.CHECK) {

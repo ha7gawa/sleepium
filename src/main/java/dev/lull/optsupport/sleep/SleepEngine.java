@@ -937,6 +937,10 @@ public final class SleepEngine {
     static final java.util.Set<String> TEST_DROP = java.util.Set.of(System.getProperty("sleep.test.dropWakes", "").split(","));
 
     public static void onPos(Level level, BlockPos pos, String reason) {
+        if (dev.lull.optsupport.ServerParallelItems.running()) {   // (a parallel item run: in the run's order after it)
+            BlockPos at = pos.immutable();
+            if (dev.lull.optsupport.ServerParallelItems.defer(() -> onPos(level, at, reason))) return;
+        }
         if (TEST_DROP.contains(reason)) return;
         if (TEST_BYPASS.size() > 1 || !TEST_BYPASS.contains("")) {
             if (("container".equals(reason) || "changed".equals(reason)) && level != null) {
@@ -957,6 +961,8 @@ public final class SleepEngine {
     /** An entity moved, appeared, changed its item or was removed: wake sleepers whose read boxes it touches. */
     public static void onEntity(Entity e, String reason) {
         AABB bb = e.getBoundingBox();
+        if (dev.lull.optsupport.ServerParallelItems.running()
+                && dev.lull.optsupport.ServerParallelItems.defer(() -> onEntity(e, reason, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ))) return;
         onEntity(e, reason, bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ);
     }
 
@@ -966,7 +972,8 @@ public final class SleepEngine {
      * position change saw the old one, and a boat stopping in a sleeping item's box never woke it).
      */
     public static void onMove(Entity e, AABB from, AABB to) {
-        if (from.equals(to)) return;   // the same box set again (a position packet with the place it had): nothing any box query sees moved
+        if (from.equals(to)) return;
+        if (dev.lull.optsupport.ServerParallelItems.running() && dev.lull.optsupport.ServerParallelItems.defer(() -> onMove(e, from, to))) return;   // the same box set again (a position packet with the place it had): nothing any box query sees moved
         double ax = Math.min(from.minX, to.minX), ay = Math.min(from.minY, to.minY), az = Math.min(from.minZ, to.minZ),
                 bx = Math.max(from.maxX, to.maxX), by = Math.max(from.maxY, to.maxY), bz = Math.max(from.maxZ, to.maxZ);
         // A move changes which entities are in the boxes that meet the old box or the new one, nothing else: both boxes
