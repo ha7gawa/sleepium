@@ -318,7 +318,7 @@ public final class ServerParallelItems {
             var pool = ServerReactor.pool();
             for (IntArrayList l : byLevel) {
                 if (l == null) continue;
-                pool.forRange(l.size(), 8, pool.workerCount(), q -> {
+                pool.forRange(l.size(), 8, pool.workerCount(), SpecTicks.job(q -> {
                     int k = l.getInt(q);
                     int[] cur = CUR.get();
                     cur[0] = k;
@@ -327,7 +327,7 @@ public final class ServerParallelItems {
                     } finally {
                         cur[0] = -1;
                     }
-                });
+                }));
             }
         } finally {
             running = false;
@@ -357,6 +357,11 @@ public final class ServerParallelItems {
 
     public static boolean inRun() {
         return running;
+    }
+
+    /** this thread runs an items job of a run (SpecTicks.job marks it): only these threads' chunk lookups are served from CHUNKS */
+    public static boolean inJob() {
+        return running && SpecTicks.jobThread();
     }
 
     public static boolean running() {
