@@ -16,6 +16,27 @@ Thank you to everyone who tested it, reported crashes and sent ideas, especially
 
 See you, hopefully in a year.
 
+## Forks, ports and reuse
+
+You're welcome to fork Sleepium, port it to other Minecraft versions (backports and newer versions alike) or loaders,
+and publish your build on CurseForge, Modrinth or anywhere else. It's under LGPL-3.0, which allows all of this. What the
+licence asks in return:
+
+- keep your changed source open under LGPL-3.0, with the licence files (`LICENSE` and `COPYING`) included;
+- say that your version is modified, and keep the existing copyright notices.
+
+A few requests on top, so players can tell builds apart:
+
+- **Name it as unofficial**, for example "Sleepium (unofficial 1.21.4 port)", and link back to this repository.
+- **Change something.** Platforms don't allow plain re-uploads of someone else's mod; link to the official pages
+  instead.
+- **Mod id:** a straight port to another Minecraft version can keep `sleepium` (configs and packs keep working); a fork
+  with different features should use its own id.
+- **Exactness:** Sleepium's promise is that it changes nothing the game computes. Please call your build exact only if
+  it passes the exactness checks - the tools are in this repository (`tools/suite.py`, `tools/box_suite.py`).
+
+If you'd like to look after the official project while I'm away, open an issue and say so.
+
 ---
 
 A performance engine for modded Minecraft that changes nothing the game computes. Every optimisation is checked
