@@ -27,6 +27,12 @@ public abstract class ServerParallelItemsPathMixin {
         }
     }
 
+    /** lab.fast.pathMemo: a block's path type dropped from every thread's memory too */
+    @Inject(method = "invalidate", at = @At("HEAD"))
+    private void sleep$memoInvalidate(BlockPos pos, CallbackInfo ci) {
+        if (dev.lull.optsupport.SpecTicks.PATH_MEMO) dev.lull.optsupport.SpecTicks.pathInvalidate(positions, pos.asLong());
+    }
+
     @org.spongepowered.asm.mixin.injection.ModifyConstant(method = "index", constant = @org.spongepowered.asm.mixin.injection.Constant(intValue = 4095))
     private static int sleep$fastMask(int mask) {
         return dev.lull.optsupport.SpecTicks.PATH_MASK;

@@ -63,6 +63,18 @@ public final class SpecTicks {
         final long[] lastPos = {Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, Long.MIN_VALUE, 0, -1};
         Long2ObjectOpenHashMap<PathType> overlay;
 
+        /** per level (the path cache's positions array): this thread's path types across runs (lab.fast.pathMemo) */
+        final java.util.IdentityHashMap<long[], Long2ObjectOpenHashMap<PathType>> memos = new java.util.IdentityHashMap<>();
+
+        Long2ObjectOpenHashMap<PathType> memo(long[] cache) {
+            Long2ObjectOpenHashMap<PathType> m = memos.get(cache);
+            if (m == null) {
+                memos.put(cache, m = new Long2ObjectOpenHashMap<>(4096));
+                LOCALS.add(this);
+            }
+            return m;
+        }
+
         Long2ObjectOpenHashMap<PathType> overlay() {
             Long2ObjectOpenHashMap<PathType> m = overlay;
             if (m == null) {
@@ -74,6 +86,21 @@ public final class SpecTicks {
     }
 
     private static final ThreadLocal<Local> LOCAL = ThreadLocal.withInitial(Local::new);
+    /** the threads' states holding path memories (invalidated on the server thread with vanilla's cache) */
+    private static final java.util.Set<Local> LOCALS = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** lab.fast.pathMemo (on with lab.fast): path types kept per thread across runs, dropped where vanilla's cache drops one */
+    public static final boolean PATH_MEMO = Boolean.getBoolean("lab.fast") && Boolean.getBoolean("lab.fast.pathMemo");   // (opt-in: host pigs30k 36.9 / 41.4 vs 36.4 / 36.8 ms with 279 M hits - no gain)
+    static final int PATH_MEMO_MAX = Integer.getInteger("lab.fast.pathMemo.max", 1 << 16);
+    static long memoHits, memoDrops;
+
+    /** PathTypeCache.invalidate (the server thread: a block changed; runs' writes are applied after them): every thread's memory of it */
+    public static void pathInvalidate(long[] cache, long key) {
+        if (!PATH_MEMO) return;
+        for (Local lo : LOCALS) {
+            Long2ObjectOpenHashMap<PathType> m = lo.memos.get(cache);
+            if (m != null && m.remove(key) != null) memoDrops++;
+        }
+    }
 
     static Local local() {
         if (Thread.currentThread() instanceof dev.lab.runtime.LabRuntime.LabThread t) {
@@ -1471,7 +1498,20 @@ public final class SpecTicks {
             return t;
         }
         long key = pos.asLong();
-        Long2ObjectOpenHashMap<PathType> ov = local().overlay();
+        Local lo = local();
+        if (PATH_MEMO) {   // (lab.fast: this thread's memory of the level's path types, across runs - PathMemo)
+            Long2ObjectOpenHashMap<PathType> memo = lo.memo(positions);
+            PathType t = memo.get(key);
+            if (t != null) {
+                memoHits++;
+                return t;
+            }
+            t = dev.lull.opt.ServerParallelItemsWalkInvoker.sleep$pathTypeFromState(level, pos);
+            if (memo.size() >= PATH_MEMO_MAX) memo.clear();
+            memo.put(key, t);
+            return t;
+        }
+        Long2ObjectOpenHashMap<PathType> ov = lo.overlay();
         PathType t = ov.get(key);
         if (t != null) return t;
         int idx = (int) it.unimi.dsi.fastutil.HashCommon.mix(key) & PATH_MASK;
@@ -1525,8 +1565,8 @@ public final class SpecTicks {
                 dw, (nsParallel - lastPar) / 1e6 / dw, (nsPhase - lastPhase) / 1e6 / dw, (nsCommit - lastCommit) / 1e6 / dw, runs - lastRuns));
         lastPhase = nsPhase; lastCommit = nsCommit; lastPar = nsParallel; lastWalksPar = walksParallel; lastRuns = runs;
         if (FAST && fastBlocks > 0) {
-            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d, gathered %d; pushes summed %d (applied %d), moves in their section %d; frozen grids %d, queries %d, visited %d; paths %.1f a tick, denied %.1f a tick",
-                    fastBlocks, fastGroups, fastGroups / (double) fastBlocks, fastBlockSum / (double) fastBlocks, fastBigSum / (double) fastBlocks, fastMaxGroup, fastTargets, fastDeferredWorld, fastGathered, FastPush.pushes, FastPush.applied, sameSectionMoves, FrozenGrid.builds, FrozenGrid.queries, FrozenGrid.visited, pathsMade / (double) Math.max(1, pathTicks), pathsDenied / (double) Math.max(1, pathTicks)));
+            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d, gathered %d; pushes summed %d (applied %d), moves in their section %d; frozen grids %d, queries %d, visited %d; paths %.1f a tick, denied %.1f a tick; path memo hits %d, drops %d",
+                    fastBlocks, fastGroups, fastGroups / (double) fastBlocks, fastBlockSum / (double) fastBlocks, fastBigSum / (double) fastBlocks, fastMaxGroup, fastTargets, fastDeferredWorld, fastGathered, FastPush.pushes, FastPush.applied, sameSectionMoves, FrozenGrid.builds, FrozenGrid.queries, FrozenGrid.visited, pathsMade / (double) Math.max(1, pathTicks), pathsDenied / (double) Math.max(1, pathTicks), memoHits, memoDrops));
             fastMaxGroup = 0;
         }
         System.out.println(String.format(java.util.Locale.ROOT,
