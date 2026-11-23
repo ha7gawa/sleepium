@@ -19,6 +19,53 @@ public final class CollisionMask {
 
     private CollisionMask() {}
 
+    public static long clearHits, clearMisses;
+
+    /**
+     * every block cell of box (BlockPos.betweenClosedStream's cells: floor of each bound, inclusive) lies in a loaded
+     * chunk section whose current mask has its bit clear - a state that never collides. The owner thread may build a
+     * mask; any other thread takes one only if current (InWallMaskMixin).
+     */
+    public static boolean allClear(net.minecraft.world.level.Level level, net.minecraft.world.phys.AABB box) {
+        if (!usable()) return false;
+        int x0 = net.minecraft.util.Mth.floor(box.minX), y0 = net.minecraft.util.Mth.floor(box.minY), z0 = net.minecraft.util.Mth.floor(box.minZ);
+        int x1 = net.minecraft.util.Mth.floor(box.maxX), y1 = net.minecraft.util.Mth.floor(box.maxY), z1 = net.minecraft.util.Mth.floor(box.maxZ);
+        boolean own = OwnerThread.owns(level);
+        for (int cx = x0 >> 4; cx <= x1 >> 4; cx++)
+            for (int cz = z0 >> 4; cz <= z1 >> 4; cz++) {
+                net.minecraft.world.level.chunk.LevelChunk c = level.getChunkSource().getChunkNow(cx, cz);
+                if (c == null) {
+                    clearMisses++;
+                    return false;
+                }
+                for (int sy = y0 >> 4; sy <= y1 >> 4; sy++) {
+                    int idx = c.getSectionIndexFromSectionY(sy);
+                    if (idx < 0 || idx >= c.getSections().length) {   // (outside the build height: vanilla reads air there - no collision)
+                        continue;
+                    }
+                    LevelChunkSection s = c.getSection(idx);
+                    long[] m = s instanceof Holder h ? (own ? h.sleep$mask() : h.sleep$maskIfCurrent()) : null;
+                    if (m == null) {
+                        clearMisses++;
+                        return false;
+                    }
+                    int ya = Math.max(y0, sy << 4), yb = Math.min(y1, (sy << 4) + 15);
+                    int xa = Math.max(x0, cx << 4), xb = Math.min(x1, (cx << 4) + 15), za = Math.max(z0, cz << 4), zb = Math.min(z1, (cz << 4) + 15);
+                    for (int y = ya; y <= yb; y++)
+                        for (int z = za; z <= zb; z++)
+                            for (int x = xa; x <= xb; x++) {
+                                int b = (y & 15) << 8 | (z & 15) << 4 | (x & 15);
+                                if ((m[b >>> 6] & 1L << b) != 0) {
+                                    clearMisses++;
+                                    return false;
+                                }
+                            }
+                }
+            }
+        clearHits++;
+        return true;
+    }
+
     /** A chunk section's mask (SectionModCountMixin), current for its contents. */
     public interface Holder {
         long[] sleep$mask();

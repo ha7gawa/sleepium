@@ -7,6 +7,7 @@
   "overwrites": { "conformVisibility": true },
   "refmap": "sleepium.refmap.json",
   "mixins": [
+    "InWallMaskMixin",
     "ServerParallelItemsMixin",
     "ServerParallelItemsChunkMapAccessor",
     "ServerParallelItemsPortalAccessor",
