@@ -13,6 +13,7 @@
     "ServerParallelItemsChunkMapAccessor",
     "ServerParallelItemsPortalAccessor",
     "ServerParallelItemsPushMixin",
+    "ServerParallelItemsRaidMixin",
     "ServerParallelItemsPoiLockMixin",
     "ServerParallelItemsReputationMixin",
     "ServerParallelItemsCreeperMixin",

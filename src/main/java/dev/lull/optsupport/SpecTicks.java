@@ -325,7 +325,7 @@ public final class SpecTicks {
     static boolean kindOk(Entity e) {
         if (e instanceof Animal) return true;
         if (!MONSTERS || !(e instanceof net.minecraft.world.entity.Mob)) return false;
-        return !(e instanceof net.minecraft.world.entity.raid.Raider) && !(e instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon)
+        return (FAST || !(e instanceof net.minecraft.world.entity.raid.Raider)) && !(e instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon)   // (lab.fast: raiders too - their raid's writes wait for the run's end)
                 && !(e instanceof net.minecraft.world.entity.boss.wither.WitherBoss) && !(e instanceof net.minecraft.world.entity.monster.Shulker);
     }
 
