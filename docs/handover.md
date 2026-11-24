@@ -117,6 +117,11 @@ reporter): the reporter's whole-screen black frame with the HUD (their test A) w
   changed for N ticks" instead. Ticking mods' machines on several threads is not an option: Create, AE2 and Mekanism
   keep shared networks (see "Tried and dropped").
 - Natural spawning is still serial inside the chunk ticks (random ticks are parallel since 1.4.6).
+- With Lithium (1.21.1), Canary or Radium (1.20.1), Maximum speed runs without its parallel passes. These mods
+  overwrite `ServerChunkCache.getChunk`, `PoiManager` queries, `ClassInstanceMultiMap.find` and `Raid.updateBossbar`, so
+  the hooks the parallel passes depend on give way (MixinYield), and since 1.4.7 the passes stay serial instead of
+  hanging (`HookFlags`). To get the parallelism back, those hooks need places these mods do not overwrite (for chunks,
+  `Level.getChunk(int, int, ChunkStatus, boolean)` is a candidate), then the same 100-bot checks.
 - The path budget (`lab.fast.pathBudget=N`) is built and off. At 32: 30k pigs 39.2 -> 33.4 ms a tick, but strolls are
   2-4x rarer. Whether that is acceptable is a design decision, not a measurement.
 - The client side of Maximum speed (`lab.fast.client`) costs frames until frames are decoupled from the client tick:
