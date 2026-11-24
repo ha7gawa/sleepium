@@ -1,6 +1,7 @@
 {
   "homepage": "https://modrinth.com/mod/sleepium",
   "1.21.1": {
+    "1.4.6": "Maximum speed: chunk ticks in parallel (100 players: 30.3 -> 25.6 ms a tick); fixes: server stop with /debug or /perf, a mob at the loaded edge (both Maximum speed); quieter #11 refusals, passive glTrace.",
     "1.4.5": "Fix: flicker / stray textures / dark frames with mods drawing into the game's buffers (#11); Maximum speed: raiders in parallel (witch / raid farms 5.8 -> 1.7 ms); an opt-in switch for mods' mobs.",
     "1.4.4": "Maximum speed: villagers and iron golems on all threads (farm 29 -> 22 ms), creepers in parallel, items stay parallel.",
     "1.4.3": "Fix: parallel ticks / Maximum speed could stop a server during world generation; Maximum speed works with mods' tick listeners; crowds faster (pens 41 -> 25 ms).",
@@ -39,12 +40,13 @@
     "1.0.0": "The first public release."
   },
   "promos": {
-    "1.21.1-latest": "1.4.5",
-    "1.21.1-recommended": "1.4.5",
-    "1.20.1-latest": "1.4.5",
-    "1.20.1-recommended": "1.4.5"
+    "1.21.1-latest": "1.4.6",
+    "1.21.1-recommended": "1.4.6",
+    "1.20.1-latest": "1.4.6",
+    "1.20.1-recommended": "1.4.6"
   },
   "1.20.1": {
+    "1.4.6": "Maximum speed: chunk ticks in parallel (100 players: 30.3 -> 25.6 ms a tick); fixes: server stop with /debug or /perf, a mob at the loaded edge (both Maximum speed); quieter #11 refusals, passive glTrace.",
     "1.4.5": "Fix: flicker / stray textures / dark frames with mods drawing into the game's buffers (#11); Maximum speed: raiders in parallel (witch / raid farms 5.8 -> 1.7 ms); an opt-in switch for mods' mobs.",
     "1.4.4": "Maximum speed: villagers and iron golems on all threads (farm 29 -> 22 ms), creepers in parallel, items stay parallel.",
     "1.4.3": "Fix: parallel ticks / Maximum speed could stop a server during world generation; Maximum speed works with mods' tick listeners; crowds faster (pens 41 -> 25 ms).",

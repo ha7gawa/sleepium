@@ -4,6 +4,22 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.6 - 2026-11-24
+
+- **Maximum speed: chunk ticks in parallel.** Random ticks (crops, grass, leaves and the like), snow, ice and lightning
+  are worked out for all ticking chunks at once on the worker threads; the block changes, spawns, sounds and neighbour
+  updates they make are applied right after, in order. Mods' blocks keep their random ticks on the server thread.
+  100 players moving around a normal world: 30.3 -> 25.6 ms a tick on 1.21.1 (about 7 % less on 1.20.1).
+- **Fixed (Maximum speed): the server stopped when the game's profiler was on** (`/debug start`, `/perf start`).
+- **Fixed (Maximum speed): the server could stop when a mob at the edge of the loaded area wandered towards an
+  unloaded chunk.** For that mob's tick the unloaded chunk now counts as empty.
+- **Issue #11 follow-ups:** when a mod draws into the game's own buffers from a render worker, the work still moves to
+  the render thread, but without an error and a stack trace in the log; `-Dsleep.glTrace` now only reads and reports
+  by default (its retries need `-Dsleep.glTrace.retry=true`).
+
+The exact modes are unchanged: the exactness checks stay identical to vanilla by default and with parallel entity ticks
+on.
+
 ## 1.4.5 - 2026-11-24
 
 - **Fixed: flicker, stray stretched textures and dark frames with some mods (issue #11).** A mod that draws in an
