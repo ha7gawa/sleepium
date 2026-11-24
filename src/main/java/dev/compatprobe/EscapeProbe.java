@@ -18,6 +18,7 @@ public final class EscapeProbe {
     public static long lines;
     static final boolean CACHED = Boolean.getBoolean("sleep.test.escape.cached");
     static final boolean GOOD = Boolean.getBoolean("sleep.test.escape.good");
+    static final boolean BADQUAD = Boolean.getBoolean("sleep.test.escape.badquad");
 
     /** a small quad above the entity (the good listener's drawing: a format the cache records) */
     static void quad(VertexConsumer b, PoseStack.Pose p, int light) {
@@ -32,6 +33,11 @@ public final class EscapeProbe {
             // (-Dsleep.test.escape.cached=true: the source kept from the first event on, as a mod holding it in a field)
             if (CACHED && held == null) held = Minecraft.getInstance().renderBuffers().bufferSource();
             // (.good=true: into the event's own source - a well-behaved listener)
+            if (BADQUAD) {   // (.badquad=true: a quad into the game's own source - escaping, but a type the cache records)
+                quad(Minecraft.getInstance().renderBuffers().bufferSource().getBuffer(RenderType.entityCutoutNoCull(net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS)), e.getPoseStack().last(), e.getPackedLight());
+                lines++;
+                return;
+            }
             VertexConsumer buf = GOOD ? e.getMultiBufferSource().getBuffer(RenderType.entityCutoutNoCull(net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS))
                     : (CACHED ? held : Minecraft.getInstance().renderBuffers().bufferSource()).getBuffer(RenderType.lines());
             if (GOOD) {

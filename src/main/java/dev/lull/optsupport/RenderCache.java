@@ -420,6 +420,33 @@ public final class RenderCache {
 
     /** issue #11: recordings a renderer wrote past (into the frame's own buffers) - its class then goes the safe way */
     public static long escapes, rollbackMisses;
+    /** issue #11: listener requests for the frame's own buffers answered by the recording / not recordable */
+    public static long listenerRecorded, listenerUnrecordable;
+
+    /** a sink for the writes of a type the recording cannot hold */
+    static final VertexConsumer NOWHERE = new VertexConsumer() {
+        @Override public VertexConsumer vertex(double x, double y, double z) { return this; }
+        @Override public VertexConsumer color(int r, int g, int b, int a) { return this; }
+        @Override public VertexConsumer uv(float u, float v) { return this; }
+        @Override public VertexConsumer overlayCoords(int u, int v) { return this; }
+        @Override public VertexConsumer uv2(int u, int v) { return this; }
+        @Override public VertexConsumer normal(float x, float y, float z) { return this; }
+        @Override public void endVertex() {}
+        @Override public void defaultColor(int r, int g, int b, int a) {}
+        @Override public void unsetDefaultColor() {}
+    };
+
+    /** BufferSourceListenerMixin: a listener's request for the frame's source during a recording (null: as it is) */
+    public static VertexConsumer listenerBuffer(MultiBufferSource.BufferSource src, RenderType type) {
+        if (recordDepth == 0 || src != Minecraft.getInstance().renderBuffers().bufferSource()) return null;
+        if ((type.mode() != VertexFormat.Mode.QUADS && type.mode() != VertexFormat.Mode.TRIANGLES) || !formatSupported(type.format())) {
+            listenerUnrecordable++;
+            RECORDER.unsupported = true;   // (the object is drawn the vanilla way: the listener draws for real then)
+            return NOWHERE;
+        }
+        listenerRecorded++;
+        return RECORDER.getBuffer(type);
+    }
 
     /** issue #11 fallback: a renderer the cache could not record whole is drawn the vanilla way - said in the mod report and once in the chat */
     private static boolean safeModeSaid;
@@ -450,10 +477,13 @@ public final class RenderCache {
         PoseStack ps = recordDepth == 0 ? LOCAL : new PoseStack();
         ps.setIdentity();
         recordDepth++;
+        Thread was = ListenerScope.recording;
+        ListenerScope.recording = Thread.currentThread();
         try {
             d.draw(ps, RECORDER, pt);
         } finally {
             recordDepth--;
+            ListenerScope.recording = was;
         }
         if (realVerticesTimed() != before) {
             // it wrote past the recorder (issue #11): those vertices are in the recording's space - taken back out of
@@ -1018,7 +1048,7 @@ public final class RenderCache {
                 .forEach(e -> sb.append("render cache not resident: ").append(e.getValue()[0]).append("x ").append(e.getKey()).append('\n'));
         if (WHY_GENERIC) GENERIC_WHY.forEach((k, v) -> sb.append("render cache per-vertex way: ").append(v[0]).append("x ").append(k.length() > 200 ? k.substring(0, 200) : k).append('\n'));
         sb.append(String.format(java.util.Locale.ROOT,
-                "render cache: hits %d, records %d, animated %d, empty %d, unsupported %d (escapes " + escapes + ", not taken back " + rollbackMisses + "), vanilla %d, deferred to next frames %d, replayed vertices %d%s%s", hits, records,
+                "render cache: hits %d, records %d, animated %d, empty %d, unsupported %d (escapes " + escapes + ", listener writes recorded " + listenerRecorded + ", not recordable " + listenerUnrecordable + "), vanilla %d, deferred to next frames %d, replayed vertices %d%s%s", hits, records,
                 animated, empty, unsupported, vanilla, deferred, replayedVertices, VERIFY ? ", verified " + verified + ", mismatches " + mismatches : "",
                 StateHash.LEARN ? ", same after a state change " + sameAfterChange + ", fields left out " + StateHash.learned : ""));
         if (TIME && tFrames > 0) {

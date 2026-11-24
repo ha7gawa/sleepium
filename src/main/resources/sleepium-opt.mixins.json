@@ -366,6 +366,7 @@
     "CompositeRenderTypeAccessor",
     "CompositeStateAccessor",
     "RenderCacheMixin",
+    "BufferSourceListenerMixin",
     "RenderCacheBlockEntityMixin",
     "RenderCacheClockMixin",
     "RenderCallJournalMixin",
