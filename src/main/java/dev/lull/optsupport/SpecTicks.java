@@ -1249,6 +1249,148 @@ public final class SpecTicks {
         nsCommit += System.nanoTime() - t1;
     }
 
+    // ------------------------------------------------------------------ lab.fast: chunk ticks in parallel
+
+    /**
+     * lab.fast (-Dlab.fast.chunkTicks=false: serial): ServerLevel.tickChunk - thunder, ice and snow, random ticks - for all
+     * ticking chunks on the pool after the spawning walk instead of chunk by chunk inside it. Each chunk is a walk index:
+     * its world writes, spawns, effects, neighbour updates and scheduled ticks are kept and done at the pass's end in
+     * the chunks' order (reads see the world as it was before the pass); mods' blocks' random ticks are kept whole and
+     * done there too (their code may use the mod's own state). A chunk whose tick throws on the pool is done again
+     * serially, its kept work dropped.
+     */
+    public static volatile boolean chunkTicks = FAST && !"false".equals(System.getProperty("lab.fast.chunkTicks"));
+    private static LevelChunk[] ctChunks = new LevelChunk[256];
+    private static boolean[] ctFailed = new boolean[256];
+    private static int ctN, ctSpeed;
+    private static ServerLevel ctLevel;
+    static long ctPasses, ctTicked, ctRedone, ctModTicks, ctNs, fastEmptyChunks;
+
+    static {
+        if (FAST) dev.lull.bots.BotLoad.AB.put("chunkTicks", v -> chunkTicks = v);
+    }
+
+    /** ServerParallelItemsChunkTicksMixin: the chunk's tickChunk kept for the pass (true), or done now (false) */
+    public static boolean keepChunkTick(ServerLevel lvl, LevelChunk c, int speed) {
+        if (!chunkTicks || running || ServerParallelItems.running()) return false;
+        if (ctLevel != null && ctLevel != lvl) chunkTicksPass();
+        if (ctN == ctChunks.length) ctChunks = java.util.Arrays.copyOf(ctChunks, ctN * 2);
+        ctChunks[ctN++] = c;
+        ctLevel = lvl;
+        ctSpeed = speed;
+        return true;
+    }
+
+    /** ServerParallelItemsRandomTickMixin: a mod's block's random tick during the pass, kept whole for its end (true) */
+    public static boolean keepModRandomTick(Class<?> code, Runnable tick) {
+        if (!running || current() < 0 || VANILLA_CODE.get(code)) return false;
+        ctModTicks++;
+        return deferWorld(tick);
+    }
+
+    private static final ClassValue<Boolean> VANILLA_CODE = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> c) {
+            return c.getName().startsWith("net.minecraft.");
+        }
+    };
+
+    /** ServerParallelItemsChunkTicksMixin, before the custom spawners: the kept chunks ticked */
+    public static void chunkTicksPass() {
+        int n = ctN;
+        if (n == 0) return;
+        ServerLevel lvl = ctLevel;
+        int speed = ctSpeed;
+        LevelChunk[] cs = ctChunks;
+        ctN = 0;
+        ctLevel = null;
+        long t0 = System.nanoTime();
+        if (deferred.length < n) {
+            int len = Math.max(n, deferred.length * 2);
+            deferred = java.util.Arrays.copyOf(deferred, len);
+            deferredN = java.util.Arrays.copyOf(deferredN, len);
+        }
+        if (ctFailed.length < n) ctFailed = new boolean[Math.max(n, ctFailed.length * 2)];
+        boolean[] failed = ctFailed;
+        java.util.Arrays.fill(failed, 0, n, false);
+        ctPasses++;
+        ctTicked += n;
+        chunkEpoch++;
+        main = Thread.currentThread();
+        var pool = ServerReactor.pool();
+        var real = ((dev.lull.opt.ServerParallelItemsNeighborAccessor) lvl).sleep$neighborUpdater();
+        ((dev.lull.opt.ServerParallelItemsNeighborAccessor) lvl).sleep$setNeighborUpdater(new DeferredNeighbors(real));
+        running = true;
+        try {
+            pool.forRange(n, 4, pool.workerCount(), job(i -> {
+                int[] cur = local().cur;
+                cur[0] = i;
+                try {
+                    lvl.tickChunk(cs[i], speed);
+                } catch (Throwable t) {
+                    failed[i] = true;
+                } finally {
+                    cur[0] = -1;
+                }
+            }));
+        } finally {
+            running = false;
+            ((dev.lull.opt.ServerParallelItemsNeighborAccessor) lvl).sleep$setNeighborUpdater(real);
+        }
+        for (int i = 0; i < n; i++) {
+            if (!failed[i]) continue;
+            for (int q = 0; q < deferredN[i]; q++) deferred[i][q] = null;
+            deferredN[i] = 0;
+        }
+        commitDeferred(0, n);
+        for (int i = 0; i < n; i++) {
+            if (!failed[i]) continue;
+            ctRedone++;
+            lvl.tickChunk(cs[i], speed);
+        }
+        java.util.Arrays.fill(cs, 0, n, null);
+        ctNs += System.nanoTime() - t0;
+    }
+
+    /** the level's neighbour updates during a chunk ticks pass: kept for its end */
+    static final class DeferredNeighbors implements net.minecraft.world.level.redstone.NeighborUpdater {
+        final net.minecraft.world.level.redstone.NeighborUpdater real;
+
+        DeferredNeighbors(net.minecraft.world.level.redstone.NeighborUpdater real) {
+            this.real = real;
+        }
+
+        private void keep(Runnable r) {
+            if (!deferWorld(r)) r.run();
+        }
+
+        @Override
+        public void shapeUpdate(net.minecraft.core.Direction d, net.minecraft.world.level.block.state.BlockState state, net.minecraft.core.BlockPos pos,
+                                net.minecraft.core.BlockPos from, int flags, int left) {
+            net.minecraft.core.BlockPos p = pos.immutable(), f = from.immutable();
+            keep(() -> real.shapeUpdate(d, state, p, f, flags, left));
+        }
+
+        @Override
+        public void neighborChanged(net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.Block block, net.minecraft.core.BlockPos from) {
+            net.minecraft.core.BlockPos p = pos.immutable(), f = from.immutable();
+            keep(() -> real.neighborChanged(p, block, f));
+        }
+
+        @Override
+        public void neighborChanged(net.minecraft.world.level.block.state.BlockState state, net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.Block block,
+                                    net.minecraft.core.BlockPos from, boolean moved) {
+            net.minecraft.core.BlockPos p = pos.immutable(), f = from.immutable();
+            keep(() -> real.neighborChanged(state, p, block, f, moved));
+        }
+
+        @Override
+        public void updateNeighborsAtExceptFromFacing(net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.Block block, net.minecraft.core.Direction except) {
+            net.minecraft.core.BlockPos p = pos.immutable();
+            keep(() -> real.updateNeighborsAtExceptFromFacing(p, block, except));
+        }
+    }
+
     /** what the ticks of [from, to) deferred, in the walk's order */
     private static void commitDeferred(int from, int to) {
         for (int k = from; k < to; k++) {
@@ -1379,6 +1521,11 @@ public final class SpecTicks {
             abortIfSpeculative("needs an unloaded chunk");
             throw new IllegalStateException("[sleep/spec] a run tick needs chunk " + x + ", " + z + " that is not loaded");
         }
+        if (require && FAST) {   // (lab.fast: vanilla would load it on the server thread; a worker reads it as empty, as a client does - a mob at the loaded edge strolling outward stopped the server)
+            fastEmptyChunks++;
+            return new net.minecraft.world.level.chunk.EmptyLevelChunk(cache.level, new ChunkPos(x, z),
+                    cache.level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME).getHolderOrThrow(net.minecraft.world.level.biome.Biomes.PLAINS));
+        }
         if (require) throw new IllegalStateException("[sleep/spec] a run tick needs chunk " + x + ", " + z + " that is not loaded");
         return null;
     }
@@ -1420,6 +1567,10 @@ public final class SpecTicks {
         if (dw > 0) System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] last %d parallel walks: walk %.2f ms, of it the runs' parallel phase %.2f ms, their commit %.2f ms (%d runs)",
                 dw, (nsParallel - lastPar) / 1e6 / dw, (nsPhase - lastPhase) / 1e6 / dw, (nsCommit - lastCommit) / 1e6 / dw, runs - lastRuns));
         lastPhase = nsPhase; lastCommit = nsCommit; lastPar = nsParallel; lastWalksPar = walksParallel; lastRuns = runs;
+        if (FAST && ctPasses > 0) {
+            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] lab.fast chunk ticks: %d passes, %.1f chunks a pass, %.3f ms a pass, %d done again serially, %d mods' random ticks kept; unloaded chunks read as empty %d",
+                    ctPasses, ctTicked / (double) ctPasses, ctNs / 1e6 / ctPasses, ctRedone, ctModTicks, fastEmptyChunks));
+        }
         if (FAST && fastBlocks > 0) {
             System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d, gathered %d; pushes summed %d (applied %d), moves in their section %d; frozen grids %d, queries %d, visited %d",
                     fastBlocks, fastGroups, fastGroups / (double) fastBlocks, fastBlockSum / (double) fastBlocks, fastBigSum / (double) fastBlocks, fastMaxGroup, fastTargets, fastDeferredWorld, fastGathered, FastPush.pushes, FastPush.applied, sameSectionMoves, FrozenGrid.builds, FrozenGrid.queries, FrozenGrid.visited));

@@ -108,11 +108,11 @@ public final class ParallelRender {
      * cache miss whose fill needs the render thread) or permanent (the renderer shares mutable state with the render
      * thread, or posts an event somebody listens to): that entity type stays on the render thread.
      */
-    public static final class Refusal extends RuntimeException {
+    public static final class Refusal extends QuietSignal {
         final boolean permanent;
 
         Refusal(String why, boolean permanent) {
-            super(why, null, false, false);
+            super(why);
             this.permanent = permanent;
         }
     }

@@ -16,9 +16,14 @@ import org.lwjgl.opengl.GL43C;
  * changed at a time (each vertex array off, the storage buffers unbound, one command, the single-draw form), and the
  * commands, the element buffer and each array's buffer are reported, so a driver that only says "Generic error"
  * (Intel) still tells which input it refuses. The first 2 failing draws per call site; state is restored after.
+ * Passive by default (issue #11): only GL state is read and reported, nothing drawn or bound for good; the draws tried
+ * again, the storage buffers unbound and the self test (it writes into the game's command buffer) only with
+ * -Dsleep.glTrace.retry=true.
  */
 public final class IndirectDiag {
     public static final boolean ON = Boolean.getBoolean("sleep.glTrace");
+    /** the active probes: draws tried again, storage buffers rebound, the self test */
+    static final boolean RETRY = Boolean.getBoolean("sleep.glTrace.retry");
     private static final Map<String, int[]> SEEN = new HashMap<>();
 
     private IndirectDiag() {}
@@ -60,9 +65,13 @@ public final class IndirectDiag {
                     .append(" int ").append(GL20C.glGetVertexAttribi(a, GL30C.GL_VERTEX_ATTRIB_ARRAY_INTEGER))
                     .append(" stride ").append(GL20C.glGetVertexAttribi(a, GL20C.GL_VERTEX_ATTRIB_ARRAY_STRIDE))
                     .append(" divisor ").append(GL20C.glGetVertexAttribi(a, org.lwjgl.opengl.GL33C.GL_VERTEX_ATTRIB_ARRAY_DIVISOR))
-                    .append(" -> off: ").append(without(a, type, offset, n, stride));
+                    .append(RETRY ? " -> off: " + without(a, type, offset, n, stride) : "");
         }
         GL15C.glBindBuffer(GL15C.GL_ARRAY_BUFFER, arrayBuffer);
+        if (!RETRY) {
+            System.out.println(sb.append("\n   (passive report; -Dsleep.glTrace.retry=true tries the draw again in other forms)"));
+            return;
+        }
         sb.append("\n   again: ").append(name(draw(type, offset, n, stride)));
         sb.append(", one command: ").append(name(draw(type, offset, 1, stride)));
         GL11C.glGetError();
