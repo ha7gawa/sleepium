@@ -19,8 +19,11 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        return sleep$decide(targetClassName, mixinClassName) && !dev.lull.optsupport.MixinYield.yields(targetClassName, mixinClassName)
-                && !dev.lull.optsupport.MixinYield.needsYielded(mixinClassName) && !sleep$givesWayToC2me(mixinClassName);
+        if (!sleep$decide(targetClassName, mixinClassName)) return false;
+        boolean gaveWay = dev.lull.optsupport.MixinYield.yields(targetClassName, mixinClassName)
+                || dev.lull.optsupport.MixinYield.needsYielded(mixinClassName) || sleep$givesWayToC2me(mixinClassName);
+        if (gaveWay) dev.lull.optsupport.HookFlags.gaveWay(mixinClassName);   // (the parallel runs' guards say why only for these)
+        return !gaveWay;
     }
 
     /**
@@ -407,8 +410,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             dev.lull.optsupport.EventSiteTransformer.transform(targetClass, false, null);
         if (mixinClassName.endsWith(".WriteBarrierMixin"))
             dev.lull.optsupport.sleep.WriteBarrier.transform(targetClass);
-        if (mixinClassName.endsWith(".ServerParallelItemsChunkMixin"))
-            dev.lull.optsupport.HookFlags.chunkHook = true;
+        dev.lull.optsupport.HookFlags.applied(mixinClassName);   // (the parallel runs' guards: HookFlags)
         if (mixinClassName.endsWith(".WorldgenAllocAp2Mixin"))
             dev.lull.optsupport.ScratchArrays.transform(targetClass);
         if (mixinClassName.endsWith(".AllocTrimPackMixin"))
