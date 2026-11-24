@@ -4,6 +4,27 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.5 - 2026-11-24
+
+- **Fixed: flicker, stray stretched textures and dark frames with some mods (issue #11).** A mod that draws in an
+  entity's render event into the game's own buffers instead of the ones it is given (health bars, name tags and the
+  like) confused the entity render cache (its vertices landed at the camera) and, on 1.20.1, raced the render
+  threads ("Not filled all elements of the vertex" crashes). Now such drawing is recorded with the entity when it can
+  be - the cache stays on, with no frame-rate cost - and otherwise that mob is drawn the normal way; a renderer that
+  still draws past its buffers is switched to a safe mode for good (noted once in the chat and in Options > Sleepium...
+  > Mods). Embeddium keeps its fast path; other buffer wrappers are written to through their own API. Thanks to
+  swordeatingrabbit-max for the detailed analysis.
+- **Maximum speed: raiders tick in parallel** - witches, pillagers, vindicators, evokers and ravagers (witch and raid
+  farms). Their raid's bookkeeping (joining, leaving, the leader, the boss bar) waits for the end of each batch.
+  700 raiders around iron golems: 5.8 -> 1.7 ms a tick.
+- **New option: Maximum speed for mods' mobs** (off): with it, mobs added by mods are ticked on the worker threads too.
+  A mod's mob may use the mod's own state that is not made for several threads, so it is a separate switch - turn it
+  on in a pack where it runs well.
+- **1.20.1:** entities nobody can see skip their per-tick network update with Maximum speed (as on 1.21.1).
+
+The exact modes are unchanged: the exactness suite stays identical to vanilla by default and with parallel entity
+ticks on.
+
 ## 1.4.4 - 2026-11-24
 
 - **Maximum speed: villagers and iron golems tick on all threads.** They used to share one thread per batch, because

@@ -77,6 +77,15 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.4.5: a fix for flicker with some mods, raiders in parallel
+
+**Fixed:** flicker, stray stretched textures, dark frames and rare crashes with mods that draw in an entity's render
+event into the game's own buffers (issue #11). Such drawing is now recorded with the entity where it can be - the
+render cache stays on - and otherwise that mob is drawn the normal way.
+
+**Maximum speed** now ticks raiders in parallel too - witches, pillagers, vindicators, evokers, ravagers (witch and
+raid farms: 5.8 -> 1.7 ms a tick), and a new switch lets mods' mobs join (off by default).
+
 ## New in 1.4.4: villagers on all threads
 
 **Maximum speed** now ticks villagers and iron golems on every worker thread - the game's points-of-interest
