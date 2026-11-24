@@ -137,7 +137,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ItemGpuMixin") && Boolean.getBoolean("lab.opt.PartBatchMixin");
         if (simple.equals("CompositeRenderTypeAccessor") || simple.equals("CompositeStateAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.EntityBatchMixin");
-        if (simple.equals("RenderCacheBlockEntityMixin") || simple.equals("RenderCacheClockMixin") || simple.equals("BufferBuilderAccessor") || simple.equals("BufferSourceAccessor") || simple.equals("ByteBufferBuilderAccessor"))
+        if (simple.equals("RenderCacheBlockEntityMixin") || simple.equals("RenderCacheClockMixin") || simple.equals("BufferBuilderAccessor") || simple.equals("BufferSourceAccessor") || simple.equals("BufferSourceListenerMixin") || simple.equals("ByteBufferBuilderAccessor"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.RenderCacheMixin");
         if (simple.equals("ChunkMultiDrawCompatMixin"))   // part of chunk multi-draw
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ChunkMultiDrawMixin");

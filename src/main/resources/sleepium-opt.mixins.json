@@ -461,6 +461,7 @@
     "CompositeRenderTypeAccessor",
     "CompositeStateAccessor",
     "RenderCacheMixin",
+    "BufferSourceListenerMixin",
     "ByteBufferBuilderAccessor",
     "RenderCacheBlockEntityMixin",
     "RenderCacheClockMixin",

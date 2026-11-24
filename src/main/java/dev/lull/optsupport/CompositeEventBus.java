@@ -199,6 +199,19 @@ public final class CompositeEventBus extends EventBus {
     public static long lockedPosts;
 
     private <T extends Event> T postFull(T event) {
+        Thread rec = ListenerScope.recording;
+        if (rec != null && rec == Thread.currentThread()) {   // (issue #11: listeners inside a render cache recording)
+            ListenerScope.depth++;
+            try {
+                return postFull1(event);
+            } finally {
+                ListenerScope.depth--;
+            }
+        }
+        return postFull1(event);
+    }
+
+    private <T extends Event> T postFull1(T event) {
         if (SpecTicks.FAST && (SpecTicks.running() || ServerParallelItems.running())) {
             synchronized (RUN_POSTS) {
                 lockedPosts++;

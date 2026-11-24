@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * all elements of the vertex"). The job is refused before it writes anything: it goes to the render thread, its type
  * stays there.
  */
-@Mixin(MultiBufferSource.BufferSource.class)
+@Mixin(value = MultiBufferSource.BufferSource.class, priority = 400)   // (first: before EntityBatchMixin begins a batch on the frame's source from the worker)
 public abstract class ParallelEntitiesFrameBufferGuardMixin {
     @Inject(method = "getBuffer", at = @At("HEAD"))
     private void sleep$guard(RenderType type, CallbackInfoReturnable<VertexConsumer> cir) {
