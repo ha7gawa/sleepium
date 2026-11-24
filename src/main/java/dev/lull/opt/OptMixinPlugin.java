@@ -394,6 +394,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             dev.lull.optsupport.EventSiteTransformer.transform(targetClass, false, null);
         if (mixinClassName.endsWith(".WriteBarrierMixin"))
             dev.lull.optsupport.sleep.WriteBarrier.transform(targetClass);
+        if (mixinClassName.endsWith(".ServerParallelItemsChunkMixin"))
+            dev.lull.optsupport.HookFlags.chunkHook = true;
         if (mixinClassName.endsWith(".WorldgenAllocAp2Mixin"))
             dev.lull.optsupport.ScratchArrays.transform(targetClass);
         if (mixinClassName.endsWith(".AllocTrimPackMixin"))
