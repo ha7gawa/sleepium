@@ -1,7 +1,7 @@
 # Picking up Sleepium
 
 For whoever continues this project: a maintainer of the official repository, someone porting it to another Minecraft
-version or loader, or someone taking ideas into their own mod. It records the state on 2026-11-24 (release 1.4.5),
+version or loader, or someone taking ideas into their own mod. It records the state on 2026-11-24 (release 1.4.6),
 where to start, the work that is open, and what we learned the hard way: the traps, the measurements that misled us,
 and the ideas that were tried and gave nothing.
 
@@ -13,7 +13,7 @@ page does not repeat them.
 | | 1.21.1 NeoForge | 1.20.1 Forge |
 |---|---|---|
 | branch | `1.21.1-neoforge` (main line) | `1.20.1-forge` (long-term) |
-| last release | 1.4.5 | 1.4.5 |
+| last release | 1.4.6 | 1.4.6 |
 | exactness suite (23 scenes) | identical to vanilla, defaults and parallel entity ticks | the same, checked on a production server |
 | Maximum speed (`lab.fast`) | experimental, off by default | experimental, off by default |
 
@@ -30,7 +30,7 @@ page does not repeat them.
   - #4 (NullPointerExceptions, fixed in 1.1.9), #10 (deadlock with C2ME, fixed in 1.3.1) and #12 (crash with FTB
     Quests, fixed in 1.3.4) have their fixes released. They are still open, waiting for the reporters to confirm, and
     can be closed if nobody answers.
-  - #11 (screen flicker) has fixes in 1.4.5 and still has open ends, listed under "Open work".
+  - #11 (screen flicker) has fixes in 1.4.5 and 1.4.6 and still has an open end, listed under "Open work".
   - #13 is the pinned status issue: people ask for things or offer help there.
 
 ## Where to start
@@ -56,7 +56,11 @@ A release is one version number for every supported Minecraft version, built fro
    - a production **client** start on both versions with the built jar (`tools/prod_client.py`). Twice we shipped a
      jar whose dev runs were fine: 1.4.1 did not start on clients, and from 1.1.0 the settings screen was locked. See
      "Traps" below.
-   - For Maximum speed: `tools/fastcheck.py` (5-10 minutes) and the mob scenes of `tools/mobmass.py`.
+   - For Maximum speed: `tools/fastcheck.py` (5-10 minutes), the mob scenes of `tools/mobmass.py`, and a run with 100
+     bot players in a normal world on both versions (`tools/tick_profile.py mobs --bots 100 --normal` on 1.21.1,
+     `tools/bots_soak.py --normal` on 1.20.1). The test scenes have no players, so they never load or unload chunks
+     around a moving player. Two Maximum speed crashes in 1.4.x only showed up with bots.
+     Pass flags as `"--flags=-Dlab.fast=true"`: argparse takes a bare `-D...` value for an option.
 3. Merge the candidate into the release branch with `--no-ff`, tag `v<version>`, and attach both jars to the GitHub
    release.
 4. On `main`: add a `CHANGELOG.md` entry and update `update.json`. The Forge / NeoForge mod list reads that file, so
@@ -103,17 +107,16 @@ the config screen, the mod-compat adapters, and the per-mod rules that read `mod
 
 In rough order of value.
 
-**Issue #11** (flicker and stray textures on 1.20.1 with some mods; fixes in 1.4.5, waiting for the reporter):
-- When a parallel render job is refused because a mod's listener asked for the frame's own buffer, the refusal is
-  thrown inside that listener, and Forge logs one error with a stack per entity type. It is harmless but noisy. Catch
-  it before Forge's handler does.
-- Make the error path of `-Dsleep.glTrace` passive. The reporter noticed it does work even when nothing is wrong.
-- The reporter's whole-screen black frame with the HUD (their test A) was never reproduced. Our test mod
-  (`-Dsleep.test.escape`, `-Dsleep.test.escape.badquad`) reproduces the stray textures and the crashes, not that frame.
+**Issue #11** (flicker and stray textures on 1.20.1 with some mods; fixes in 1.4.5 and 1.4.6, waiting for the
+reporter): the reporter's whole-screen black frame with the HUD (their test A) was never reproduced. Our test mod
+(`-Dsleep.test.escape`, `-Dsleep.test.escape.badquad`) reproduces the stray textures and the crashes, not that frame.
 
 **Maximum speed (`lab.fast`)**, as measured in 1.4.x:
-- Block entities by region, in parallel (a dense mod-machine scene shows 5-7 ms of 11.5 to gain).
-- Chunk ticks (random ticks and natural spawning) in parallel, with per-chunk random streams.
+- Mods' machines sleep less than they could: the exact sleep checks an idle mod machine with a hash of everything it
+  owns on every tick, and classes where that check is too expensive never sleep. Maximum speed may trust "nothing
+  changed for N ticks" instead. Ticking mods' machines on several threads is not an option: Create, AE2 and Mekanism
+  keep shared networks (see "Tried and dropped").
+- Natural spawning is still serial inside the chunk ticks (random ticks are parallel since 1.4.6).
 - The path budget (`lab.fast.pathBudget=N`) is built and off. At 32: 30k pigs 39.2 -> 33.4 ms a tick, but strolls are
   2-4x rarer. Whether that is acceptable is a design decision, not a measurement.
 - The client side of Maximum speed (`lab.fast.client`) costs frames until frames are decoupled from the client tick:
@@ -192,6 +195,13 @@ Each of these cost at least one bad release or one lost night.
   four-core CPUs.
 
 ## Tried and dropped
+
+- **Block entities in parallel by region** (measured 2026-11-24, not built): vanilla block entities are already cheap
+  because idle ones sleep (1024 hoppers 0.9 ms a tick, 5120 smelting blocks 3.2 ms), so parallel ticks would save
+  1-2 ms. The real cost is mods' machines (a dense scene of 556 machine types: 270 of 290 ms a tick), but Create, AE2
+  and Mekanism keep shared networks that two threads would break, and nothing tells safe mods from unsafe ones
+  without knowing each mod. In that scene Sophisticated Storage blocks packed side by side overflow the stack even on
+  a server without Sleepium: exclude them from dense tests.
 
 So nobody spends a week on them again. All numbers are from our machines.
 
