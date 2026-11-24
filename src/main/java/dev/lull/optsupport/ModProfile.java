@@ -67,7 +67,7 @@ public final class ModProfile {
     }
 
     /** a class's mod: its module's mod file (null: the loader's or the JDK's own classes) */
-    private static String modOf(Class<?> c) {
+    static String modOf(Class<?> c) {
         Map<String, String> m = MODULE_MOD;
         if (m == null) {
             m = new HashMap<>();

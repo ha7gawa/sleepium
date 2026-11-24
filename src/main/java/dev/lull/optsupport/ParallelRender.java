@@ -120,6 +120,8 @@ public final class ParallelRender {
     public static final Refusal REFUSE_NOT_READY = new Refusal("render-thread state not ready", false);
     public static final Refusal REFUSE_SHARED = new Refusal("renderer state shared with the render thread", true);
     public static final Refusal REFUSE_LISTENED = new Refusal("event with listeners posted from a worker", true);
+    /** a job asked the frame's own buffer source for a buffer (ParallelEntitiesFrameBufferGuardMixin, issue #11) */
+    public static final Refusal REFUSE_FRAME_BUFFER = new Refusal("the frame's own buffers asked for from a worker", true);
     private static volatile int epoch;
 
     private ParallelRender() {}

@@ -24,6 +24,9 @@ public interface TrackParEntityAccessor {
     @Accessor("serverEntity")
     ServerEntity sleep$serverEntity();
 
+    @Accessor("seenBy")
+    java.util.Set<net.minecraft.server.network.ServerPlayerConnection> sleep$seenBy();
+
     @Invoker("updatePlayers")
     void sleep$updatePlayers(List<ServerPlayer> players);
 }
