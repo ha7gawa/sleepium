@@ -240,8 +240,16 @@ far from spawn (`tools/gen_chunky.py`).
 |---|---|---:|---:|
 | vanilla | 56.5 / 60.5 | 58.5 | ×1 |
 | ModernFix 5.27.27 | 65.0 / 74.3 | 69.7 | ×1.2 |
+| C2ME 0.4.0-alpha.0.124 (NeoForge) | 162.6 / 173.4 | 168.0 | ×2.9 |
 | **Sleepium 1.4.7** | 289.0 / 325.1 | **307.1** | **×5.2** |
 | Sleepium 1.4.7 + ModernFix | 289.0 / 371.6 | 330.3 | ×5.6 |
+| Sleepium 1.4.7 + C2ME | 113.1 / 113.1 | 113.1 | ×1.9 |
+| Sleepium 1.4.8 + C2ME | 153.0 / 144.5 | 148.8 | ×2.5 |
+
+Sleepium alone generates faster than C2ME. With C2ME installed, most of Sleepium's generation work gives way to C2ME's
+(they change the same methods), so the pair runs at about C2ME's speed; in 1.4.7 one of Sleepium's optimisations even
+kept C2ME's density function compiler out (113 chunks/s), fixed in 1.4.8. For the fastest generation, use Sleepium
+without C2ME. ModernFix and Sleepium work well together.
 
 Longer tasks go higher, as more of the generation runs in parallel: radius 1200 (about 22 500 chunks) with 1.3.4 gave
 320–456 chunks/s, mean ≈374.
