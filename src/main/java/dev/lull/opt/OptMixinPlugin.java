@@ -20,7 +20,20 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         return sleep$decide(targetClassName, mixinClassName) && !dev.lull.optsupport.MixinYield.yields(targetClassName, mixinClassName)
-                && !dev.lull.optsupport.MixinYield.needsYielded(mixinClassName);
+                && !dev.lull.optsupport.MixinYield.needsYielded(mixinClassName) && !sleep$givesWayToC2me(mixinClassName);
+    }
+
+    /**
+     * WorldgenColumnMemoMixin gives way to C2ME: C2ME compiles the density functions (c2me_opts_dfc), our column memos in
+     * the climate trees are nodes its compiler does not know, and the trees fell back to its interpreted path - generation
+     * with both mods 113 chunks/s against 168 with C2ME alone and 153 without the memo (host, Chunky, 11-24).
+     */
+    private static boolean sleep$givesWayToC2me(String mixinClassName) {
+        if (!mixinClassName.endsWith(".WorldgenColumnMemoMixin")) return false;
+        var mods = net.neoforged.fml.loading.LoadingModList.get();
+        if (mods == null || mods.getModFileById("c2me") == null && mods.getModFileById("c2me_opts_dfc") == null) return false;
+        System.out.println("[sleep/opt] WorldgenColumnMemoMixin not applied: C2ME compiles the density functions, and the column memos would keep its compiler out");
+        return true;
     }
 
     private boolean sleep$decide(String targetClassName, String mixinClassName) {

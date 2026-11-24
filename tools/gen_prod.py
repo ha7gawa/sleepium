@@ -20,6 +20,7 @@ ap.add_argument('--java', default=r'C:\Users\ha7gawa\.gradle\jdks\eclipse_adopti
 ap.add_argument('--launch', default='libraries/net/neoforged/neoforge/21.1.251/win_args.txt')
 ap.add_argument('--heap', default='6G')
 ap.add_argument('--flags', default='')
+ap.add_argument('--extra', default='', help='jars of other mods put beside ours (comma separated; compat runs)')
 a = ap.parse_args()
 
 D = a.server
@@ -38,6 +39,8 @@ res = []
 label = a.label or ('off' if a.off else 'on')
 try:
     shutil.copy(a.jar, os.path.join(D, 'mods'))
+    for x in filter(None, a.extra.split(',')):
+        shutil.copy(x, os.path.join(D, 'mods'))
     shutil.rmtree(os.path.join(D, props['level-name']), ignore_errors=True)
     with open(PROPS, 'w') as f:
         f.writelines('%s=%s\n' % kv for kv in props.items())
