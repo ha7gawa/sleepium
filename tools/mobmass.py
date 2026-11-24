@@ -44,6 +44,7 @@ ap.add_argument('--prod', action='store_true')
 ap.add_argument('--off', action='store_true', help='dev: without the engine defaults (-Dlab.opt.defaults=true left out)')
 ap.add_argument('--jar', default='')
 ap.add_argument('--vanilla', action='store_true', help='prod: no mod jar at all')
+ap.add_argument('--extra', default='', help='prod: jars of other mods put beside ours (comma separated; compat runs)')
 ap.add_argument('--server', default='F:/release-test/server-mobmass')
 ap.add_argument('--java', default=ADOPTIUM21)
 ap.add_argument('--flags', default='')
@@ -204,6 +205,8 @@ class Prod(Console):
             os.makedirs(mods, exist_ok=True)
             if a.jar:
                 shutil.copy2(a.jar, os.path.join(mods, os.path.basename(a.jar)))
+            for x in filter(None, a.extra.split(',')):
+                shutil.copy2(x, os.path.join(mods, os.path.basename(x)))
             p = props()
             p.update({'level-name': LEVEL, 'initial-enabled-packs': 'vanilla,file/sleep-scenes.zip'})
             with open(os.path.join(SERVER, 'server.properties'), 'w', encoding='utf-8') as f:
