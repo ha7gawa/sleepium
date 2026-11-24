@@ -1353,7 +1353,7 @@ public final class SpecTicks {
     private static boolean[] ctFailed = new boolean[256];
     private static int ctN, ctSpeed;
     private static ServerLevel ctLevel;
-    static long ctPasses, ctTicked, ctRedone, ctModTicks, ctNs;
+    static long ctPasses, ctTicked, ctRedone, ctModTicks, ctNs, fastEmptyChunks;
 
     static {
         if (FAST) dev.lull.bots.BotLoad.AB.put("chunkTicks", v -> chunkTicks = v);
@@ -1610,6 +1610,11 @@ public final class SpecTicks {
             abortIfSpeculative("needs an unloaded chunk");
             throw new IllegalStateException("[sleep/spec] a run tick needs chunk " + x + ", " + z + " that is not loaded");
         }
+        if (require && FAST) {   // (lab.fast: vanilla would load it on the server thread; a worker reads it as empty, as a client does - a mob at the loaded edge strolling outward stopped the server)
+            fastEmptyChunks++;
+            return new net.minecraft.world.level.chunk.EmptyLevelChunk(cache.level, new ChunkPos(x, z),
+                    cache.level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME).getHolderOrThrow(net.minecraft.world.level.biome.Biomes.PLAINS));
+        }
         if (require) throw new IllegalStateException("[sleep/spec] a run tick needs chunk " + x + ", " + z + " that is not loaded");
         return null;
     }
@@ -1709,8 +1714,8 @@ public final class SpecTicks {
                 dw, (nsParallel - lastPar) / 1e6 / dw, (nsPhase - lastPhase) / 1e6 / dw, (nsCommit - lastCommit) / 1e6 / dw, runs - lastRuns));
         lastPhase = nsPhase; lastCommit = nsCommit; lastPar = nsParallel; lastWalksPar = walksParallel; lastRuns = runs;
         if (FAST && ctPasses > 0) {
-            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] lab.fast chunk ticks: %d passes, %.1f chunks a pass, %.3f ms a pass, %d done again serially, %d mods' random ticks kept",
-                    ctPasses, ctTicked / (double) ctPasses, ctNs / 1e6 / ctPasses, ctRedone, ctModTicks));
+            System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] lab.fast chunk ticks: %d passes, %.1f chunks a pass, %.3f ms a pass, %d done again serially, %d mods' random ticks kept; unloaded chunks read as empty %d",
+                    ctPasses, ctTicked / (double) ctPasses, ctNs / 1e6 / ctPasses, ctRedone, ctModTicks, fastEmptyChunks));
         }
         if (FAST && fastBlocks > 0) {
             System.out.println(String.format(java.util.Locale.ROOT, "[sleep/spec] fast: blocks %d, groups %d (%.1f a block), mobs a block %.0f, its largest group %.0f on average (max %d), targets joined %d, world writes deferred %d, gathered %d; pushes summed %d (applied %d), moves in their section %d; frozen grids %d, queries %d, visited %d; paths %.1f a tick, denied %.1f a tick; path memo hits %d, drops %d",
