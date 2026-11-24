@@ -4,6 +4,19 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.8 - 2026-11-24
+
+- **Fixed: world generation with C2ME was slower than with C2ME alone.** One of Sleepium's generation optimisations (a
+  per-column memo of the climate values) put nodes into the density function trees that C2ME's compiler does not know,
+  so C2ME fell back to its slower path. With C2ME installed that optimisation now steps aside. Chunky, a normal world,
+  16 threads: Sleepium + C2ME 113 -> 149 chunks/s (C2ME alone 168).
+- **On world generation in general:** Sleepium alone generates faster than C2ME (307 against 168 chunks/s in the same
+  test, vanilla 58.5), and with C2ME installed most of Sleepium's generation work gives way to C2ME's. If world
+  generation speed is what you want, Sleepium without C2ME is the faster choice. ModernFix and Sleepium together are
+  fine (330 chunks/s).
+
+The exact modes are unchanged: the exactness checks stay identical to vanilla.
+
 ## 1.4.7 - 2026-11-24
 
 - **Fixed (1.21.1): with Lithium, some chunks were not saved** (since 1.3.5). Sleepium's faster save of a chunk's
