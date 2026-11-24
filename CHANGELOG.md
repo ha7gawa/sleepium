@@ -4,6 +4,22 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.7 - 2026-11-24
+
+- **Fixed (1.21.1): with Lithium, some chunks were not saved** (since 1.3.5). Sleepium's faster save of a chunk's
+  scheduled block ticks expected vanilla's own tick queue; Lithium keeps those ticks in a structure of its own, the save
+  failed ("Failed to save chunk" in the log) and the chunk was not written. Such chunks are now saved the way Lithium
+  saves them. If you played 1.21.1 with Sleepium 1.3.5-1.4.6 and Lithium, check your log for "Failed to save chunk":
+  changes in those chunks since they were last saved successfully may be lost.
+- **Fixed: Maximum speed and parallel entity ticks could stop the server's tick for good with Lithium** (or any mod that
+  replaces the server's chunk lookup). Sleepium's hook that lets the worker threads read chunks gave way to the other
+  mod, and a worker waited for the server thread while the server thread waited for the workers. Parallel ticks now run
+  only when that hook is in place; otherwise they stay on one thread and the log says why.
+- **Fixed: a dedicated server could stop when a mod's machine holds a field of a client-only class.** Sleepium's sleep
+  check for mods' machines now leaves such a machine awake instead.
+
+The exact modes are unchanged: the exactness checks stay identical to vanilla.
+
 ## 1.4.6 - 2026-11-24
 
 - **Maximum speed: chunk ticks in parallel.** Random ticks (crops, grass, leaves and the like), snow, ice and lightning
