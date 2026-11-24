@@ -366,7 +366,7 @@ public final class SpecTicks {
     static boolean kindOk(Entity e) {
         if (e instanceof Animal) return true;
         if (!MONSTERS || !(e instanceof net.minecraft.world.entity.Mob)) return false;
-        return (FAST || !(e instanceof net.minecraft.world.entity.raid.Raider)) && !(e instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon)   // (lab.fast: raiders too - their raid's writes wait for the run's end)
+        return (FAST && HookFlags.guard("ServerParallelItemsRaidMixin", "raiders") || !(e instanceof net.minecraft.world.entity.raid.Raider)) && !(e instanceof net.minecraft.world.entity.boss.enderdragon.EnderDragon)   // (lab.fast: raiders too - their raid's writes wait for the run's end)
                 && !(e instanceof net.minecraft.world.entity.boss.wither.WitherBoss) && !(e instanceof net.minecraft.world.entity.monster.Shulker);
     }
 
@@ -377,7 +377,8 @@ public final class SpecTicks {
 
     /** lab.fast: not the mobs whose ticks reach shared state with no guard yet (points of interest, explosions); entity sleep's own ticks stay on the server thread */
     static boolean fastOk(Entity e) {
-        return dev.lull.optsupport.sleep.EntitySleep.plainNext(e);   // (creepers too: their explosion waits for the run's end - ServerParallelItemsCreeperMixin)
+        return dev.lull.optsupport.sleep.EntitySleep.plainNext(e)   // (creepers too: their explosion waits for the run's end - ServerParallelItemsCreeperMixin)
+                && (!(e instanceof net.minecraft.world.entity.monster.Creeper) || HookFlags.guard("ServerParallelItemsCreeperMixin", "creepers"));
     }
 
     /** lab.fast: the mobs that use points of interest (one shared, unguarded manager): all of a block on one thread */
@@ -465,6 +466,13 @@ public final class SpecTicks {
     static final boolean FAST_MOD_MOBS = FAST && Boolean.getBoolean("lab.fast.modMobs");
     /** lab.fast: the POI manager under one lock during runs (ServerParallelItemsPoiLockMixin) - villagers / golems not one group */
     public static final boolean POI_LOCK = FAST && !"false".equals(System.getProperty("lab.fast.poiLock"));
+
+    /** the POI lock in force: its three parts applied (the queries' lock, sectionsToVillage, the deferred reputation events) */
+    static boolean poiLock() {
+        return POI_LOCK && HookFlags.guard("ServerParallelItemsPoiLockMixin", "villagers and golems (one thread for the users of points of interest)")
+                && HookFlags.guard("ServerParallelItemsPoiMixin", "villagers and golems (one thread for the users of points of interest)")
+                && HookFlags.guard("ServerParallelItemsReputationMixin", "villagers and golems (one thread for the users of points of interest)");
+    }
     public static final Object POI = new Object();
     /** measurement only (unsafe: the POI manager is not thread-safe): -Dlab.fast.noPoiGroup=true */
     static final boolean NO_POI_GROUP = Boolean.getBoolean("lab.fast.noPoiGroup");
@@ -563,10 +571,11 @@ public final class SpecTicks {
                 }
             }
         }
+        boolean poiLock = poiLock();
         if (FAST && !NO_POI_GROUP) {   // (the users of points of interest: one thread for all of them)
             int p0 = -1;
             for (int i = 0; i < m; i++)
-                if (POI_LOCK ? all[b0 + i] instanceof net.minecraft.world.entity.animal.Bee : usesPoi(all[b0 + i])) {   // (with the POI lock: bees only - their hives' occupant lists)
+                if (poiLock ? all[b0 + i] instanceof net.minecraft.world.entity.animal.Bee : usesPoi(all[b0 + i])) {   // (with the POI lock: bees only - their hives' occupant lists)
                     if (p0 < 0) p0 = i;
                     else {
                         int ra = find(i), rb = find(p0);
@@ -574,7 +583,7 @@ public final class SpecTicks {
                     }
                 }
         }
-        if (POI_LOCK)   // (brain partners write into each other - gossip, trades, breeding: both on one thread)
+        if (poiLock)   // (brain partners write into each other - gossip, trades, breeding: both on one thread)
             for (int i = 0; i < m; i++)
                 if (all[b0 + i] instanceof net.minecraft.world.entity.LivingEntity le && le.getBrain() != null) {
                     var br = le.getBrain();
@@ -1361,7 +1370,9 @@ public final class SpecTicks {
 
     /** ServerParallelItemsChunkTicksMixin: the chunk's tickChunk kept for the pass (true), or done now (false) */
     public static boolean keepChunkTick(ServerLevel lvl, LevelChunk c, int speed) {
-        if (!chunkTicks || running || ServerParallelItems.running() || !HookFlags.chunkHook) return false;
+        if (!chunkTicks || running || ServerParallelItems.running() || !HookFlags.parallelOk()) return false;
+        if (!HookFlags.guard("ServerParallelItemsRandomTickMixin", "chunk ticks") || !HookFlags.guard("ServerParallelItemsScheduleMixin", "chunk ticks")
+                || !HookFlags.guard("ServerParallelItemsNeighborAccessor", "chunk ticks")) return false;
         if (ctLevel != null && ctLevel != lvl) chunkTicksPass();
         if (ctN == ctChunks.length) ctChunks = java.util.Arrays.copyOf(ctChunks, ctN * 2);
         ctChunks[ctN++] = c;
