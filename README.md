@@ -128,6 +128,7 @@ Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md) - in short: a pull re
 - [Settings](docs/settings.md) - the settings screen, flags, opt-in features, shaderpacks
 - [For modpack makers and mod authors](docs/pack-makers.md) - what Sleepium does to each mod, rules per mod, the pack's settings file, Find the cause, the HUD
 - [Versions](docs/versions.md) - what each version has, and how versions are supported
+- [Picking up Sleepium](docs/handover.md) - for whoever continues: the state, open work, porting notes, traps, what was tried and dropped
 - [Changelog](CHANGELOG.md)
 
 ## License
