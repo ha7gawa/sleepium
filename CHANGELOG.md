@@ -4,6 +4,20 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.9 - 2026-11-24
+
+- **Safer Maximum speed and parallel entity ticks next to other mods.** Parallel ticks rely on several of Sleepium's
+  guards: chunk lookups for the worker threads, the entity lists' lock, spawns and block changes kept for the end of a
+  batch, the points-of-interest lock, raids, creeper explosions. When another mod changes the same code, Sleepium's
+  guard steps aside. 1.4.7 handled this for the chunk lookups (the hang with Lithium); now every guard is checked: the
+  batches stay on one thread without the general ones, villagers and golems share one thread without the
+  points-of-interest lock, raiders and creepers stay on the server thread without theirs. The log says once which
+  guard is missing and why. Without such mods nothing changes.
+- With Lithium (1.21.1), Canary or Radium (1.20.1), Maximum speed therefore runs without its parallel batches: these
+  mods change the same code. Everything else works as before.
+
+The exact modes are unchanged: the exactness checks stay identical to vanilla, with parallel entity ticks too.
+
 ## 1.4.8 - 2026-11-24
 
 - **Fixed: world generation with C2ME was slower than with C2ME alone.** One of Sleepium's generation optimisations (a
