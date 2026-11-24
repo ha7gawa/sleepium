@@ -77,7 +77,7 @@ public final class ServerParallelItems {
             SpecTicks.forEach(list, consumer, lvl);
             return;
         }
-        if (!enabled || lvl.getProfiler() != net.minecraft.util.profiling.InactiveProfiler.INSTANCE || ParallelEntities.tickListenersActing()) {
+        if (!enabled || lvl.getProfiler() != net.minecraft.util.profiling.InactiveProfiler.INSTANCE || ParallelEntities.tickListenersActing() || !HookFlags.parallelOk()) {
             list.forEach(consumer);
             return;
         }
