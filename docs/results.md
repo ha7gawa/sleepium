@@ -232,8 +232,27 @@ used 0.74 → 0.28 cores.
 
 ### World generation
 
-On the host, 43–56 chunks/s in vanilla → 158–160 chunks/s (a second batch, everything warm). Single-threaded work per
-chunk drops from 71.9 ms and 19.1 MB of garbage to 35.5 ms. On the N100, 12 → 25.6 chunks/s once warm.
+Chunky 1.4.23 on the production NeoForge 1.21.1 server, host (Ryzen 7 5800X, 16 threads), 2026-11-24, Sleepium 1.4.7:
+a fresh normal world (seed 20260924), a warm-up task, then two tasks of radius 400 blocks (about 2 500 chunks each)
+far from spawn (`tools/gen_chunky.py`).
+
+| | chunks/s (two tasks) | mean | against vanilla |
+|---|---|---:|---:|
+| vanilla | 56.5 / 60.5 | 58.5 | ×1 |
+| ModernFix 5.27.27 | 65.0 / 74.3 | 69.7 | ×1.2 |
+| **Sleepium 1.4.7** | 289.0 / 325.1 | **307.1** | **×5.2** |
+| Sleepium 1.4.7 + ModernFix | 289.0 / 371.6 | 330.3 | ×5.6 |
+
+Longer tasks go higher, as more of the generation runs in parallel: radius 1200 (about 22 500 chunks) with 1.3.4 gave
+320–456 chunks/s, mean ≈374.
+
+The terrain is vanilla's. Per-chunk hashes after the carvers step (noise, surface, aquifers, carvers) are identical
+with and without Sleepium, and with ModernFix too: 576 of 576 chunks (`/sleepium genbench`). After the feature step,
+chunks differ even between two vanilla runs: in 1.21.1 the order in which neighbouring chunks generate decides some
+decorations, so that step cannot be compared from run to run.
+
+Earlier (1.0.x): single-threaded work per chunk dropped from 71.9 ms and 19.1 MB of garbage to 35.5 ms; on the N100,
+12 → 25.6 chunks/s once warm.
 
 ### Against other projects
 

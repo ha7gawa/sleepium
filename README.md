@@ -76,6 +76,7 @@ or the [GitHub releases](../../releases). Each release has one jar per supported
 | A Cursed Fate fight (840 entities, burning mobs), fps, 1.20.1 | 87 | 600-646 |
 | The Biohazard pack (473 mods, 1.20.1), a new world, fps | 351-379 | 571-578 |
 | 144 Fresh Animations mobs (Entity Model Features 3.3) among 450 other entities, fps, 1.21.1 | 42-46 | 490-506 |
+| World generation, a normal world (Chunky, 16 threads), chunks per second, 1.21.1 | 58 | 307 |
 | World generation with JJThunder To The Max (Chunky, 16 threads), chunks per second, 1.21.1 | 30 | 93-100 |
 | 2 000 experience orbs + 1 500 items being picked up, fps, 1.21.1 (with [Clumps](https://modrinth.com/mod/clumps): 996) | 1 | 215 |
 | The same on an Intel N100 with integrated graphics, fps (with Clumps: 89) | 1 | 24-27 |
