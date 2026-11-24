@@ -88,17 +88,25 @@ public final class SaveWrite {
      * ListTag that the pool fills - the same elements in the same order as the container's save would add them.
      */
     public static final boolean TICKS = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.SaveTicks");
+    /** chunks whose tick container keeps its ticks elsewhere (Lithium): saved by the container itself */
+    public static long foreignTicks;
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static net.minecraft.nbt.Tag ticks(SerializableTickContainer c, long gameTime, Function ids) {
         if (TICKS && !vanillaNow() && AsyncChunkSave.collecting()) {
             TickJob job = null;
+            // (only vanilla's own containers: a mod that keeps the ticks in a structure of its own - Lithium replaces
+            // LevelChunkTicks' queue and leaves the field null - saves through the container's save below; 1.3.5-1.4.6
+            // read the null queue and the chunk was not saved at all)
             if (c.getClass() == ProtoChunkTicks.class) {
-                job = new TickJob(((dev.lull.opt.SaveTicksProtoAccessor) c).sleep$ticks().toArray(), null, gameTime, ids);
+                java.util.List<?> ticks = ((dev.lull.opt.SaveTicksProtoAccessor) c).sleep$ticks();
+                if (ticks != null) job = new TickJob(ticks.toArray(), null, gameTime, ids);
             } else if (c.getClass() == LevelChunkTicks.class) {
                 dev.lull.opt.SaveTicksLevelAccessor a = (dev.lull.opt.SaveTicksLevelAccessor) c;
                 java.util.List<?> pending = a.sleep$pendingTicks();
-                job = new TickJob(pending == null ? null : pending.toArray(), a.sleep$tickQueue().toArray(), gameTime, ids);
+                java.util.Queue<?> queue = a.sleep$tickQueue();
+                if (queue != null) job = new TickJob(pending == null ? null : pending.toArray(), queue.toArray(), gameTime, ids);
+                else foreignTicks++;
             }
             if (job != null) {
                 ListTag placeholder = new ListTag();
