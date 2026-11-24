@@ -115,7 +115,7 @@ public final class SpecTicks {
             all[n++] = e;
         });
         walks++;
-        boolean serial = ALTERNATE && (walks & 1) == 0;
+        boolean serial = ALTERNATE && (walks & 1) == 0 || !HookFlags.parallelOk();
         long t0 = System.nanoTime();
         try {
             if (UNDO_TEST) {
@@ -1272,7 +1272,7 @@ public final class SpecTicks {
 
     /** ServerParallelItemsChunkTicksMixin: the chunk's tickChunk kept for the pass (true), or done now (false) */
     public static boolean keepChunkTick(ServerLevel lvl, LevelChunk c, int speed) {
-        if (!chunkTicks || running || ServerParallelItems.running()) return false;
+        if (!chunkTicks || running || ServerParallelItems.running() || !HookFlags.chunkHook) return false;
         if (ctLevel != null && ctLevel != lvl) chunkTicksPass();
         if (ctN == ctChunks.length) ctChunks = java.util.Arrays.copyOf(ctChunks, ctN * 2);
         ctChunks[ctN++] = c;

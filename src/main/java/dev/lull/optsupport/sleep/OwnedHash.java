@@ -101,7 +101,9 @@ final class OwnedHash {
         seen.clear();
         seen.put(be);
         long h = 17;
-        for (Field f : fields(be.getClass(), true)) h = h * 1_000_003L + value(get(f, be), 1, seen);
+        Field[] own = fields(be.getClass(), true);
+        if (own == BLIND) return ++blindCalls * 0x9E3779B97F4A7C15L;
+        for (Field f : own) h = h * 1_000_003L + value(get(f, be), 1, seen);
         return h;
     }
 
@@ -117,8 +119,14 @@ final class OwnedHash {
     private static Field[] fields(Class<?> c, boolean be) {
         return FIELDS.computeIfAbsent(c, k -> {
             List<Field> l = new ArrayList<>();
-            for (Class<?> x = k; x != null && x != Object.class && x != BE; x = x.getSuperclass())
-                for (Field f : x.getDeclaredFields()) {
+            for (Class<?> x = k; x != null && x != Object.class && x != BE; x = x.getSuperclass()) {
+                Field[] declared;
+                try {
+                    declared = x.getDeclaredFields();
+                } catch (Throwable t) {   // a field typed with a class this side cannot load (a client class on a dedicated server)
+                    return BLIND;
+                }
+                for (Field f : declared) {
                     if (Modifier.isStatic(f.getModifiers()) || f.isSynthetic()) continue;
                     try {
                         f.setAccessible(true);
@@ -127,9 +135,14 @@ final class OwnedHash {
                         // a module-closed field: left out (a class the mods own is open; JDK internals are not followed)
                     }
                 }
+            }
             return l.toArray(new Field[0]);
         });
     }
+
+    /** a class whose fields cannot be read: its owner's hash differs on every call (it never looks unchanged, never sleeps by it) */
+    private static final Field[] BLIND = new Field[0];
+    private static long blindCalls;
 
     private static long value(Object v, int depth, Seen seen) {
         if (v == null) return 0;
@@ -174,7 +187,9 @@ final class OwnedHash {
         }
         if (c.getName().startsWith("java.") || c.getName().startsWith("jdk.") || c.getName().startsWith("sun.")) return System.identityHashCode(v);
         long h = c.hashCode();
-        for (Field f : fields(c, false)) h = h * 1_000_003L + value(get(f, v), depth + 1, seen);
+        Field[] fs = fields(c, false);
+        if (fs == BLIND) return ++blindCalls * 0x9E3779B97F4A7C15L;
+        for (Field f : fs) h = h * 1_000_003L + value(get(f, v), depth + 1, seen);
         return h;
     }
 }
