@@ -23,6 +23,8 @@ ap.add_argument('--java', default=r'C:\Users\ha7gawa\.gradle\jdks\eclipse_adopti
 ap.add_argument('--launch', default='libraries/net/neoforged/neoforge/21.1.251/win_args.txt')
 ap.add_argument('--heap', default='6G')
 ap.add_argument('--flags', default='')
+ap.add_argument('--extra', default='', help='jars of other mods put beside ours (comma separated)')
+ap.add_argument('--log', default='', help='write every server line here')
 a = ap.parse_args()
 
 D = a.server
@@ -46,6 +48,8 @@ res = []
 label = a.label or ('vanilla' if not a.jar else 'off' if a.off else 'on')
 try:
     shutil.copy(a.chunky, os.path.join(D, 'mods'))
+    for x in filter(None, a.extra.split(',')):
+        shutil.copy(x, os.path.join(D, 'mods'))
     if a.jar:
         shutil.copy(a.jar, os.path.join(D, 'mods'))
     shutil.rmtree(os.path.join(D, props['level-name']), ignore_errors=True)
@@ -116,6 +120,8 @@ finally:
 
 if res:
     print('%s: %d rounds, chunks/s %s, mean %.1f' % (label, len(res), ' '.join('%.1f' % x for x in res), sum(res) / len(res)))
+if a.log:
+    open(a.log, 'w', encoding='utf-8').write(chr(10).join(lines))
 errs = [l for l in lines if ('/ERROR' in l or 'Exception' in l) and 'UniExceptionally' not in l]
 print('%d error / exception lines' % len(errs))
 for l in errs[:6]:
