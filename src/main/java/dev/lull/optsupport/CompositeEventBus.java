@@ -259,7 +259,7 @@ public final class CompositeEventBus extends EventBus {
                     ModProfile.listener(current[i], event, System.nanoTime() - t0);
                 }
             } catch (Throwable t) {
-                exceptionHandler.handleException(this, event, current, i, t);
+                if (!(t instanceof QuietSignal)) exceptionHandler.handleException(this, event, current, i, t);
                 throw t;
             }
             return event;
@@ -269,7 +269,7 @@ public final class CompositeEventBus extends EventBus {
             try {
                 for (; i < n; i++) current[i].invoke(event);
             } catch (Throwable t) {
-                exceptionHandler.handleException(this, event, current, i, t);
+                if (!(t instanceof QuietSignal)) exceptionHandler.handleException(this, event, current, i, t);
                 throw t;
             }
             return event;
@@ -277,7 +277,7 @@ public final class CompositeEventBus extends EventBus {
         try {
             b.dispatch().dispatch(event);
         } catch (Throwable t) {
-            exceptionHandler.handleException(this, event, current, -1, t);
+            if (!(t instanceof QuietSignal)) exceptionHandler.handleException(this, event, current, -1, t);
             throw t;
         }
         return event;
