@@ -4,6 +4,19 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.10 - 2026-11-25
+
+- **Maximum speed keeps mods' code off the worker threads also when it sits inside vanilla mobs and blocks.** Mods often
+  change a vanilla mob's or block's tick with a mixin (seasons changing crop growth, mods adding behaviour to a vanilla
+  animal), and that code usually keeps state that is not made for several threads. Such a mob now stays on the server
+  thread (unless *Maximum speed for mods' mobs* is on), and such a block's random tick runs after the parallel pass,
+  on the server thread. Found with test mods that do exactly this: before, most of their calls ran on the workers and
+  lost updates; now none do. Without such mods nothing changes.
+- Checked at the same time: a mod that follows entity ticks with an event listener sees every tick in the exact mode,
+  the same count as in vanilla, also where Sleepium puts entities to sleep.
+
+The exact modes are unchanged: the exactness checks stay identical to vanilla, with parallel entity ticks too.
+
 ## 1.4.9 - 2026-11-24
 
 - **Safer Maximum speed and parallel entity ticks next to other mods.** Parallel ticks rely on several of Sleepium's
