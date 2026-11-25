@@ -162,7 +162,7 @@ public final class ParallelBeSave {
             TypeState ts = TYPES.get(be.getClass());
             p.type[i] = ts;
             int v = ts.verdict;
-            byte m = v == SERIAL || be.hasAttachments() ? M_MAIN : v == TRUSTED ? M_POOL : M_LEARN;
+            byte m = v == SERIAL ? M_MAIN : v == TRUSTED ? M_POOL : M_LEARN;
             p.mode[i] = m;
             if (m != M_MAIN) work[w++] = i;
             i++;

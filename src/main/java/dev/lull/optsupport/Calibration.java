@@ -22,8 +22,7 @@ public final class Calibration {
     /** this jar's version from the mod list (a constant here stayed at 1.2.1 in 1.2.2) */
     private static String version() {
         try {
-            return net.neoforged.fml.ModList.get().getModContainerById("sleepium")
-                    .map(c -> c.getModInfo().getVersion().toString()).orElse("?");
+            return dev.lull.Loader.version("sleepium");
         } catch (Throwable t) {
             return "?";
         }
@@ -48,8 +47,7 @@ public final class Calibration {
     private static String mods() {
         StringBuilder b = new StringBuilder();
         try {
-            net.neoforged.fml.ModList.get().getMods().stream()
-                    .map(m -> m.getModId() + "@" + m.getVersion())
+            dev.lull.Loader.mods().stream()
                     .sorted()
                     .forEach(x -> b.append(x).append(';'));
         } catch (Throwable t) {

@@ -36,8 +36,6 @@ public final class WB {
             }
         }
         O0 = o.length > 0 ? o[0] : -1; O1 = o.length > 1 ? o[1] : -1; O2 = o.length > 2 ? o[2] : -1; O3 = o.length > 3 ? o[3] : -1; O4 = o.length > 4 ? o[4] : -1; O5 = o.length > 5 ? o[5] : -1; O6 = o.length > 6 ? o[6] : -1; O7 = o.length > 7 ? o[7] : -1; O8 = o.length > 8 ? o[8] : -1; O9 = o.length > 9 ? o[9] : -1; O10 = o.length > 10 ? o[10] : -1; O11 = o.length > 11 ? o[11] : -1; O12 = o.length > 12 ? o[12] : -1; O13 = o.length > 13 ? o[13] : -1; O14 = o.length > 14 ? o[14] : -1; O15 = o.length > 15 ? o[15] : -1; O16 = o.length > 16 ? o[16] : -1; O17 = o.length > 17 ? o[17] : -1; O18 = o.length > 18 ? o[18] : -1; O19 = o.length > 19 ? o[19] : -1; O20 = o.length > 20 ? o[20] : -1; O21 = o.length > 21 ? o[21] : -1; O22 = o.length > 22 ? o[22] : -1; O23 = o.length > 23 ? o[23] : -1;
-        if (SAMPLE > 0) net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(WB::onPre);
-        if (SAMPLE > 0) net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(WB::onPost);
         System.out.println("[sleep/wb] write barrier: " + WriteBarrier.sites + " sites in " + WriteBarrier.classes + " classes so far, " + WBIds.count + " fields");
     }
 
@@ -253,8 +251,9 @@ public final class WB {
 
     private static Field bodyRot;
 
-    static void onPre(net.neoforged.neoforge.event.tick.EntityTickEvent.Pre e) {
-        Entity en = e.getEntity();
+    static void onPre(Object e) {   // (Fabric: never called - no entity tick events)
+        if (true) return;
+        Entity en = ((Entity) null);
         if (en.level().isClientSide) return;
         if (sampled.size() < SAMPLE && en instanceof Animal && !sampled.contains(en)) sampled.add(en);
         if (!sampled.contains(en)) return;
@@ -290,8 +289,9 @@ public final class WB {
         logN = 0;
     }
 
-    static void onPost(net.neoforged.neoforge.event.tick.EntityTickEvent.Post e) {
-        if (cur != e.getEntity()) return;
+    static void onPost(Object e) {   // (Fabric: never called)
+        if (true) return;
+        if (cur != ((Entity) null)) return;
         cur = null;
         ticks++;
         changedBy = grow(changedBy, WBIds.count - 1);

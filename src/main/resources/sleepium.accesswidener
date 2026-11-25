@@ -1,0 +1,80 @@
+accessWidener v2 named
+# converted from accesstransformer.cfg (NeoForge branch) by at2aw.py
+accessible class net/minecraft/client/renderer/texture/SpriteContents$Ticker
+accessible field net/minecraft/client/renderer/texture/SpriteContents$Ticker frame I
+accessible field net/minecraft/client/renderer/texture/SpriteContents$Ticker subFrame I
+accessible field net/minecraft/client/renderer/texture/SpriteContents$Ticker animationInfo Lnet/minecraft/client/renderer/texture/SpriteContents$AnimatedTexture;
+accessible class net/minecraft/client/renderer/texture/SpriteContents$AnimatedTexture
+accessible field net/minecraft/client/renderer/texture/SpriteContents$AnimatedTexture frames Ljava/util/List;
+accessible method net/minecraft/client/renderer/texture/SpriteContents$AnimatedTexture getFrameX (I)I
+accessible method net/minecraft/client/renderer/texture/SpriteContents$AnimatedTexture getFrameY (I)I
+accessible class net/minecraft/client/renderer/texture/SpriteContents$FrameInfo
+accessible field net/minecraft/client/renderer/texture/SpriteContents$FrameInfo index I
+accessible field net/minecraft/client/renderer/texture/SpriteContents$FrameInfo time I
+accessible method net/minecraft/client/renderer/texture/SpriteContents upload (IIII[Lcom/mojang/blaze3d/platform/NativeImage;)V
+accessible field com/mojang/blaze3d/platform/NativeImage pixels J
+accessible class net/minecraft/client/renderer/SectionOcclusionGraph$Node
+accessible method net/minecraft/client/renderer/SectionOcclusionGraph$Node <init> (Lnet/minecraft/client/renderer/chunk/SectionRenderDispatcher$RenderSection;Lnet/minecraft/core/Direction;I)V
+accessible field net/minecraft/client/renderer/SectionOcclusionGraph$Node section Lnet/minecraft/client/renderer/chunk/SectionRenderDispatcher$RenderSection;
+accessible field net/minecraft/client/renderer/SectionOcclusionGraph$Node sourceDirections B
+accessible field net/minecraft/client/renderer/SectionOcclusionGraph$Node directions B
+accessible field net/minecraft/client/renderer/SectionOcclusionGraph$Node step I
+accessible method net/minecraft/client/renderer/SectionOcclusionGraph$Node setDirections (BLnet/minecraft/core/Direction;)V
+accessible method net/minecraft/client/renderer/SectionOcclusionGraph$Node hasDirection (Lnet/minecraft/core/Direction;)Z
+accessible method net/minecraft/client/renderer/SectionOcclusionGraph$Node addSourceDirection (Lnet/minecraft/core/Direction;)V
+accessible method net/minecraft/client/renderer/SectionOcclusionGraph$Node hasSourceDirection (I)Z
+accessible method net/minecraft/client/renderer/SectionOcclusionGraph$Node hasSourceDirections ()Z
+accessible class net/minecraft/client/renderer/SectionOcclusionGraph$GraphStorage
+accessible method net/minecraft/client/renderer/SectionOcclusionGraph$GraphStorage <init> (I)V
+accessible class net/minecraft/client/renderer/SectionOcclusionGraph$SectionToNodeMap
+accessible method net/minecraft/client/renderer/chunk/SectionRenderDispatcher$RenderSection doesChunkExistAt (Lnet/minecraft/core/BlockPos;)Z
+accessible field net/minecraft/client/renderer/chunk/SectionRenderDispatcher$RenderSection relativeOrigins [Lnet/minecraft/core/BlockPos$MutableBlockPos;
+accessible method net/minecraft/client/renderer/ViewArea getRenderSectionAt (Lnet/minecraft/core/BlockPos;)Lnet/minecraft/client/renderer/chunk/SectionRenderDispatcher$RenderSection;
+accessible method net/minecraft/client/renderer/chunk/SectionRenderDispatcher$RenderSection getDistToPlayerSqr ()D
+accessible field net/minecraft/client/renderer/SectionOcclusionGraph$SectionToNodeMap nodes [Lnet/minecraft/client/renderer/SectionOcclusionGraph$Node;
+accessible class net/minecraft/client/renderer/block/ModelBlockRenderer$AmbientOcclusionFace
+accessible field net/minecraft/client/renderer/block/ModelBlockRenderer$AmbientOcclusionFace brightness [F
+accessible field net/minecraft/client/renderer/block/ModelBlockRenderer$AmbientOcclusionFace lightmap [I
+accessible class net/minecraft/client/renderer/chunk/RenderChunk
+accessible field net/minecraft/client/renderer/chunk/RenderChunkRegion chunks [Lnet/minecraft/client/renderer/chunk/RenderChunk;
+accessible field net/minecraft/world/level/lighting/LightEngine storage Lnet/minecraft/world/level/lighting/LayerLightSectionStorage;
+accessible method net/minecraft/world/level/lighting/LayerLightSectionStorage getDataLayer (JZ)Lnet/minecraft/world/level/chunk/DataLayer;
+accessible method net/minecraft/client/renderer/chunk/SectionRenderDispatcher$RenderSection setCompiled (Lnet/minecraft/client/renderer/chunk/SectionRenderDispatcher$CompiledSection;)V
+accessible field net/minecraft/world/level/chunk/PalettedContainer data Lnet/minecraft/world/level/chunk/PalettedContainer$Data;
+accessible class net/minecraft/world/level/chunk/PalettedContainer$Data
+accessible class net/minecraft/client/renderer/block/ModelBlockRenderer$Cache
+accessible class net/minecraft/server/level/DistanceManager$PlayerTicketTracker
+accessible method net/minecraft/server/level/DistanceManager$PlayerTicketTracker updateViewDistance (I)V
+accessible class net/minecraft/server/level/DistanceManager$FixedPlayerDistanceChunkTracker
+accessible field net/minecraft/server/level/DistanceManager playersPerChunk Lit/unimi/dsi/fastutil/longs/Long2ObjectMap;
+accessible class net/minecraft/server/level/ChunkMap$DistanceManager
+accessible class net/minecraft/server/level/PlayerMap
+accessible method net/minecraft/server/level/PlayerMap ignored (Lnet/minecraft/server/level/ServerPlayer;)Z
+accessible field net/minecraft/world/level/Level blockEntityTickers Ljava/util/List;
+accessible method net/minecraft/world/level/chunk/PalettedContainer createOrReuseData (Lnet/minecraft/world/level/chunk/PalettedContainer$Data;I)Lnet/minecraft/world/level/chunk/PalettedContainer$Data;
+accessible field net/minecraft/world/level/chunk/LevelChunkSection nonEmptyBlockCount S
+accessible field net/minecraft/world/level/chunk/LevelChunkSection tickingBlockCount S
+accessible field net/minecraft/world/level/chunk/LevelChunkSection tickingFluidCount S
+accessible class net/minecraft/world/level/levelgen/SurfaceRules$Context
+accessible method net/minecraft/world/level/levelgen/SurfaceRules$Context <init> (Lnet/minecraft/world/level/levelgen/SurfaceSystem;Lnet/minecraft/world/level/levelgen/RandomState;Lnet/minecraft/world/level/chunk/ChunkAccess;Lnet/minecraft/world/level/levelgen/NoiseChunk;Ljava/util/function/Function;Lnet/minecraft/core/Registry;Lnet/minecraft/world/level/levelgen/WorldGenerationContext;)V
+accessible method net/minecraft/world/level/levelgen/SurfaceRules$Context updateXZ (II)V
+accessible method net/minecraft/world/level/levelgen/SurfaceRules$Context updateY (IIIIII)V
+accessible class net/minecraft/world/level/levelgen/SurfaceRules$SurfaceRule
+accessible method net/minecraft/world/level/levelgen/SurfaceRules$Context getMinSurfaceLevel ()I
+accessible class net/minecraft/world/level/levelgen/SurfaceRules$Condition
+accessible class net/minecraft/world/level/levelgen/SurfaceRules$SequenceRule
+accessible class net/minecraft/world/level/levelgen/SurfaceRules$TestRule
+accessible class net/minecraft/world/level/levelgen/SurfaceRules$StateRule
+accessible class net/minecraft/world/level/levelgen/SurfaceRules$NotCondition
+accessible class net/minecraft/world/level/levelgen/SurfaceRules$StoneDepthCheck
+accessible field net/minecraft/world/level/levelgen/SurfaceRules$Context surfaceDepth I
+accessible method net/minecraft/world/level/levelgen/SurfaceRules$Context getSurfaceSecondary ()D
+accessible class net/minecraft/world/level/levelgen/SurfaceRules$YConditionSource
+accessible class net/minecraft/world/level/levelgen/SurfaceRules$WaterConditionSource
+accessible field net/minecraft/world/level/levelgen/SurfaceRules$Context context Lnet/minecraft/world/level/levelgen/WorldGenerationContext;
+accessible field net/minecraft/world/entity/Mob goalSelector Lnet/minecraft/world/entity/ai/goal/GoalSelector;
+accessible field net/minecraft/world/entity/Mob targetSelector Lnet/minecraft/world/entity/ai/goal/GoalSelector;
+accessible field net/minecraft/client/renderer/texture/SpriteContents byMipLevel [Lcom/mojang/blaze3d/platform/NativeImage;
+accessible field net/minecraft/client/Minecraft itemColors Lnet/minecraft/client/color/item/ItemColors;
+accessible method net/minecraft/server/level/ChunkMap getVisibleChunkIfPresent (J)Lnet/minecraft/server/level/ChunkHolder;
+accessible field net/minecraft/server/level/ServerChunkCache level Lnet/minecraft/server/level/ServerLevel;

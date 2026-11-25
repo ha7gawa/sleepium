@@ -149,7 +149,7 @@ public final class ItemGpu {
             return false;
         }
         ItemColors ic = colors;
-        if (ic == null) colors = ic = Minecraft.getInstance().getItemColors();
+        if (ic == null) colors = ic = Minecraft.getInstance().itemColors;
         PartBatch.JobParts jp;
         if (vc instanceof RecordingBuilder rb) {
             // a ParallelRender job: the record into the job, merged on the render thread (PartBatch.mergeJob); another

@@ -18,7 +18,7 @@ public final class Sides {
 
     private static boolean dedicated() {
         try {
-            return net.neoforged.fml.loading.FMLEnvironment.dist.isDedicatedServer();
+            return !dev.lull.Loader.client();
         } catch (Throwable t) {
             return false;
         }
@@ -34,6 +34,6 @@ public final class Sides {
             if (o == FrameReactor.poolIfMade()) return false;
             if (o == ServerReactor.poolIfMade()) return true;
         }
-        return net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer() != null;
+        return dev.lull.Loader.server != null;
     }
 }

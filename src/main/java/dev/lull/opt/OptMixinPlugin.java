@@ -33,8 +33,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
      */
     private static boolean sleep$givesWayToC2me(String mixinClassName) {
         if (!mixinClassName.endsWith(".WorldgenColumnMemoMixin")) return false;
-        var mods = net.neoforged.fml.loading.LoadingModList.get();
-        if (mods == null || mods.getModFileById("c2me") == null && mods.getModFileById("c2me_opts_dfc") == null) return false;
+        if (!dev.lull.Loader.modLoaded("c2me") && !dev.lull.Loader.modLoaded("c2me_opts_dfc")) return false;
         System.out.println("[sleep/opt] WorldgenColumnMemoMixin not applied: C2ME compiles the density functions, and the column memos would keep its compiler out");
         return true;
     }

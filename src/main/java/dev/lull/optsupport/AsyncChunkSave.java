@@ -20,8 +20,6 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.PalettedContainer;
 import net.minecraft.world.level.chunk.storage.ChunkStorage;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.level.ChunkDataEvent;
 
 /**
  * exp/async-chunk-save (server): the expensive part of saving a chunk on the main thread — encoding every section's
@@ -71,15 +69,11 @@ public final class AsyncChunkSave {
         // a LevelChunk
         if (!(chunk instanceof LevelChunk) && !(chunk instanceof net.minecraft.world.level.chunk.ProtoChunk)) return false;
         if (((StorageAccess) storage).sleep$legacyHandler() != null) return false;
-        return NeoForge.EVENT_BUS instanceof CompositeEventBus cb && (!cb.mayHaveListeners(ChunkDataEvent.Save.class)
-                || onlyCounters(cb)   // the engine's own event counting (/sleepium report, genbench rounds)
-                || SaveListeners.ON && SaveListeners.onlyOwnKeys(cb));   // lab.asyncsave.listeners: listeners that keep to their own keys
+        return true;   // (Fabric: no ChunkDataEvent.Save listeners can exist)
     }
 
     /** the listener array last decided, and whether it held only the engine's counting listeners */
-    private record Counted(net.neoforged.bus.api.EventListener[] listeners, boolean only) {}
 
-    private static volatile Counted counted;
     public static final AtomicLong countedOnly = new AtomicLong();
 
     /**
@@ -87,17 +81,8 @@ public final class AsyncChunkSave {
      * type - ChunkDataEvent.Save too - and every save went back to the vanilla way on the main thread (a fifth of the
      * genbench's saves, 34 % of the server thread's allocation in its JFR). A counting listener never sees the tag.
      */
-    private static boolean onlyCounters(CompositeEventBus cb) {
-        net.neoforged.bus.api.EventListener[] ls = cb.listenersOf(ChunkDataEvent.Save.class);
-        if (ls == null || ls.length == 0) return false;
-        Counted c = counted;
-        if (c == null || c.listeners() != ls) {
-            boolean only = true;
-            for (net.neoforged.bus.api.EventListener l : ls) if (!dev.lull.EventCounter.isCounting(l)) { only = false; break; }
-            counted = c = new Counted(ls, only);
-        }
-        if (c.only()) countedOnly.incrementAndGet();
-        return c.only();
+    private static boolean onlyCounters(Object cb) {
+        return false;   // (Fabric: no ChunkDataEvent)
     }
 
     /** ChunkMap.save's ChunkSerializer.write, main thread. */

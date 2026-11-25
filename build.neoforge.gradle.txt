@@ -1,0 +1,172 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'net.neoforged.moddev' version '2.0.147'
+    id 'idea'
+}
+
+tasks.named('wrapper', Wrapper).configure {
+    distributionType = Wrapper.DistributionType.BIN
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// the jar names the Minecraft version and the loader it is for: sleepium-1.1.0+mc1.21.1-neoforge.jar
+tasks.named('jar', Jar).configure {
+    archiveVersion = "${mod_version}+mc${minecraft_version}-neoforge"
+}
+
+// the test scenes (data/sleep/function: lag_*, client_*): loaded by the dev runs and the tools, not in the jar
+sourceSets {
+    scenes
+}
+tasks.named('classes') { dependsOn 'processScenesResources' }
+
+// Minecraft 1.21.1 runs on Java 21
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+    // GeckoLib, for the engine's GeckoLib mixins (applied only when GeckoLib is installed)
+    maven {
+        url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
+        content { includeGroup 'software.bernie.geckolib' }
+    }
+    // Flywheel (Create bundles it), for the engine's Flywheel mixin (applied only when Flywheel is installed)
+    maven {
+        url = 'https://maven.createmod.net'
+        content { includeGroup 'dev.engine-room.flywheel'; includeGroup 'net.createmod.ponder'; includeGroup 'com.simibubi.create' }
+    }
+}
+
+dependencies {
+    compileOnly "software.bernie.geckolib:geckolib-neoforge-${minecraft_version}:${geckolib_version}"
+    compileOnly "dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}"
+    compileOnly "net.createmod.ponder:ponder-neoforge:${ponder_version}"
+    compileOnly("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }
+}
+
+neoForge {
+    version = project.neo_version
+
+    parchment {
+        mappingsVersion = project.parchment_mappings_version
+        minecraftVersion = project.parchment_minecraft_version
+    }
+
+    runs {
+        client {
+            client()
+        }
+        // the same client, recording a JFR profile of the whole session into run/sleep-<timestamp>.jfr
+        clientJfr {
+            client()
+            jvmArguments.addAll(
+                    '-XX:StartFlightRecording=settings=profile,dumponexit=true,filename=sleep-%t.jfr',
+                    '-XX:FlightRecorderOptions=stackdepth=256'
+            )
+        }
+        server {
+            server()
+            programArgument '--nogui'
+        }
+        configureEach {
+            logLevel = org.slf4j.event.Level.INFO
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+            sourceSet(sourceSets.scenes)
+        }
+    }
+}
+
+// neoforge.mods.toml from its template, with the build's properties
+var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+    var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+            mod_authors            : mod_authors,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from "src/main/templates"
+    into "build/generated/sources/modMetadata"
+}
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+// the engine's default flags (defaults.txt) in the jar: on in production unless -Dlab.opt.defaults=false
+// (dev.lull.optsupport.GameDefaults); the network lag simulator stays a test tool
+processResources {
+    from('defaults.txt') {
+        into 'sleepium'
+        filter { line -> line.contains('NetLagMixin') ? null : line }
+    }
+    from('LICENSE')
+    from('COPYING')
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            url = layout.projectDirectory.dir("repo")
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}
+
+// The engine stands alone: its sources may use only its own packages (dev.lull, dev.lab), Minecraft, NeoForge and
+// libraries - never a mod built on it.
+def engineSources = fileTree('src/main/java')
+def checkEngine = tasks.register('checkEngineIndependent') {
+    inputs.files(engineSources)
+    doLast {
+        def bad = engineSources.files.findAll { f ->
+            f.name.endsWith('.java') && f.text.find(/(?m)^\s*import\s+(static\s+)?dev\.(?!lull\.|lab\.|engine_room\.flywheel\.)/)
+        }
+        if (!bad.isEmpty()) throw new GradleException("the engine imports another mod's package: " + bad*.name)
+    }
+}
+tasks.named('compileJava') { dependsOn checkEngine }
+
+// the dedicated server reads its console from this build's standard input: tools/*.sh drive it with commands
+tasks.named('runServer') { standardInput = System.in }
+
+// extra JVM arguments for the runs, from the tools: -PrunJvmArgs="-Dlab.opt.defaults=true -Dsleep.seedEntities=true"
+// -PrunArgs="--width 1280 --height 720": program arguments for the dev runs (tools/client_bench.py)
+if (project.hasProperty('runArgs')) {
+    def extra = project.property('runArgs').toString().trim()
+    if (!extra.isEmpty()) neoForge.runs.configureEach { programArguments.addAll(extra.split(/\s+/) as List) }
+}
+if (project.hasProperty('runJvmArgs')) {
+    def extra = project.property('runJvmArgs').toString().trim()
+    if (!extra.isEmpty()) neoForge.runs.configureEach { jvmArguments.addAll(extra.split(/\s+/) as List) }
+}

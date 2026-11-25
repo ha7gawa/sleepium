@@ -72,8 +72,7 @@ public final class ModProfile {
         if (m == null) {
             m = new HashMap<>();
             try {
-                for (var info : net.neoforged.fml.loading.LoadingModList.get().getModFiles())
-                    if (!info.getMods().isEmpty()) m.put(info.moduleName(), info.getMods().get(0).getModId());
+                // (Fabric: no module per mod - classes are told apart by their code source below)
             } catch (Throwable t) {
                 // (tests: no loader)
             }

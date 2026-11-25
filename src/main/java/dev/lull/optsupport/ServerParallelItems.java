@@ -173,7 +173,7 @@ public final class ServerParallelItems {
         if (ie.getItem().isEmpty()) return no("empty");
         if (!PLAIN_ITEM.computeIfAbsent(ie.getItem().getItem().getClass(), ServerParallelItems::plainItem)) return no("item update hook");
         int age = ie.getAge();
-        if (age != -32768 && age + 1 >= ie.lifespan) return no("expires");
+        if (age != -32768 && age + 1 >= 6000) return no("expires");
         if (e.getRemainingFireTicks() > 0 || e.isOnFire() || e.isInLava() || e.portalProcess != null) return no("fire / lava / portal");
         if (e.getY() < lvl.getMinBuildHeight() - 32) return no("below the world");
         if (!dev.lull.optsupport.sleep.EntitySleep.plainNext(e)) return no("entity sleep observes");

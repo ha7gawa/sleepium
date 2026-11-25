@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.Shadow;
 /** Hysteresis: the player ticket tracker's source chunks are the anchors (an override of getLevelFromSource). */
 @Mixin(targets = "net.minecraft.server.level.DistanceManager$PlayerTicketTracker")
 public abstract class PlayerTicketHystMixin {
-    @Shadow @Final DistanceManager this$0;
+    @Shadow(aliases = "field_17463") @Final DistanceManager this$0;
 
     protected int getLevelFromSource(long pos) {
         if (Hysteresis.ON) return ((Hysteresis.Anchors) (Object) this$0).sleep$hasAnchor(pos) ? 0 : Integer.MAX_VALUE;

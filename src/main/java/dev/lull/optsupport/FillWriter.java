@@ -238,7 +238,7 @@ public final class FillWriter {
             int k = c[i];
             if (k == 0) continue;
             BlockState st = v[i];
-            if (!st.isEmpty()) {
+            if (!st.isAir()) {   // (NeoForge counts with isEmpty, default isAir)
                 nonEmpty += k;
                 if (st.isRandomlyTicking()) ticking += k;
             }

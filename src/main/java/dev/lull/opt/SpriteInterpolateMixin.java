@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.Shadow;
 @Mixin(targets = "net.minecraft.client.renderer.texture.SpriteContents$InterpolationData")
 public abstract class SpriteInterpolateMixin {
     @Shadow @Final private NativeImage[] activeFrame;
-    @Shadow @Final SpriteContents this$0;
+    @Shadow(aliases = "field_21757") @Final SpriteContents this$0;
 
     /**
      * @author sleep

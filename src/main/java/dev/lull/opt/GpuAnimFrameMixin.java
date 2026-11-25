@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** -Dlab.opt.GpuAnim: an animated sprite's next frame copied on the GPU from its sheet (GpuAnim) instead of uploaded. */
 @Mixin(targets = "net.minecraft.client.renderer.texture.SpriteContents$AnimatedTexture")
 public abstract class GpuAnimFrameMixin {
-    @Shadow @Final SpriteContents this$0;
+    @Shadow(aliases = "field_28469") @Final SpriteContents this$0;
 
     @Shadow
     public abstract int getFrameX(int frameIndex);

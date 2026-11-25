@@ -127,7 +127,7 @@ public final class GameDefaults {
         if ("false".equals(opt)) return;
         boolean prod;
         try {
-            prod = net.neoforged.fml.loading.FMLLoader.isProduction();
+            prod = dev.lull.Loader.production();
         } catch (Throwable t) {
             prod = false;
         }

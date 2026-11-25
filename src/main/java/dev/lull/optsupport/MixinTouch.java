@@ -259,7 +259,7 @@ public final class MixinTouch {
      */
     private static void indexModFiles(Map<String, Set<String>> m) {
         try {
-            var mods = net.neoforged.fml.loading.LoadingModList.get();
+            var mods = FabricModFiles.get();
             if (mods == null) return;
             for (var info : mods.getModFiles()) {
                 var file = info.getFile();
@@ -277,6 +277,14 @@ public final class MixinTouch {
                         if (!o.has("package") || !o.get("package").isJsonPrimitive()) continue;
                         String pkg = o.get("package").getAsString();
                         if (pkg.startsWith("dev.lull") || pkg.startsWith("dev.probe")) continue;
+                        indexingRefmap = null;   // (Fabric: mods name methods in their own mappings - Yarn; the refmap gives the environment's)
+                        if (o.has("refmap") && o.get("refmap").isJsonPrimitive()) {
+                            java.nio.file.Path rm = file.findResource(o.get("refmap").getAsString());
+                            if (rm != null && java.nio.file.Files.exists(rm)) {
+                                var ro = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(rm)).getAsJsonObject();
+                                if (ro.has("mappings") && ro.get("mappings").isJsonObject()) indexingRefmap = ro.getAsJsonObject("mappings");
+                            }
+                        }
                         for (String key : new String[] {"mixins", "client", "server"}) {
                             if (!o.has(key) || !o.get(key).isJsonArray()) continue;
                             for (var e : o.getAsJsonArray(key)) {
@@ -311,7 +319,7 @@ public final class MixinTouch {
     /** Every mixin class of this mod's configs (sleepium*.mixins.json), read from the mod file (no code). */
     static void ourMixins(java.util.function.BiConsumer<String, ClassNode> each) {
         try {
-            var mods = net.neoforged.fml.loading.LoadingModList.get();
+            var mods = FabricModFiles.get();
             if (mods == null) return;
             for (var info : mods.getModFiles()) {
                 var file = info.getFile();
@@ -341,13 +349,13 @@ public final class MixinTouch {
     }
 
     /** a foreign mixin config as its mod file holds it (RenderFieldFlow) */
-    record ForeignConfig(net.neoforged.neoforgespi.locating.IModFile file, String mod, String name, String pkg, List<String> mixins) {}
+    record ForeignConfig(FabricModFiles.FileView file, String mod, String name, String pkg, List<String> mixins) {}
 
     /** every foreign mixin config of every mod file (jar-in-jar mods included), read from the files; mixins: class names (dots) */
     static List<ForeignConfig> foreignConfigs() {
         List<ForeignConfig> out = new java.util.ArrayList<>();
         try {
-            var mods = net.neoforged.fml.loading.LoadingModList.get();
+            var mods = FabricModFiles.get();
             if (mods == null) return out;
             for (var info : mods.getModFiles()) {
                 var file = info.getFile();
@@ -399,6 +407,16 @@ public final class MixinTouch {
         Set<String> methods = new HashSet<>();
         collect(cn, methods);
         List<String> reds = redirectKeys(cn), args = argKeys(cn), ows = overwriteNames(cn);
+        if (indexingRefmap != null && indexingRefmap.has(cn.name) && indexingRefmap.get(cn.name).isJsonObject()) {   // (Fabric: through the refmap)
+            Map<String, String> tr = new java.util.HashMap<>();
+            for (var en : indexingRefmap.getAsJsonObject(cn.name).entrySet())
+                if (en.getValue().isJsonPrimitive()) tr.put(nameOf(en.getKey()), runtimeName(en.getValue().getAsString(), ts.get(0)));
+            Set<String> m2 = new HashSet<>();
+            for (String x : methods) m2.add(tr.getOrDefault(x, x));
+            methods = m2;
+            reds = translateKeys(reds, tr);
+            args = translateKeys(args, tr);
+        }
         for (String target : ts) {
             m.computeIfAbsent(target, k -> new HashSet<>()).addAll(methods);
             if (!reds.isEmpty()) REDIRECTS.computeIfAbsent(target, k -> new HashSet<>()).addAll(reds);
@@ -406,6 +424,47 @@ public final class MixinTouch {
             if (!ows.isEmpty()) OVERWRITES.computeIfAbsent(target, k -> new HashSet<>()).addAll(ows);
             noteWho(target, owner, cn.name, methods, reds, args, ows);
         }
+    }
+
+    /** the refmap "mappings" of the config being indexed (Fabric), or null */
+    private static com.google.gson.JsonObject indexingRefmap;
+
+    /**
+     * a refmap target ("Lowner;name(desc)ret" or "name(desc)ret", intermediary names) -> the method's name in this runtime
+     * (Fabric's MappingResolver: Mojang's names in a dev run)
+     */
+    private static String runtimeName(String ref, String targetInternal) {
+        try {
+            var r = net.fabricmc.loader.api.FabricLoader.getInstance().getMappingResolver();
+            String owner = null, rest = ref;
+            if (ref.startsWith("L") && ref.indexOf(';') > 0) {
+                owner = ref.substring(1, ref.indexOf(';')).replace('/', '.');
+                rest = ref.substring(ref.indexOf(';') + 1);
+            }
+            int p = rest.indexOf('(');
+            if (p < 0) return nameOf(ref);
+            String name = rest.substring(0, p), desc = rest.substring(p);
+            if (owner == null) owner = r.unmapClassName("intermediary", targetInternal.replace('/', '.'));
+            if (!name.startsWith("method_")) return name;
+            return r.mapMethodName("intermediary", owner, name, desc);
+        } catch (Throwable t) {
+            return nameOf(ref);
+        }
+    }
+
+    /** "method|invoked" keys with both names through a refmap's names */
+    private static List<String> translateKeys(List<String> keys, Map<String, String> tr) {
+        if (keys.isEmpty()) return keys;
+        List<String> out = new java.util.ArrayList<>(keys.size());
+        for (String k : keys) {
+            int bar = k.indexOf('|');
+            if (bar < 0) out.add(tr.getOrDefault(k, k));
+            else {
+                String m = k.substring(0, bar), inv = k.substring(bar + 1);
+                out.add(tr.getOrDefault(m, m) + "|" + tr.getOrDefault(inv, inv));
+            }
+        }
+        return out;
     }
 
     /** who touches a method: "target#method" (official names; "target#*" a wildcard) -> "mod (Mixin)" */

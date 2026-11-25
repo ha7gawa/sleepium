@@ -1285,8 +1285,7 @@ public final class SpecTicks {
      * the registries do not change while a run ticks - their owners are not run entities, block entities do not move)
      */
     public static boolean quietGameEvent(ServerLevel level, net.minecraft.core.Holder<net.minecraft.world.level.gameevent.GameEvent> ev, net.minecraft.world.phys.Vec3 pos) {
-        if (!(net.neoforged.neoforge.common.NeoForge.EVENT_BUS instanceof CompositeEventBus cb)
-                || cb.mayHaveListeners(net.neoforged.neoforge.event.VanillaGameEvent.class)) return false;
+        // (Fabric: no VanillaGameEvent listeners can exist)
         int r = ev.value().notificationRadius();
         BlockPos p = BlockPos.containing(pos);
         int x0 = net.minecraft.core.SectionPos.blockToSectionCoord(p.getX() - r), y0 = net.minecraft.core.SectionPos.blockToSectionCoord(p.getY() - r);

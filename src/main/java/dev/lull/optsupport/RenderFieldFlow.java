@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import net.neoforged.neoforgespi.locating.IModFile;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Opcodes;
@@ -337,7 +336,7 @@ public final class RenderFieldFlow {
         final Map<String, Set<String>> readSites = new HashMap<>();
         int methods;
 
-        void walk(IModFile home, String owner, MethodNode m, int depth) {
+        void walk(FabricModFiles.FileView home, String owner, MethodNode m, int depth) {
             if (m.instructions == null || !seen.add(owner + "." + m.name + m.desc)) return;
             if (depth > 14) {
                 notFollowed.add(owner + "." + m.name + " (too deep)");
@@ -384,7 +383,7 @@ public final class RenderFieldFlow {
             return false;
         }
 
-        void call(IModFile home, String owner, String name, String desc, boolean virtual, int depth) {
+        void call(FabricModFiles.FileView home, String owner, String name, String desc, boolean virtual, int depth) {
             if (owner.startsWith("[")) return;   // array clone
             if (owner.equals("java/lang/reflect/Method") && name.equals("invoke") || owner.equals("java/lang/invoke/MethodHandle") && name.startsWith("invoke")) {
                 notFollowed.add(owner + "." + name + " (reflection)");
@@ -397,7 +396,7 @@ public final class RenderFieldFlow {
             }
             if (outside(owner)) return;
             boolean found = false;
-            IModFile[] where = new IModFile[1];
+            FabricModFiles.FileView[] where = new FabricModFiles.FileView[1];
             for (String c = owner; c != null && !outside(c); ) {
                 ClassNode cn = Classes.find(home, c, where);
                 if (cn == null) break;
@@ -426,8 +425,8 @@ public final class RenderFieldFlow {
         }
 
         /** the method comes from vanilla / a library up the hierarchy (a mod class extending a vanilla one) */
-        private static boolean inheritedOutside(IModFile home, ClassNode cn, String name, String desc) {
-            IModFile[] where = new IModFile[1];
+        private static boolean inheritedOutside(FabricModFiles.FileView home, ClassNode cn, String name, String desc) {
+            FabricModFiles.FileView[] where = new FabricModFiles.FileView[1];
             for (ClassNode c = cn; c != null; ) {
                 if (c.superName != null && outside(c.superName)) return true;
                 for (String i : c.interfaces) if (outside(i)) return true;
@@ -448,40 +447,40 @@ public final class RenderFieldFlow {
     /** classes read from the mod files (raw bytes, nothing loaded), cached; implementors indexed per file met */
     static final class Classes {
         private static final Map<String, ClassNode> NODES = new HashMap<>();
-        private static final Map<String, IModFile> FILE_OF = new HashMap<>();
+        private static final Map<String, FabricModFiles.FileView> FILE_OF = new HashMap<>();
         private static final Set<String> MISSING = new HashSet<>();
-        private static final Map<IModFile, Map<String, Set<String>>> SUBS = new HashMap<>();
-        private static List<IModFile> all;
+        private static final Map<FabricModFiles.FileView, Map<String, Set<String>>> SUBS = new HashMap<>();
+        private static List<FabricModFiles.FileView> all;
 
-        private static final Map<String, IModFile> PKG_FILE = new HashMap<>();
+        private static final Map<String, FabricModFiles.FileView> PKG_FILE = new HashMap<>();
         private static final Set<String> PKG_MISSING = new java.util.HashSet<>();
 
-        static ClassNode read(IModFile file, String internal) {
-            return find(file, internal, new IModFile[1]);
+        static ClassNode read(FabricModFiles.FileView file, String internal) {
+            return find(file, internal, new FabricModFiles.FileView[1]);
         }
 
         /** the class from its home file first, then any mod file */
-        static ClassNode find(IModFile home, String internal, IModFile[] where) {
+        static ClassNode find(FabricModFiles.FileView home, String internal, FabricModFiles.FileView[] where) {
             ClassNode cn = NODES.get(internal);
             if (cn != null) {
                 where[0] = FILE_OF.get(internal);
                 return cn;
             }
             if (MISSING.contains(internal) || outside(internal)) return null;
-            IModFile f = home != null && has(home, internal) ? home : null;
+            FabricModFiles.FileView f = home != null && has(home, internal) ? home : null;
             if (f == null) {
                 // the file its package was found in first; a package no mod file has: the game's class loader (below) -
                 // every mod file asked for every class cost 2.6 s on a 229-mod pack (absent optional dependencies)
                 String pkg = internal.substring(0, Math.max(0, internal.lastIndexOf('/')));
-                IModFile pf = PKG_FILE.get(pkg);
+                FabricModFiles.FileView pf = PKG_FILE.get(pkg);
                 if (pf != null && has(pf, internal)) f = pf;
                 else if (!PKG_MISSING.contains(pkg)) {
                     if (all == null) {
                         all = new ArrayList<>();
-                        var mods = net.neoforged.fml.loading.LoadingModList.get();
+                        var mods = FabricModFiles.get();
                         if (mods != null) for (var i : mods.getModFiles()) all.add(i.getFile());
                     }
-                    for (IModFile m : all) if (has(m, internal)) { f = m; break; }   // (a split package: its other file)
+                    for (FabricModFiles.FileView m : all) if (has(m, internal)) { f = m; break; }   // (a split package: its other file)
                     if (f != null) PKG_FILE.putIfAbsent(pkg, f);
                     else if (pf == null) PKG_MISSING.add(pkg);
                 }
@@ -515,7 +514,7 @@ public final class RenderFieldFlow {
 
         static long hasN, hasNs, resN, resNs, readN, readNs;
 
-        private static boolean has(IModFile f, String internal) {
+        private static boolean has(FabricModFiles.FileView f, String internal) {
             long t0 = System.nanoTime();
             hasN++;
             try {
@@ -574,7 +573,7 @@ public final class RenderFieldFlow {
             return MISSING.contains(internal);
         }
 
-        static boolean isMixin(IModFile home, String internal) {
+        static boolean isMixin(FabricModFiles.FileView home, String internal) {
             ClassNode cn = read(home, internal);
             return cn != null && !MixinTouch.targets(cn).isEmpty();
         }
@@ -583,7 +582,7 @@ public final class RenderFieldFlow {
          * An instance field of an object one entity's draw owns: a vanilla per-object class's, or a mixin's into such a
          * class (its @Unique / @Shadow fields live in the target's instances).
          */
-        static boolean perObjectField(IModFile home, String owner) {
+        static boolean perObjectField(FabricModFiles.FileView home, String owner) {
             if (outside(owner)) return perObject(owner);
             ClassNode cn = read(home, owner);
             if (cn == null) return false;
@@ -594,17 +593,17 @@ public final class RenderFieldFlow {
         }
 
         /** every class in the home file and the files met so far extending / implementing owner, transitively */
-        static Set<String> implementors(IModFile home, String owner) {
+        static Set<String> implementors(FabricModFiles.FileView home, String owner) {
             Set<String> out = new TreeSet<>();
-            Set<IModFile> files = new HashSet<>(FILE_OF.values());
+            Set<FabricModFiles.FileView> files = new HashSet<>(FILE_OF.values());
             if (home != null) files.add(home);
             // the files not indexed yet, in parallel (each on its own: the whole jar's class headers - 225 files, 57 k
             // classes, 2.8 s one after another on a 229-mod pack)
-            List<IModFile> missing = new ArrayList<>();
-            for (IModFile f : files) if (!SUBS.containsKey(f)) missing.add(f);
+            List<FabricModFiles.FileView> missing = new ArrayList<>();
+            for (FabricModFiles.FileView f : files) if (!SUBS.containsKey(f)) missing.add(f);
             if (missing.size() > 1)
                 for (var e : missing.parallelStream().map(f -> Map.entry(f, index(f))).toList()) SUBS.put(e.getKey(), e.getValue());
-            for (IModFile f : files) {
+            for (FabricModFiles.FileView f : files) {
                 Map<String, Set<String>> subs = SUBS.computeIfAbsent(f, Classes::index);
                 List<String> q = new ArrayList<>(List.of(owner));
                 while (!q.isEmpty()) {
@@ -617,7 +616,7 @@ public final class RenderFieldFlow {
 
         static volatile long idxN, idxNs, idxClasses;   // (stats; the parallel indexing may lose a count)
 
-        private static Map<String, Set<String>> index(IModFile f) {
+        private static Map<String, Set<String>> index(FabricModFiles.FileView f) {
             long ti = System.nanoTime();
             idxN++;
             Map<String, Set<String>> subs = new HashMap<>();

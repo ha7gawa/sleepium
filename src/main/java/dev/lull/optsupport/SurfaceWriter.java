@@ -369,8 +369,8 @@ public final class SurfaceWriter {
                 if (state != wState) {
                     wState = state;
                     BlockState o = def;
-                    wNonEmpty = (state.isEmpty() ? 0 : 1) - (o.isEmpty() ? 0 : 1);
-                    wTicking = (!state.isEmpty() && state.isRandomlyTicking() ? 1 : 0) - (!o.isEmpty() && o.isRandomlyTicking() ? 1 : 0);
+                    wNonEmpty = (state.isAir() ? 0 : 1) - (o.isAir() ? 0 : 1);
+                    wTicking = (!state.isAir() && state.isRandomlyTicking() ? 1 : 0) - (!o.isAir() && o.isRandomlyTicking() ? 1 : 0);
                     wFluid = (state.getFluidState().isEmpty() ? 0 : 1) - (o.getFluidState().isEmpty() ? 0 : 1);
                     wMark = !state.getFluidState().isEmpty();
                 }

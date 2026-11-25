@@ -117,7 +117,7 @@ public final class LightRecipe {
     public static int flatSelf(BlockAndTintGetter level, BlockState self, BlockPos pos, BlockPos sample) {
         int local = ((pos.getX() & 15) << 8) | ((pos.getY() & 15) << 4) | (pos.getZ() & 15);
         if (self.emissiveRendering(level, sample)) return pack(0, FULL_BRIGHT, 0, 0, local);
-        int e = self.getLightEmission(level, sample);
+        int e = self.getLightEmission();
         return pack(code(pos, sample), FLAT_SELF, Math.min(15, e), 0, local);
     }
 

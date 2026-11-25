@@ -140,7 +140,7 @@ public final class LightVolumes {
 
     private static void diag(BlockState state, BakedQuad quad, boolean ao, boolean culledFlat, java.util.BitSet flags, int emulated, int written) {
         String k = state.getBlock().getDescriptionId().replace("block.minecraft.", "") + " " + (ao ? "ao" : culledFlat ? "flat-culled" : "flat") + " " + quad.getDirection()
-                + (ao ? " flags" + flags : "") + " quadAO=" + quad.hasAmbientOcclusion() + " shade=" + quad.isShade();
+                + (ao ? " flags" + flags : "") + " shade=" + quad.isShade();
         REJECTS.computeIfAbsent(k, x -> new long[1])[0]++;
         EXAMPLES.putIfAbsent(k, "recipe " + Integer.toHexString(emulated) + " written " + Integer.toHexString(written));
     }

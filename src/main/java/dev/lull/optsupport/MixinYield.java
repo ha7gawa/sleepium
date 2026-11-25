@@ -282,7 +282,7 @@ public final class MixinYield {
     }
 
     /** a dedicated server has no client classes: asking for one only makes the loader log an error ("invalid dist") */
-    private static final boolean SERVER = !net.neoforged.fml.loading.FMLEnvironment.dist.isClient();
+    private static final boolean SERVER = !dev.lull.Loader.client();
 
     private static ClassNode node(String internal) {
         if (SERVER && internal.startsWith("net/minecraft/client/")) return null;

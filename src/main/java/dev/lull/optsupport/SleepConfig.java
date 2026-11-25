@@ -32,7 +32,7 @@ public final class SleepConfig {
     public static Path file() {
         Path dir;
         try {
-            dir = net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get();
+            dir = dev.lull.Loader.configDir();
         } catch (Throwable t) {
             dir = Path.of("config");
         }

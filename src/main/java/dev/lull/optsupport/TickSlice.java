@@ -154,9 +154,9 @@ public final class TickSlice {
             RenderSystem.enableCull();
             mc.mouseHandler.handleAccumulatedMovement();
             if (!mc.noRender) {
-                net.neoforged.neoforge.client.ClientHooks.fireRenderFramePre(timer);
+                { }   // (Fabric: no frame events)
                 mc.gameRenderer.render(timer, true);
-                net.neoforged.neoforge.client.ClientHooks.fireRenderFramePost(timer);
+                { }
             }
             mc.getMainRenderTarget().unbindWrite();
             mc.getMainRenderTarget().blitToScreen(mc.getWindow().getWidth(), mc.getWindow().getHeight());

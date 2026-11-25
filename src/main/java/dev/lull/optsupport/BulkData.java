@@ -18,8 +18,7 @@ public final class BulkData {
     public static final ClassValue<Boolean> SHORT9_DEFAULT = new ClassValue<>() {
         @Override
         protected Boolean computeValue(Class<?> c) {
-            return declaredBy(c, new Class<?>[] {PoseStack.Pose.class, BakedQuad.class, float.class, float.class, float.class, float.class, int.class, int.class,
-                    boolean.class}, net.neoforged.neoforge.client.extensions.IVertexConsumerExtension.class);
+            return false;   // (Fabric: no NeoForge overload)
         }
     };
 

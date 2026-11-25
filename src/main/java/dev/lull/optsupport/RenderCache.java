@@ -257,9 +257,7 @@ public final class RenderCache {
 
     /** RenderLivingEvent.Pre / Post have a listener (a bus not ours: unknown - yes) */
     static boolean livingRenderListened() {
-        var bus = net.neoforged.neoforge.common.NeoForge.EVENT_BUS;
-        if (!(bus instanceof CompositeEventBus cb)) return true;
-        return cb.mayHaveListeners(net.neoforged.neoforge.client.event.RenderLivingEvent.Pre.class) || cb.mayHaveListeners(net.neoforged.neoforge.client.event.RenderLivingEvent.Post.class);
+        return false;   // (Fabric: no render event bus)
     }
 
     private static long[] classCounters(Class<?> rendererClass) {

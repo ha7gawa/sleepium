@@ -40,11 +40,11 @@ public final class FrameCoop {
         int mods;
         StringBuilder names = new StringBuilder();
         try {
-            var list = net.neoforged.fml.ModList.get().getMods();
             mods = 0;
-            for (var m : list) {
-                if (OWN.contains(m.getModId())) continue;
-                if (mods++ < 6) names.append(names.length() == 0 ? "" : ", ").append(m.getModId());
+            for (String m : dev.lull.Loader.mods()) {
+                String id = m.substring(0, m.indexOf('@'));
+                if (OWN.contains(id)) continue;
+                if (mods++ < 6) names.append(names.length() == 0 ? "" : ", ").append(id);
             }
         } catch (Throwable t) {
             mods = 99;

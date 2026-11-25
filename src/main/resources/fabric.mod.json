@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "sleepium",
+  "version": "${version}",
+  "name": "Sleepium",
+  "description": "World generation and entity rendering from the Sleepium engine (Fabric alpha).",
+  "authors": [
+    "ha7gawa"
+  ],
+  "contact": {
+    "sources": "https://github.com/ha7gawa/sleepium"
+  },
+  "license": "LGPL-3.0-only",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.lull.SleepFabric"
+    ],
+    "client": [
+      "dev.lull.SleepFabricClient"
+    ]
+  },
+  "mixins": [
+    "sleepium.mixins.json",
+    "sleepium-opt.mixins.json"
+  ],
+  "accessWidener": "sleepium.accesswidener",
+  "depends": {
+    "fabricloader": ">=0.16",
+    "minecraft": "1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}

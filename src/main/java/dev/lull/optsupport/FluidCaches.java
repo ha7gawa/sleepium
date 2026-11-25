@@ -42,7 +42,7 @@ public final class FluidCaches {
     private FluidCaches() {}
 
     public static boolean onServerThread() {
-        var server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
+        var server = dev.lull.Loader.server;
         return server != null && Thread.currentThread() == server.getRunningThread();
     }
 

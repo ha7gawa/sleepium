@@ -216,7 +216,7 @@ public final class FrameThread {
         sideOn();
         setRenderThread(thread);
         FrameCoop.decide();
-        if (Boolean.getBoolean("sleep.test.compatProbe")) dev.compatprobe.CompatProbe.register();
+        // (Fabric: no compat probe)
         active = true;
         thread.start();
         LOG.info("[sleep/opt] frame thread: the GL context and the frame's drawing on a thread of their own (stage A1b)");
@@ -954,7 +954,7 @@ public final class FrameThread {
         if (w == null) {
             int mods;
             try {   // (minecraft, neoforge, sleepium, and the mods known to make GL calls only where the frame thread runs them)
-                mods = (int) net.neoforged.fml.ModList.get().getMods().stream().filter(m -> !GL_CLEAN.contains(m.getModId())).count();
+                mods = (int) dev.lull.Loader.mods().stream().filter(m -> !GL_CLEAN.contains(m.substring(0, m.indexOf('@')))).count();
             } catch (Throwable t) {
                 mods = 99;
             }
@@ -1628,9 +1628,9 @@ public final class FrameThread {
                 case BIND_WRITE -> m.getMainRenderTarget().bindWrite(ARG_Z[k]);
                 case SETUP_NO_FOG -> net.minecraft.client.renderer.FogRenderer.setupNoFog();
                 case ENABLE_CULL -> com.mojang.blaze3d.systems.RenderSystem.enableCull();
-                case FRAME_PRE -> net.neoforged.neoforge.client.ClientHooks.fireRenderFramePre(TICK_END);
+                case FRAME_PRE -> { }   // (Fabric: no frame events)
                 case RENDER -> m.gameRenderer.render(TICK_END, ARG_Z[k]);
-                case FRAME_POST -> net.neoforged.neoforge.client.ClientHooks.fireRenderFramePost(TICK_END);
+                case FRAME_POST -> { }
                 case UNBIND_WRITE -> m.getMainRenderTarget().unbindWrite();
                 case BLIT -> m.getMainRenderTarget().blitToScreen(ARG_I[k], ARG_J[k]);
                 case UPDATE_DISPLAY -> m.getWindow().updateDisplay();

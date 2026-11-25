@@ -1,5 +1,6 @@
 pluginManagement {
     repositories {
+        maven { url = 'https://maven.fabricmc.net/' }
         gradlePluginPortal()
     }
 }
@@ -8,5 +9,4 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
-// the sleep engine: a NeoForge mod (mod id "sleepium") on its own; games and mods build on it from source (includeBuild)
 rootProject.name = 'sleepium'

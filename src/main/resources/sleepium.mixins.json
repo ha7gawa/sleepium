@@ -3,7 +3,9 @@
   "minVersion": "0.8",
   "package": "dev.lull.mixin",
   "compatibilityLevel": "JAVA_21",
-  "overwrites": { "conformVisibility": true },
+  "overwrites": {
+    "conformVisibility": true
+  },
   "mixins": [
     "ServeMeterPacketMixin",
     "ServeMeterSenderAccessor",
@@ -31,7 +33,6 @@
     "ComponentShadowMixin",
     "BlockableEventLoopMixin",
     "ProcessorMailboxMixin",
-    "ChunkStepHashMixin",
     "GenProfileMixin",
     "GenProfileTaskMixin",
     "GenProfileAdmitMixin",
@@ -60,7 +61,6 @@
     "IoScoutSaveMixin",
     "IoScoutBitmapMixin",
     "IoScoutChunkMapMixin",
-    "NetCoalesceClientMixin",
     "NetStatsSendMixin",
     "NetStatsBytesMixin",
     "GenProfileReadPartsMixin",
@@ -82,10 +82,6 @@
     "LightProbeLevelEngineAccessor",
     "LightProbeEngineAccessor",
     "LightProbeStorageInvoker",
-    "EventSourcesMixin",
-    "TickSourcesMixin",
-    "NeighborSourcesMixin",
-    "LevelTicksSourcesMixin",
     "BeTickMixin",
     "WriteProbeMixin",
     "WriteProbeBlockEntityMixin",
@@ -116,9 +112,7 @@
     "BrainTimeTickMixin"
   ],
   "client": [
-    "ServeFeelClientMixin",
     "ServeFeelLevelAccessor",
-    "ServeFeelRollbackMixin",
     "ClientEntSleepTickMixin",
     "GenTraceClientMixin",
     "FrameHashFreezeMixin",
@@ -137,7 +131,8 @@
     "GlTraceMixin"
   ],
   "injectors": {
-    "defaultRequire": 1
+    "defaultRequire": 0
   },
-  "plugin": "dev.lull.mixin.SleepMixinPlugin"
+  "plugin": "dev.lull.mixin.SleepMixinPlugin",
+  "refmap": "sleepium.refmap.json"
 }

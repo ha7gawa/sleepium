@@ -182,14 +182,14 @@ public final class ParallelRender {
             }
             BlockEntityWithoutLevelRenderer bewlr = new BlockEntityWithoutLevelRenderer(bed, mc.getEntityModels());
             bewlr.onResourceManagerReload(rm);
-            ItemRenderer ir = new ItemRenderer(mc, mc.getTextureManager(), mc.getModelManager(), mc.getItemColors(), bewlr);
+            ItemRenderer ir = new ItemRenderer(mc, mc.getTextureManager(), mc.getModelManager(), mc.itemColors, bewlr);
             irOfSet[0] = ir;
             ir.onResourceManagerReload(rm);
             ItemInHandRenderer hand = new ItemInHandRenderer(mc, d, ir);
             EntityRendererProvider.Context ctx = new EntityRendererProvider.Context(d, ir, mc.getBlockRenderer(), hand, rm, mc.getEntityModels(), mc.font);
             renderers = EntityRenderers.createEntityRenderers(ctx);
             players = EntityRenderers.createPlayerRenderers(ctx);
-            net.neoforged.fml.ModLoader.postEvent(new net.neoforged.neoforge.client.event.EntityRenderersEvent.AddLayers(renderers, players, ctx));
+            // (Fabric: layers come with the renderers - LivingEntityFeatureRendererRegistrationCallback runs inside their constructors)
         }
 
         @SuppressWarnings("unchecked")

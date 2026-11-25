@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  */
 @Mixin(NoiseChunk.NoiseInterpolator.class)
 public abstract class NoiseLazyInterpolatorMixin {
-    @Shadow @Final NoiseChunk this$0;
+    @Shadow(aliases = "field_34622") @Final NoiseChunk this$0;
     @Shadow double[][] slice0;
     @Shadow double[][] slice1;
     @Shadow private double noise000;
