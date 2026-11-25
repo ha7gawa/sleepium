@@ -17,19 +17,39 @@ import org.lwjgl.opengl.GL11;
  * way vanilla's draw does it - the attribute pointers set exactly as Forge's preDraw / postDraw set them for a
  * Tessellator draw (types, strides, offsets), one glDrawArrays.
  *
- * <p>Default: the bytes in a GL buffer object. Checked against vanilla with screenshots of the client bench scene
- * (120 armour stands, 235 item frames...): identical to the pixel (NVIDIA, 11-25), 77 -> 210 fps. (An earlier finding
- * of 1 LSB on lit item frames was the bench's own noise: the client counts the time of day between the server's time
- * packets, so the sun - and the sky light on the frames - differed between runs; the bench now holds noon.)
+ * <p>Default: from client memory (a direct buffer kept) - vanilla's own path, the frame identical to vanilla's to the
+ * pixel (client bench screenshots, NVIDIA, 11-25): 78 -> 116 fps. Saved: the per-frame rebuild of the vertices and, for
+ * block models, one draw per quad.
  *
- * <p>-Dsleep.render.modelClientMemory=true: the bytes from client memory instead (vanilla's own path, a direct buffer
- * kept) - for a driver where the buffer path would differ; still saves the per-frame rebuild.
+ * <p>-Dsleep.render.modelGpuBuffers=true: the bytes in a GL buffer object - 210 fps, but NOT exact: lit items and item
+ * frames come out 1 LSB apart on ~5000 pixels (the GPU fetches a buffer's byte normals as c/127, matched to the pixel
+ * by float normals widened that way; the driver's client-memory path gives other values, and widening by (2c+1)/255
+ * does not reproduce them either). -Dsleep.render.normalRule=old|new (measuring) widens the normals to floats.
  */
 public final class ModelVbo {
     private static final BufferBuilder BUILD = new BufferBuilder(1 << 16);
-    static final boolean GPU = !Boolean.getBoolean("sleep.render.modelClientMemory");
-    private final ByteBuffer bytes;      // client memory (-Dsleep.render.modelClientMemory)
-    private final VertexBuffer vbo;      // a GL buffer (default)
+    static final boolean GPU = Boolean.getBoolean("sleep.render.modelGpuBuffers");
+    /** (measuring) GPU buffers with the byte normals widened to floats by a rule: "old" (2c+1)/255, "new" max(c/127, -1) */
+    static final String NORMAL_RULE = System.getProperty("sleep.render.normalRule", "");
+    private static VertexFormat floatNormals;
+
+    /** the format with its byte normal as 3 floats and without the normal's pad byte */
+    private static VertexFormat floatNormalFormat(VertexFormat f) {
+        if (floatNormals != null) return floatNormals;
+        VertexFormat n = new VertexFormat();
+        for (VertexFormatElement e : f.getElements()) {
+            if (e.getUsage() == VertexFormatElement.EnumUsage.PADDING) continue;
+            n.addElement(e.getUsage() == VertexFormatElement.EnumUsage.NORMAL
+                    ? new VertexFormatElement(0, VertexFormatElement.EnumType.FLOAT, VertexFormatElement.EnumUsage.NORMAL, 3) : e);
+        }
+        return floatNormals = n;
+    }
+
+    private static float widen(byte c) {
+        return NORMAL_RULE.equals("old") ? (2 * c + 1) / 255f : Math.max(c / 127f, -1f);
+    }
+    private final ByteBuffer bytes;      // client memory (default, exact)
+    private final VertexBuffer vbo;      // a GL buffer (-Dsleep.render.modelGpuBuffers, not exact)
     private final VertexFormat format;
     private final int mode, vertices;
 
@@ -51,7 +71,20 @@ public final class ModelVbo {
         src.position(0);
         src.limit(n * format.getSize());
         ModelVbo m;
-        if (GPU) {
+        if (GPU && !NORMAL_RULE.isEmpty() && format.hasNormal()) {
+            VertexFormat nf = floatNormalFormat(format);
+            ByteBuffer w = GLAllocation.createDirectByteBuffer(n * nf.getSize());
+            int no = format.getNormalOffset(), so = format.getSize();
+            for (int i = 0; i < n; i++) {
+                for (int k = 0; k < no; k++) w.put(src.get(i * so + k));
+                for (int k = 0; k < 3; k++) w.putFloat(widen(src.get(i * so + no + k)));
+                for (int k = no + 4; k < so; k++) w.put(src.get(i * so + k));
+            }
+            w.flip();
+            VertexBuffer v = new VertexBuffer(nf);
+            v.bufferData(w);
+            m = new ModelVbo(null, v, nf, mode, n);
+        } else if (GPU) {
             VertexBuffer v = new VertexBuffer(format);
             v.bufferData(src);
             m = new ModelVbo(null, v, format, mode, n);
