@@ -754,6 +754,7 @@ public final class ClientAuto {
                 else if ("!pause".equals(c[1])) Minecraft.getInstance().pauseGame(false);
                 else if ("!close".equals(c[1])) Minecraft.getInstance().setScreen(null);
                 else if ("!sleepium".equals(c[1])) Minecraft.getInstance().setScreen(new dev.lull.ui.SleepScreen(null));   // (the settings screen, for a shot)
+                else if (((String) c[1]).startsWith("!hud")) dev.lull.ui.HudLayoutScreen.test((String) c[1]);   // the HUD's layout screen driven (open, drag, wheel, keys)
                 else command(Minecraft.getInstance(), (String) c[1]);
             }
         }
