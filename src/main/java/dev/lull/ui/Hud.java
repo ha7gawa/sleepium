@@ -30,11 +30,16 @@ public final class Hud {
     private Hud() {}
 
     static final String[] WIDGETS = {"fps", "graph", "stutters", "server", "gc", "threads", "memory", "mods", "sleep", "world", "position", "system", "network", "clock"};
-    /** the HUD's size against the game's GUI scale (players asked for it, 11-23) */
-    static final float[] SCALES = {0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f};
+    /** the HUD's size against the game's GUI scale (players asked for it, 11-23; any percent 25-400, 11-25) */
     static float scale = 1f;
-    static final String[] CORNERS = {"off", "tl", "tr", "bl", "br"};
+    static final float SCALE_MIN = 0.25f, SCALE_MAX = 4f;
+    /** a widget's place: off, a corner's group, or a box of its own */
+    static final String[] CORNERS = {"off", "tl", "tr", "bl", "br", "own"};
     private static final Map<String, String> CORNER = new LinkedHashMap<>();
+    /** where a box was moved (a corner's group by the corner's name, a widget's own box by the widget's): fractions of the room
+     *  beside the box, 0 = the left / top edge, 1 = the right / bottom one - a box stays on the screen at any window size
+     *  (players asked to drag the HUD anywhere, 11-25) */
+    private static final Map<String, float[]> POS = new HashMap<>();
     static int refreshMs = 250;
     private static boolean loaded;
     private static final dev.lull.optsupport.HudTexture TEXTURE = new dev.lull.optsupport.HudTexture();
@@ -60,7 +65,11 @@ public final class Hud {
                 String k = line.substring(0, eq).trim(), v = line.substring(eq + 1).trim().toLowerCase(Locale.ROOT);
                 if (k.startsWith("hud.") && CORNER.containsKey(k.substring(4)) && java.util.Arrays.asList(CORNERS).contains(v)) CORNER.put(k.substring(4), v);
                 if (k.equals("hud.refreshMs")) refreshMs = Math.max(50, Math.min(2000, Integer.parseInt(v)));
-                if (k.equals("hud.scale")) scale = Math.max(0.25f, Math.min(4f, Float.parseFloat(v)));
+                if (k.equals("hud.scale")) scale = clampScale(Float.parseFloat(v));
+                if (k.startsWith("hud.pos.")) {
+                    String[] xy = v.split(",");
+                    if (xy.length == 2) setPos(k.substring(8), Float.parseFloat(xy[0].trim()), Float.parseFloat(xy[1].trim()));
+                }
             }
         } catch (Exception e) {
             System.out.println("[sleep/hud] " + f + ": " + e);
@@ -68,17 +77,25 @@ public final class Hud {
     }
 
     static synchronized void save() {
-        StringBuilder sb = new StringBuilder("# Sleepium's HUD: each widget's corner (off, tl, tr, bl, br), how often it is redrawn, its size (hud.scale).\n"
+        StringBuilder sb = new StringBuilder("# Sleepium's HUD: each widget's corner (off, tl, tr, bl, br; own = a box of its own), how often it is redrawn,\n"
+                + "# its size (hud.scale, 0.25-4), where a box was moved (hud.pos.<corner or widget>=x,y: 0 = left / top, 1 = right / bottom).\n"
                 + "# The settings screen (Options -> Sleepium -> HUD) writes this file; a modpack may ship its own.\n");
         for (var e : CORNER.entrySet()) sb.append("hud.").append(e.getKey()).append('=').append(e.getValue()).append('\n');
         sb.append("hud.refreshMs=").append(refreshMs).append('\n');
         sb.append("hud.scale=").append(scale).append('\n');
+        for (var e : new java.util.TreeMap<>(POS).entrySet())
+            sb.append("hud.pos.").append(e.getKey()).append('=').append(String.format(Locale.ROOT, "%.4f,%.4f", e.getValue()[0], e.getValue()[1])).append('\n');
         try {
             Files.createDirectories(file().getParent());
             Files.writeString(file(), sb, StandardCharsets.UTF_8);
         } catch (Exception e) {
             System.out.println("[sleep/hud] " + file() + ": " + e);
         }
+        TEXTURE.invalidate();
+    }
+
+    /** the size or a place changed (not yet saved): the next frame redraws */
+    static void changed() {
         TEXTURE.invalidate();
     }
 
@@ -90,6 +107,36 @@ public final class Hud {
     static void corner(String w, String c) {
         load();
         CORNER.put(w, c);
+        save();
+    }
+
+    static float clampScale(float s) {
+        return Float.isNaN(s) ? 1f : Math.max(SCALE_MIN, Math.min(SCALE_MAX, s));
+    }
+
+    /** a box's place: where it was moved, else its corner (a widget's own box: the screen's middle, a step lower for each widget) */
+    static float[] pos(String box) {
+        load();
+        float[] p = POS.get(box);
+        if (p != null) return p;
+        return switch (box) {
+            case "tl" -> new float[] {0, 0};
+            case "tr" -> new float[] {1, 0};
+            case "bl" -> new float[] {0, 1};
+            case "br" -> new float[] {1, 1};
+            default -> new float[] {0.5f, 0.1f + 0.06f * Math.max(0, java.util.Arrays.asList(WIDGETS).indexOf(box))};
+        };
+    }
+
+    static void setPos(String box, float x, float y) {
+        if (Float.isNaN(x) || Float.isNaN(y)) return;
+        POS.put(box, new float[] {Math.max(0, Math.min(1, x)), Math.max(0, Math.min(1, y))});
+    }
+
+    /** every box back at its corner */
+    static void resetPositions() {
+        load();
+        POS.clear();
         save();
     }
 
@@ -356,16 +403,43 @@ public final class Hud {
     /** a line of a widget: text and colour, or the frame graph (text null) */
     private record Item(String text, int color) {}
 
+    /** a box drawn (for the layout screen): its corner's or widget's name, its edges in the GUI's coordinates, its size in the HUD's scaled space */
+    record Box(String id, float x0, float y0, float x1, float y1, int w, int h) {}
+
+    /** the layout screen (HudLayoutScreen): the HUD drawn as it is now, each frame, with the boxes it drew */
+    static void drawForLayout(GuiGraphics g, List<Box> boxes) {
+        load();
+        census();
+        mods();
+        paint(g, new ArrayList<>(), boxes);
+    }
+
+    /** a box dragged to (x, y) - its top left corner in the GUI's coordinates: the place it gets as fractions (kept on the screen) */
+    static void moveBox(int guiWidth, int guiHeight, Box b, double x, double y) {
+        float s = scale;
+        int gw = (int) (guiWidth / s), gh = (int) (guiHeight / s), top = top();
+        double roomX = gw - 8 - b.w(), roomY = gh - 6 - top - b.h();
+        setPos(b.id(), roomX <= 0 ? 0 : (float) ((x / s - 4) / roomX), roomY <= 0 ? 0 : (float) ((y / s - top - 2) / roomY));
+    }
+
+    private static int top() {
+        return dev.lull.shaders.ShaderPipeline.preparing() != null ? 14 : 2;
+    }
+
     private static void paint(GuiGraphics g, List<int[]> rects) {
+        paint(g, rects, null);
+    }
+
+    private static void paint(GuiGraphics g, List<int[]> rects, List<Box> boxes) {
         Minecraft mc = Minecraft.getInstance();
         Font font = mc.font;
         double[] pct = percentiles();
-        Map<String, List<Item>> byCorner = new LinkedHashMap<>();
-        for (String c : CORNERS) byCorner.put(c, new ArrayList<>());
+        Map<String, List<Item>> byCorner = new LinkedHashMap<>();   // the boxes: the corners' groups, then the widgets in boxes of their own
+        for (String c : CORNERS) if (!c.equals("off") && !c.equals("own")) byCorner.put(c, new ArrayList<>());
         for (String w : WIDGETS) {
             String c = corner(w);
             if (c.equals("off")) continue;
-            List<Item> items = byCorner.get(c);
+            List<Item> items = byCorner.computeIfAbsent(c.equals("own") ? w : c, k -> new ArrayList<>());
             switch (w) {
                 case "fps" -> items.add(new Item(String.format(Locale.ROOT, "FPS %d · frame p50 %.2f · p99 %.2f ms", mc.getFps(), pct[0], pct[1]), TEXT));
                 case "graph" -> items.add(new Item(null, 0));
@@ -397,7 +471,7 @@ public final class Hud {
                 }
             }
         }
-        int top = dev.lull.shaders.ShaderPipeline.preparing() != null ? 14 : 2;
+        int top = top();
         // the size: the corners laid out in a scaled space (the GUI's width / scale), drawn scaled; the boxes the texture
         // keeps are in the GUI's own coordinates
         float s = scale;
@@ -408,8 +482,11 @@ public final class Hud {
         for (var e : byCorner.entrySet()) {
             List<Item> items = e.getValue();
             if (items.isEmpty()) continue;
-            String c = e.getKey();
-            int w = 0, h = 0, max = Math.max(GRAPH_W, gw / 2 - 12);
+            String id = e.getKey();
+            boolean corner = id.length() == 2 && java.util.Arrays.asList(CORNERS).contains(id);
+            float[] p = pos(id);
+            boolean right = p[0] > 0.5f;   // text kept to the side the box is nearer (the corners as before)
+            int w = 0, h = 0, max = Math.max(GRAPH_W, corner ? gw / 2 - 12 : gw - 16);
             for (int i = 0; i < items.size(); i++) {
                 Item it = items.get(i);
                 if (it.text() != null && font.width(it.text()) > max)
@@ -417,16 +494,18 @@ public final class Hud {
                 w = Math.max(w, it.text() == null ? GRAPH_W : font.width(it.text()));
                 h += it.text() == null ? GRAPH_H + 2 : 10;
             }
-            int x = c.endsWith("l") ? 4 : gw - 4 - w;
-            int y = c.startsWith("t") ? top + 2 : gh - 4 - h;
+            // the room beside the box split by its place: 0 = at the left / top (4 / top + 2 as before), 1 = at the right / bottom
+            int x = 4 + Math.max(0, Math.round((gw - 8 - w) * p[0]));
+            int y = top + 2 + Math.max(0, Math.round((gh - 6 - top - h) * p[1]));
             g.fill(x - 3, y - 2, x + w + 3, y + h + 1, BOX);
             rects.add(new int[] {(int) Math.floor((x - 3) * s), (int) Math.floor((y - 2) * s), (int) Math.ceil((x + w + 3) * s), (int) Math.ceil((y + h + 1) * s)});
+            if (boxes != null) boxes.add(new Box(id, (x - 3) * s, (y - 2) * s, (x + w + 3) * s, (y + h + 1) * s, w, h));
             for (Item it : items) {
                 if (it.text() == null) {
-                    graph(g, x + (c.endsWith("r") ? w - GRAPH_W : 0), y);
+                    graph(g, x + (right ? w - GRAPH_W : 0), y);
                     y += GRAPH_H + 2;
                 } else {
-                    g.drawString(font, it.text(), c.endsWith("r") ? x + w - font.width(it.text()) : x, y, it.color(), false);
+                    g.drawString(font, it.text(), right ? x + w - font.width(it.text()) : x, y, it.color(), false);
                     y += 10;
                 }
             }
