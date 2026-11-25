@@ -27,6 +27,7 @@ public final class SleepMod {
             for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) g.rotate(d);
         if (Boolean.getBoolean("lab.opt.HeapReturn")) LOGGER.info("sleep: {}", dev.lull.optsupport.HeapReturn.apply());   // memory back to the OS after bursts
         if (Boolean.getBoolean("sleep.test.tickListener")) dev.compatprobe.TickListenerProbe.register();
+        if (Boolean.getBoolean("sleep.test.modlike")) testmods.modlikestate.ModLikeState.register();   // test: mods' mixins with thread-unsafe state in vanilla ticks
         if (Boolean.getBoolean("sleep.test.escape") && net.minecraftforge.fml.loading.FMLEnvironment.dist.isClient()) dev.compatprobe.EscapeProbe.register();   // (issue #11 test: a listener writing into the game's buffers)   // test: a thread-unsafe tick listener (Maximum speed's run lock)
         if (Boolean.getBoolean("lab.opt.TrackFast")) dev.lull.optsupport.TrackFast.register();   // A/B switch and counters with /sleep bots
         if (dev.lull.net.NetReactor.ENABLED) dev.lull.net.NetReactor.registerAb();   // /sleep bots ab flushlater
