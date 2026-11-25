@@ -286,3 +286,4 @@
 -Dlab.opt.MoveMemo=true
 # isInWall without its stream where the collision masks show no colliding block at the eyes (exact; Xeons 30k pigs -4.3 %, 11-23)
 -Dlab.opt.InWallMaskMixin=true
+-Dlab.opt.PostProcessStaticMixin=true
