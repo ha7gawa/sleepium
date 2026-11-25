@@ -18,7 +18,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * The neighbour reads have no effect either: the chunk's 3x3 is FULL when it starts ticking (prepareTickingChunk waits
  * for it), so they load nothing. Skipping both for such blocks is exact; every other block runs vanilla's code.
  *
- * <p>Seen on a player flying over new terrain (1.20.1, host, a bot at 120 blocks/s): the server thread spent 72 % of its
+ * <p>Seen on a player flying over new terrain (1.20.1 and 1.21.1, host, a bot at 120 blocks/s): the server thread spent 72 % of its
  * time in postProcessGeneration (palette writes of unchanged states, neighbour reads); FastChunkGen's skipStaticShapes
  * does the same kind of skip.
  *
@@ -32,7 +32,7 @@ public final class StaticShapes {
     static {
         Method m;
         try {
-            m = net.minecraftforge.fml.util.ObfuscationReflectionHelper.findMethod(BlockBehaviour.class, "m_7417_",
+            m = net.minecraftforge.fml.util.ObfuscationReflectionHelper.findMethod(BlockBehaviour.class, "m_7417_",   // updateShape (SRG in production)
                     BlockState.class, Direction.class, BlockState.class, LevelAccessor.class, BlockPos.class, BlockPos.class);
         } catch (Throwable t) {
             m = null;
@@ -40,11 +40,28 @@ public final class StaticShapes {
         BASE = m;
     }
 
-    public static final boolean ACTIVE = BASE != null
+    private static Boolean active, fluidsActive;
+
+    /** on first use (the post-processing of the first chunk): the foreign mixin index is built by then */
+    public static boolean active() {
+        Boolean a = active;
+        if (a == null) active = a = computeActive();
+        return a;
+    }
+
+    public static boolean fluidsActive() {
+        Boolean a = fluidsActive;
+        if (a == null) fluidsActive = a = computeFluidsActive();
+        return a;
+    }
+
+    private static boolean computeActive() {
+        return BASE != null
             && !MixinTouch.touched("net/minecraft/world/level/block/state/BlockBehaviour", "updateShape")
             && !MixinTouch.touched("net/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase", "updateShape")
             && !MixinTouch.touched("net/minecraft/world/level/block/Block", "updateFromNeighbourShapes")
             && !MixinTouch.touched("net/minecraft/world/level/chunk/LevelChunk", "postProcessGeneration");
+    }
 
     /**
      * Still water: a water source whose block, the block below and the four beside are all plain water blocks. Its tick
@@ -54,7 +71,8 @@ public final class StaticShapes {
      * sideways. Every step before a write is a read of loaded chunks (the 3x3 is FULL). Oceans and aquifers mark every
      * water block for post-processing: 15 M such ticks, 30 s of the server thread in one minute of flying (1.20.1).
      */
-    public static final boolean FLUIDS_ACTIVE = BASE != null
+    private static boolean computeFluidsActive() {
+        return BASE != null
             && !MixinTouch.touched("net/minecraft/world/level/material/FlowingFluid", "tick")
             && !MixinTouch.touched("net/minecraft/world/level/material/FlowingFluid", "spread")
             && !MixinTouch.touched("net/minecraft/world/level/material/FlowingFluid", "spreadToSides")
@@ -64,6 +82,7 @@ public final class StaticShapes {
             && !MixinTouch.touched("net/minecraft/world/level/material/WaterFluid", "canBeReplacedWith")
             && !MixinTouch.touched("net/minecraft/world/level/material/FluidState", "tick")
             && !MixinTouch.touched("net/minecraft/world/level/material/FluidState", "canBeReplacedWith");
+    }
     public static long stillSkipped, fluidsRan;
 
     public static boolean stillWater(net.minecraft.world.level.material.FluidState fluid, net.minecraft.world.level.Level level, BlockPos pos) {
@@ -92,7 +111,15 @@ public final class StaticShapes {
         @Override
         protected Boolean computeValue(Class<?> c) {
             try {
-                return c.getMethod(BASE.getName(), BASE.getParameterTypes()).getDeclaringClass() == BlockBehaviour.class;
+                // the nearest class declaring updateShape (it is protected: getMethod does not see it)
+                for (Class<?> k = c; k != null; k = k.getSuperclass()) {
+                    try {
+                        k.getDeclaredMethod(BASE.getName(), BASE.getParameterTypes());
+                        return k == BlockBehaviour.class;
+                    } catch (NoSuchMethodException ignored) {
+                    }
+                }
+                return false;
             } catch (Throwable t) {
                 return false;
             }
@@ -124,8 +151,22 @@ public final class StaticShapes {
         return STATIC.get(b.getClass());
     }
 
+    /** which of the conditions another mod's mixin touches (the report) */
+    static String touchedBy() {
+        String[][] q = {{"net/minecraft/world/level/block/state/BlockBehaviour", "updateShape"}, {"net/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase", "updateShape"},
+                {"net/minecraft/world/level/block/Block", "updateFromNeighbourShapes"}, {"net/minecraft/world/level/chunk/LevelChunk", "postProcessGeneration"},
+                {"net/minecraft/world/level/material/FlowingFluid", "tick"}, {"net/minecraft/world/level/material/FlowingFluid", "spread"},
+                {"net/minecraft/world/level/material/FlowingFluid", "spreadToSides"}, {"net/minecraft/world/level/material/FlowingFluid", "canSpreadTo"},
+                {"net/minecraft/world/level/material/FlowingFluid", "getNewLiquid"}, {"net/minecraft/world/level/material/FlowingFluid", "spreadTo"},
+                {"net/minecraft/world/level/material/WaterFluid", "canBeReplacedWith"}, {"net/minecraft/world/level/material/FluidState", "tick"},
+                {"net/minecraft/world/level/material/FluidState", "canBeReplacedWith"}};
+        StringBuilder b = new StringBuilder();
+        for (String[] x : q) if (MixinTouch.touched(x[0], x[1])) b.append(' ').append(x[0].substring(x[0].lastIndexOf('/') + 1)).append('.').append(x[1]);
+        return b.length() == 0 ? "" : " touched:" + b;
+    }
+
     public static String report() {
-        return "static shapes: " + (ACTIVE ? "on" : "off (another mod changes the shape code)") + ", skipped " + skipped + ", vanilla " + ran + "; still water: " + (FLUIDS_ACTIVE ? "on" : "off") + ", skipped " + stillSkipped + ", vanilla " + fluidsRan
+        return touchedBy() + " static shapes: " + (active() ? "on" : "off (another mod changes the shape code)") + ", skipped " + skipped + ", vanilla " + ran + "; still water: " + (fluidsActive() ? "on" : "off") + ", skipped " + stillSkipped + ", vanilla " + fluidsRan
                 + (VERIFY ? "; verified " + verified + ", mismatches " + mismatches : "");
     }
 }

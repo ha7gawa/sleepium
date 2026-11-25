@@ -22,7 +22,7 @@ public abstract class PostProcessStaticMixin {
     @WrapOperation(method = "postProcessGeneration", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/level/block/Block;updateFromNeighbourShapes(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;"))
     private BlockState sleep$shape(BlockState state, LevelAccessor level, BlockPos pos, Operation<BlockState> original) {
-        if (StaticShapes.ACTIVE && StaticShapes.isStatic(state.getBlock())) {
+        if (StaticShapes.active() && StaticShapes.isStatic(state.getBlock())) {
             sleep$skippedPos = pos;
             StaticShapes.skipped++;
             if (StaticShapes.VERIFY) {
@@ -61,7 +61,7 @@ public abstract class PostProcessStaticMixin {
     @WrapOperation(method = "postProcessGeneration", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/level/material/FluidState;tick(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)V"))
     private void sleep$fluid(net.minecraft.world.level.material.FluidState fluid, Level level, BlockPos pos, Operation<Void> original) {
-        if (StaticShapes.FLUIDS_ACTIVE && StaticShapes.stillWater(fluid, level, pos)) {
+        if (StaticShapes.fluidsActive() && StaticShapes.stillWater(fluid, level, pos)) {
             StaticShapes.stillSkipped++;
             if (StaticShapes.VERIFY) {   // the vanilla tick anyway: it must write nothing
                 StaticShapes.inVerifiedTick = true;
