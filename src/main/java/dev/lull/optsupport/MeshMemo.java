@@ -78,11 +78,11 @@ public final class MeshMemo {
         if (broken) return false;
         try {
             REGION_CHUNKS = field(RenderChunkRegion.class, "chunks");
-            Class<?> rc = Class.forName("net.minecraft.client.renderer.chunk.RenderChunk");
+            Class<?> rc = Class.forName(dev.lull.Names.cls("net.minecraft.client.renderer.chunk.RenderChunk"));
             RC_SECTIONS = field(rc, "sections");
             RC_WRAPPED = field(rc, "wrapped");
             RC_BES = field(rc, "blockEntities");
-            Class<?> data = Class.forName("net.minecraft.world.level.chunk.PalettedContainer$Data");
+            Class<?> data = Class.forName(dev.lull.Names.cls("net.minecraft.world.level.chunk.PalettedContainer$Data"));
             DATA_STORAGE = field(data, "storage");
             DATA_PALETTE = field(data, "palette");
             PC_DATA = field(PalettedContainer.class, "data");
@@ -95,7 +95,7 @@ public final class MeshMemo {
     }
 
     private static Field field(Class<?> c, String name) throws ReflectiveOperationException {
-        Field f = c.getDeclaredField(name);
+        Field f = dev.lull.Names.fieldOf(c, name);
         f.setAccessible(true);
         return f;
     }
@@ -107,7 +107,7 @@ public final class MeshMemo {
     public static Object successful() {
         if (successful == null) {
             try {
-                successful = Enum.valueOf((Class) Class.forName("net.minecraft.client.renderer.chunk.SectionRenderDispatcher$SectionTaskResult"), "SUCCESSFUL");
+                successful = Enum.valueOf((Class) Class.forName(dev.lull.Names.cls("net.minecraft.client.renderer.chunk.SectionRenderDispatcher$SectionTaskResult")), "SUCCESSFUL");
             } catch (ClassNotFoundException e) {
                 throw new IllegalStateException(e);
             }

@@ -381,7 +381,7 @@ public final class SpecTicks {
         @Override
         protected Boolean computeValue(Class<?> c) {
             for (Class<?> x = c; x != null && !SHARED_BASES.contains(x.getName()); x = x.getSuperclass()) {
-                if (!x.getName().startsWith("net.minecraft.")) continue;
+                if (!dev.lull.Names.officialMember(x.getName()).startsWith("net.minecraft.")) continue;
                 if (MixinTouch.anyForeign(x.getName().replace('.', '/'))) {
                     System.out.println("[sleep/spec] " + c.getSimpleName() + " stays serial: another mod's mixin changes " + x.getSimpleName());
                     return true;
@@ -786,7 +786,7 @@ public final class SpecTicks {
     private static Object levelSeed(ServerLevel lvl) {
         try {
             if (seedField == null) {
-                seedField = net.minecraft.world.level.levelgen.LegacyRandomSource.class.getDeclaredField("seed");
+                seedField = dev.lull.Names.fieldOf(net.minecraft.world.level.levelgen.LegacyRandomSource.class, "seed");
                 seedField.setAccessible(true);
             }
             return lvl.random instanceof net.minecraft.world.level.levelgen.LegacyRandomSource r ? seedField.get(r) : null;
@@ -1247,7 +1247,7 @@ public final class SpecTicks {
     static {
         sun.misc.Unsafe u = null;
         try {
-            java.lang.reflect.Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            java.lang.reflect.Field f = dev.lull.Names.fieldOf(sun.misc.Unsafe.class, "theUnsafe");
             f.setAccessible(true);
             u = (sun.misc.Unsafe) f.get(null);
         } catch (ReflectiveOperationException ignored) {

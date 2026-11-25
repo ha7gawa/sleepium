@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** WorldgenReactor: the FULL step's executor puts its main-thread task into FullRing instead of the main mailbox. */
 @Mixin(ChunkStatusTasks.class)
 public abstract class ReactorFullMixin {
-    @Inject(method = "lambda$full$3", at = @At("HEAD"), cancellable = true)
+    @Inject(method = {"lambda$full$3", "method_60554"}, at = @At("HEAD"), cancellable = true)
     private static void sleep$ring(WorldGenContext ctx, ChunkPos pos, GenerationChunkHolder holder, Runnable task, CallbackInfo ci) {
         FullRing.offer(holder.getTicketLevel(), task);
         ci.cancel();

@@ -52,6 +52,12 @@ public final class MixinTouch {
 
     /** The same for one method ({@code desc}; null: every method of that name). */
     public static boolean touched(String internalName, String name, String desc) {
+        if (dev.lull.Names.INTERMEDIARY)   // (Fabric production: the questions come in Mojang's names, the index holds the running ones)
+            return touchedRunning(dev.lull.Names.cls(internalName), dev.lull.Names.method(internalName, name, desc), dev.lull.Names.desc(desc));
+        return touchedRunning(internalName, name, desc);
+    }
+
+    private static boolean touchedRunning(String internalName, String name, String desc) {
         Set<String> t = TOUCHED.computeIfAbsent(internalName, MixinTouch::compute);
         if (t.contains(ALL) || t.contains(name)) return true;
         for (String w : t)
@@ -87,6 +93,7 @@ public final class MixinTouch {
 
     /** Any foreign mixin at all on this class (for callers that cannot work per method). */
     public static boolean anyForeign(String internalName) {
+        internalName = dev.lull.Names.cls(internalName);
         return !TOUCHED.computeIfAbsent(internalName, MixinTouch::compute).isEmpty();
     }
 
@@ -96,6 +103,10 @@ public final class MixinTouch {
 
     /** Is method {@code name} of this class overwritten by a foreign mixin (no injector of ours can go into it)? */
     public static boolean overwritten(String internalName, String name) {
+        if (dev.lull.Names.INTERMEDIARY) {
+            name = dev.lull.Names.method(internalName, name, null);
+            internalName = dev.lull.Names.cls(internalName);
+        }
         index();
         Set<String> o = OVERWRITES.get(internalName);
         return o != null && o.contains(name);
@@ -134,6 +145,11 @@ public final class MixinTouch {
 
     /** Does a foreign mixin @Redirect the call to {@code invoked} inside {@code method} of this class? */
     public static boolean redirected(String internalName, String method, String invoked) {
+        if (dev.lull.Names.INTERMEDIARY) {
+            method = dev.lull.Names.method(internalName, method, null);
+            invoked = dev.lull.Names.method(null, invoked, null);
+            internalName = dev.lull.Names.cls(internalName);
+        }
         index();
         Set<String> r = REDIRECTS.get(internalName);
         return r != null && (r.contains(method + "|" + invoked) || r.contains(ALL + "|" + invoked));
@@ -145,6 +161,11 @@ public final class MixinTouch {
      * the handler's, the receiver first, and the argument indices point elsewhere.
      */
     public static boolean argsModified(String internalName, String method, String invoked) {
+        if (dev.lull.Names.INTERMEDIARY) {
+            method = dev.lull.Names.method(internalName, method, null);
+            invoked = dev.lull.Names.method(null, invoked, null);
+            internalName = dev.lull.Names.cls(internalName);
+        }
         index();
         Set<String> r = ARGMODS.get(internalName);
         return r != null && (r.contains(method + "|" + invoked) || r.contains(ALL + "|" + invoked));
@@ -216,7 +237,7 @@ public final class MixinTouch {
                 if (pkg == null) continue;
                 if (!pkg.isEmpty() && !pkg.endsWith(".")) pkg += ".";
                 for (String field : new String[] {"mixinClasses", "mixinClassesClient", "mixinClassesServer"}) {
-                    Field f = mc.getClass().getDeclaredField(field);
+                    Field f = dev.lull.Names.fieldOf(mc.getClass(), field);
                     f.setAccessible(true);
                     Object list = f.get(mc);
                     if (!(list instanceof List<?> names)) continue;
@@ -534,7 +555,7 @@ public final class MixinTouch {
                     }
             if (processor != null)
                 for (String name : new String[] {"configs", "pendingConfigs"}) {
-                    Field f = processor.getClass().getDeclaredField(name);
+                    Field f = dev.lull.Names.fieldOf(processor.getClass(), name);
                     f.setAccessible(true);
                     for (Object o : (List<Object>) f.get(processor))
                         if (o instanceof org.spongepowered.asm.mixin.extensibility.IMixinConfig mc && !out.contains(mc)) out.add(mc);
@@ -552,8 +573,8 @@ public final class MixinTouch {
      */
     @SuppressWarnings("unchecked")
     private static boolean cancelPrepared(Object mc, String mixinClass, boolean dryRun) throws ReflectiveOperationException {
-        Field fMapping = mc.getClass().getDeclaredField("mixinMapping"), fUnhandled = mc.getClass().getDeclaredField("unhandledTargets"),
-                fMixins = mc.getClass().getDeclaredField("mixins");
+        Field fMapping = dev.lull.Names.fieldOf(mc.getClass(), "mixinMapping"), fUnhandled = dev.lull.Names.fieldOf(mc.getClass(), "unhandledTargets"),
+                fMixins = dev.lull.Names.fieldOf(mc.getClass(), "mixins");
         fMapping.setAccessible(true);
         fUnhandled.setAccessible(true);
         fMixins.setAccessible(true);
@@ -605,7 +626,7 @@ public final class MixinTouch {
             for (org.spongepowered.asm.mixin.extensibility.IMixinConfig mc : allConfigs()) {
                 if (mc == null || !config.equals(mc.getName())) continue;
                 try {
-                    Field prepared = mc.getClass().getDeclaredField("prepared");
+                    Field prepared = dev.lull.Names.fieldOf(mc.getClass(), "prepared");
                     prepared.setAccessible(true);
                     if (prepared.getBoolean(mc)) return cancelPrepared(mc, mixinClass, dryRun);
                 } catch (NoSuchFieldException e) {
@@ -619,7 +640,7 @@ public final class MixinTouch {
                 if (dryRun) return true;
                 boolean removed = false;
                 for (String field : new String[] {"mixinClasses", "mixinClassesClient", "mixinClassesServer"}) {
-                    Field f = mc.getClass().getDeclaredField(field);
+                    Field f = dev.lull.Names.fieldOf(mc.getClass(), field);
                     f.setAccessible(true);
                     Object list = f.get(mc);
                     if (list instanceof List<?> names) {
@@ -806,7 +827,7 @@ public final class MixinTouch {
 
     private static Field pendingField() {
         try {
-            Field f = ClassInfo.class.getDeclaredField("mixins");
+            Field f = dev.lull.Names.fieldOf(ClassInfo.class, "mixins");
             f.setAccessible(true);
             return f;
         } catch (Throwable t) {

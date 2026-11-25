@@ -58,7 +58,7 @@ public final class TestSeeds {
         int h = spec.indexOf('#');
         try {
             Class<?> c = Class.forName(spec.substring(0, h), true, TestSeeds.class.getClassLoader());
-            java.lang.reflect.Field f = c.getDeclaredField(spec.substring(h + 1));
+            java.lang.reflect.Field f = dev.lull.Names.fieldOf(c, spec.substring(h + 1));
             f.setAccessible(true);
             Object r = f.get(null);
             if (r instanceof java.util.Random jr) jr.setSeed(seed);

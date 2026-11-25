@@ -1671,7 +1671,7 @@ final class SleepAnalysis {
     private static boolean fieldsImmutable(Class<?> c, Set<Class<?>> seen) {
         for (Class<?> k = c; k != null && k != Object.class && k != Enum.class && k != Record.class; k = k.getSuperclass()) {
             for (Field f : k.getDeclaredFields()) {
-                if (f.getName().equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
+                if (dev.lull.Names.officialMember(f.getName()).equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
                 if (Modifier.isStatic(f.getModifiers())) continue;
                 if (!Modifier.isFinal(f.getModifiers()) || !deeplyImmutable(f.getType(), seen)) return false;
             }
@@ -2312,7 +2312,7 @@ final class SleepAnalysis {
             if (!dev.lull.ClassBytes.hasClassFile(loader, mi.owner)) return false;
             for (Class<?> c = ctxObj.getClass(); c != null && c != Object.class; c = c.getSuperclass())
                 for (Field f : declaredFields(c)) {
-                    if (f.getName().equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
+                    if (dev.lull.Names.officialMember(f.getName()).equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
                     if (java.lang.reflect.Modifier.isStatic(f.getModifiers()) || !java.util.Collection.class.isAssignableFrom(f.getType())
                             || !effectivelyFinal(ctxObj.getClass(), f.getName())) continue;
                     Object col = fieldValue(ctxObj, f.getName());

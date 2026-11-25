@@ -109,6 +109,7 @@
     "MainReactorScoutLoopMixin",
     "EventLoopQueueAccessor",
     "StructurePlaceLockMixin",
+    "StructurePaletteCacheMixin",
     "GenScoutAquiferMixin",
     "GenScoutPerlinMixin",
     "GenScoutBeardMixin",

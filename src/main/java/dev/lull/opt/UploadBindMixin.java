@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.At;
  */
 @Mixin(SectionRenderDispatcher.class)
 public abstract class UploadBindMixin {
-    @WrapOperation(method = "lambda$uploadSectionLayer$5", require = 0,
+    @WrapOperation(method = {"lambda$uploadSectionLayer$5", "method_43610"}, require = 0,
             at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/VertexBuffer;bind()V"))
     private static void sleep$bindLater(VertexBuffer vb, Operation<Void> original) {
         if (vb instanceof ChunkBufferTag t && t.sleep$tagSection() != null && ChunkMultiDraw.replacesVanilla(t.sleep$tagLayer())

@@ -28,16 +28,16 @@ public final class FlatRTree {
 
     static {
         try {
-            INDEX = Climate.ParameterList.class.getDeclaredField("index");
+            INDEX = dev.lull.Names.fieldOf(Climate.ParameterList.class, "index");
             Class<?> tree = INDEX.getType();
-            ROOT = tree.getDeclaredField("root");
-            LAST = tree.getDeclaredField("lastResult");
+            ROOT = dev.lull.Names.fieldOf(tree, "root");
+            LAST = dev.lull.Names.fieldOf(tree, "lastResult");
             Class<?> node = ROOT.getType();
-            SPACE = node.getDeclaredField("parameterSpace");
-            Class<?> sub = Class.forName(tree.getName() + "$SubTree");
-            Class<?> leaf = Class.forName(tree.getName() + "$Leaf");
-            CHILDREN = sub.getDeclaredField("children");
-            VALUE = leaf.getDeclaredField("value");
+            SPACE = dev.lull.Names.fieldOf(node, "parameterSpace");
+            Class<?> sub = dev.lull.Names.nested(tree, "SubTree");
+            Class<?> leaf = dev.lull.Names.nested(tree, "Leaf");
+            CHILDREN = dev.lull.Names.fieldOf(sub, "children");
+            VALUE = dev.lull.Names.fieldOf(leaf, "value");
             for (Field f : new Field[]{INDEX, ROOT, LAST, SPACE, CHILDREN, VALUE}) f.setAccessible(true);
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("ClimateSearch: Climate.RTree's fields not found", e);

@@ -12,7 +12,7 @@ public final class PendingStoreData {
     public static CompoundTag of(Object pendingStore) throws ReflectiveOperationException {
         Field f = data;
         if (f == null) {
-            f = pendingStore.getClass().getDeclaredField("data");
+            f = dev.lull.Names.fieldOf(pendingStore.getClass(), "data");
             f.setAccessible(true);
             data = f;
         }

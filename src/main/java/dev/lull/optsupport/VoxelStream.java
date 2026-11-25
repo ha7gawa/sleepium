@@ -230,7 +230,7 @@ public final class VoxelStream {
         return CUSTOM_FACES.computeIfAbsent(c, k -> {
             for (Class<?> x = k; x != null && x != Block.class && x != net.minecraft.world.level.block.state.BlockBehaviour.class; x = x.getSuperclass())
                 for (java.lang.reflect.Method m : x.getDeclaredMethods())
-                    if (m.getName().equals("skipRendering") || m.getName().equals("hidesNeighborFace") || m.getName().equals("supportsExternalFaceHiding")) return true;
+                    if (dev.lull.Names.officialMember(m.getName()).equals("skipRendering") || dev.lull.Names.officialMember(m.getName()).equals("hidesNeighborFace") || dev.lull.Names.officialMember(m.getName()).equals("supportsExternalFaceHiding")) return true;
             return false;
         });
     }
@@ -618,7 +618,7 @@ public final class VoxelStream {
             var rep = f.defaultFluidState();
             try {
                 var ext = net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions.of(rep);
-                Class<?> owner = ext.getClass().getMethod("renderFluid", net.minecraft.world.level.material.FluidState.class, net.minecraft.world.level.BlockAndTintGetter.class,
+                Class<?> owner = dev.lull.Names.publicMethod(ext.getClass(), "renderFluid", net.minecraft.world.level.material.FluidState.class, net.minecraft.world.level.BlockAndTintGetter.class,
                         BlockPos.class, com.mojang.blaze3d.vertex.VertexConsumer.class, BlockState.class).getDeclaringClass();
                 if (owner != net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions.class) continue;   // its own renderer
                 var spr = net.neoforged.neoforge.client.textures.FluidSpriteCache.getFluidSprites(level, BlockPos.ZERO, rep);
@@ -1280,14 +1280,14 @@ public final class VoxelStream {
         try {
             if (setCompiledM == null) {
                 Class<?> rsc = net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection.class;
-                setCompiledM = rsc.getDeclaredMethod("setCompiled", net.minecraft.client.renderer.chunk.SectionRenderDispatcher.CompiledSection.class);
+                setCompiledM = dev.lull.Names.methodOf(rsc, "setCompiled", net.minecraft.client.renderer.chunk.SectionRenderDispatcher.CompiledSection.class);
                 setCompiledM.setAccessible(true);
-                updateGlobalM = rsc.getDeclaredMethod("updateGlobalBlockEntities", java.util.Collection.class);
+                updateGlobalM = dev.lull.Names.methodOf(rsc, "updateGlobalBlockEntities", java.util.Collection.class);
                 updateGlobalM.setAccessible(true);
                 Class<?> csc = net.minecraft.client.renderer.chunk.SectionRenderDispatcher.CompiledSection.class;
-                csVisibility = csc.getDeclaredField("visibilitySet");
+                csVisibility = dev.lull.Names.fieldOf(csc, "visibilitySet");
                 csVisibility.setAccessible(true);
-                csRenderable = csc.getDeclaredField("renderableBlockEntities");
+                csRenderable = dev.lull.Names.fieldOf(csc, "renderableBlockEntities");
                 csRenderable.setAccessible(true);
             }
             LevelChunk c = level.getChunkSource().getChunk(o.getX() >> 4, o.getZ() >> 4, false);
@@ -3924,15 +3924,15 @@ public final class VoxelStream {
             throw new IllegalStateException("GPU terrain: a grid of " + nx + " x " + ny + " x " + nx + " blocks does not fit (3D textures up to " + max3d + ") - the normal terrain is drawn");
         minY = level.getMinBuildHeight();
         secY = level.getSectionsCount();
-        pcData = net.minecraft.world.level.chunk.PalettedContainer.class.getDeclaredField("data");
+        pcData = dev.lull.Names.fieldOf(net.minecraft.world.level.chunk.PalettedContainer.class, "data");
         pcData.setAccessible(true);
-        dlData = DataLayer.class.getDeclaredField("data");
+        dlData = dev.lull.Names.fieldOf(DataLayer.class, "data");
         dlData.setAccessible(true);
-        dlDefault = DataLayer.class.getDeclaredField("defaultValue");
+        dlDefault = dev.lull.Names.fieldOf(DataLayer.class, "defaultValue");
         dlDefault.setAccessible(true);
-        wlist = net.minecraft.client.resources.model.WeightedBakedModel.class.getDeclaredField("list");
+        wlist = dev.lull.Names.fieldOf(net.minecraft.client.resources.model.WeightedBakedModel.class, "list");
         wlist.setAccessible(true);
-        mselectors = net.minecraft.client.resources.model.MultiPartBakedModel.class.getDeclaredField("selectors");
+        mselectors = dev.lull.Names.fieldOf(net.minecraft.client.resources.model.MultiPartBakedModel.class, "selectors");
         mselectors.setAccessible(true);
         STATES.clear();
         STATE_CLASS.clear();

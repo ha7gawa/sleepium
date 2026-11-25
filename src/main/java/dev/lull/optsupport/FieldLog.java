@@ -171,7 +171,7 @@ public final class FieldLog {
             for (Slot s : ALL) {
                 try {
                     Class<?> c = Class.forName(s.owner.replace('/', '.'), false, FieldLog.class.getClassLoader());
-                    Field f = c.getDeclaredField(s.name);
+                    Field f = dev.lull.Names.fieldOf(c, s.name);
                     f.setAccessible(true);
                     fs[s.index] = f;
                 } catch (Throwable t) {

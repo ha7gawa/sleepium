@@ -27,7 +27,7 @@ public abstract class ParallelAnimationMixin {
         return SLEEP$CACHE.get();
     }
 
-    @Redirect(method = "lambda$animate$2", require = 0,
+    @Redirect(method = {"lambda$animate$2", "method_43783"}, require = 0,
             at = @At(value = "FIELD", target = "Lnet/minecraft/client/model/HierarchicalModel;ANIMATION_VECTOR_CACHE:Lorg/joml/Vector3f;", opcode = Opcodes.GETSTATIC))
     private org.joml.Vector3f sleep$cacheAnimate() {
         return SLEEP$CACHE.get();

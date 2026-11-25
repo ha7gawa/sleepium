@@ -41,7 +41,7 @@ public final class CellWrap {
     static {
         DensityFunction m = null;
         try {
-            Class<?> c = Class.forName("net.minecraft.world.level.levelgen.DensityFunctions$BeardifierMarker");
+            Class<?> c = Class.forName(dev.lull.Names.cls("net.minecraft.world.level.levelgen.DensityFunctions$BeardifierMarker"));
             m = (DensityFunction) c.getEnumConstants()[0];
         } catch (ReflectiveOperationException | RuntimeException e) {
             System.out.println("[sleep/opt] cell wrap: no beardifier marker (" + e + ")");

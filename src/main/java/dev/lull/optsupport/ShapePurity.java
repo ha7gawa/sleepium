@@ -88,7 +88,7 @@ public final class ShapePurity {
         try {
             Field f = hasCollision;
             if (f == null) {
-                f = Class.forName("net.minecraft.world.level.block.state.BlockBehaviour", false, block.getClass().getClassLoader()).getDeclaredField("hasCollision");
+                f = dev.lull.Names.fieldOf(Class.forName(dev.lull.Names.cls("net.minecraft.world.level.block.state.BlockBehaviour"), false, block.getClass().getClassLoader()), "hasCollision");
                 f.setAccessible(true);
                 hasCollision = f;
             }
@@ -270,7 +270,7 @@ public final class ShapePurity {
     private static boolean finalField(ClassLoader loader, String owner, String name) {
         try {
             for (Class<?> k = Class.forName(owner.replace('/', '.'), false, loader); k != null; k = k.getSuperclass()) {
-                for (Field f : k.getDeclaredFields()) if (f.getName().equals(name)) return Modifier.isFinal(f.getModifiers());
+                for (Field f : k.getDeclaredFields()) if (dev.lull.Names.officialMember(f.getName()).equals(name)) return Modifier.isFinal(f.getModifiers());
             }
         } catch (Throwable ignored) {
         }

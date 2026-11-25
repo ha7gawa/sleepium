@@ -21,7 +21,7 @@ public final class ParticleCull {
         if (TOUCHED || !(p instanceof SingleQuadParticle)) return false;
         return PLAIN.computeIfAbsent(p.getClass(), c -> {
             try {
-                return c.getMethod("getRenderBoundingBox", float.class).getDeclaringClass() == SingleQuadParticle.class;
+                return dev.lull.Names.publicMethod(c, "getRenderBoundingBox", float.class).getDeclaringClass() == SingleQuadParticle.class;
             } catch (NoSuchMethodException e) {
                 return false;
             }

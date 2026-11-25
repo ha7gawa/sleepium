@@ -29,7 +29,7 @@ public final class NoAllocChecks {
     private static boolean declaredIn(Class<?> c, Class<?> base, String name, Class<?>... params) {
         for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
             try {
-                k.getDeclaredMethod(name, params);
+                dev.lull.Names.methodOf(k, name, params);
                 return k == base;
             } catch (NoSuchMethodException e) {
                 // keep looking up
@@ -58,7 +58,7 @@ public final class NoAllocChecks {
         protected Boolean computeValue(Class<?> c) {
             // the default lives in the interface: no class of the chain declares getRenderBoundingBox
             for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass())
-                for (var m : k.getDeclaredMethods()) if (m.getName().equals("getRenderBoundingBox") && !m.isBridge()) return false;
+                for (var m : k.getDeclaredMethods()) if (dev.lull.Names.officialMember(m.getName()).equals("getRenderBoundingBox") && !m.isBridge()) return false;
             return true;
         }
     };

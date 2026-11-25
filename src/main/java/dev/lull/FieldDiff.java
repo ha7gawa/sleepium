@@ -42,7 +42,7 @@ public final class FieldDiff {
             List<Field> fs = new ArrayList<>();
             for (Class<?> x = k; x != null && x != BlockEntity.class && x != Object.class; x = x.getSuperclass()) {
                 for (Field f : x.getDeclaredFields()) {
-                    if (f.getName().equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
+                    if (dev.lull.Names.officialMember(f.getName()).equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
                     if (Modifier.isStatic(f.getModifiers())) continue;
                     try {
                         f.setAccessible(true);

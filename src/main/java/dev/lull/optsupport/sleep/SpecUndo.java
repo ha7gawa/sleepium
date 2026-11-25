@@ -112,9 +112,9 @@ public final class SpecUndo {
             res = Class.forName("java.util.RegularEnumSet");
             em = java.util.EnumMap.class;
             if (U != null) {
-                a = U.objectFieldOffset(res.getDeclaredField("elements"));
-                b = U.objectFieldOffset(em.getDeclaredField("vals"));
-                c = U.objectFieldOffset(em.getDeclaredField("size"));
+                a = U.objectFieldOffset(dev.lull.Names.fieldOf(res, "elements"));
+                b = U.objectFieldOffset(dev.lull.Names.fieldOf(em, "vals"));
+                c = U.objectFieldOffset(dev.lull.Names.fieldOf(em, "size"));
             }
         } catch (ReflectiveOperationException | RuntimeException ex) {
             System.out.println("[sleep/spec] no fast enum set / map copies: " + ex);
@@ -496,7 +496,7 @@ public final class SpecUndo {
         protected long[] computeValue(Class<?> c) {
             for (Class<?> x = c; x != null && x != Object.class; x = x.getSuperclass())
                 for (java.lang.reflect.Field f : x.getDeclaredFields())
-                    if (!Modifier.isStatic(f.getModifiers()) && f.getName().startsWith("this$") && U != null) return new long[] {U.objectFieldOffset(f)};
+                    if (!Modifier.isStatic(f.getModifiers()) && dev.lull.Names.officialMember(f.getName()).startsWith("this$") && U != null) return new long[] {U.objectFieldOffset(f)};
             return new long[] {-1};
         }
     };

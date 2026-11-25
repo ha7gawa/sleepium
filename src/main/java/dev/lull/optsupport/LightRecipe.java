@@ -34,12 +34,12 @@ public final class LightRecipe {
 
     static {
         try {
-            Class<?> adj = Class.forName("net.minecraft.client.renderer.block.ModelBlockRenderer$AdjacencyInfo");
-            Class<?> remap = Class.forName("net.minecraft.client.renderer.block.ModelBlockRenderer$AmbientVertexRemap");
-            Method adjOf = adj.getDeclaredMethod("fromFacing", Direction.class), remapOf = remap.getDeclaredMethod("fromFacing", Direction.class);
+            Class<?> adj = Class.forName(dev.lull.Names.cls("net.minecraft.client.renderer.block.ModelBlockRenderer$AdjacencyInfo"));
+            Class<?> remap = Class.forName(dev.lull.Names.cls("net.minecraft.client.renderer.block.ModelBlockRenderer$AmbientVertexRemap"));
+            Method adjOf = dev.lull.Names.methodOf(adj, "fromFacing", Direction.class), remapOf = dev.lull.Names.methodOf(remap, "fromFacing", Direction.class);
             adjOf.setAccessible(true);
             remapOf.setAccessible(true);
-            Field corners = adj.getDeclaredField("corners"), nonCubic = adj.getDeclaredField("doNonCubicWeight");
+            Field corners = dev.lull.Names.fieldOf(adj, "corners"), nonCubic = dev.lull.Names.fieldOf(adj, "doNonCubicWeight");
             corners.setAccessible(true);
             nonCubic.setAccessible(true);
             String[] vn = {"vert0", "vert1", "vert2", "vert3"};
@@ -48,7 +48,7 @@ public final class LightRecipe {
                 CORNERS[d.ordinal()] = (Direction[]) corners.get(a);
                 NON_CUBIC[d.ordinal()] = nonCubic.getBoolean(a);
                 for (int i = 0; i < 4; i++) {
-                    Field f = remap.getDeclaredField(vn[i]);
+                    Field f = dev.lull.Names.fieldOf(remap, vn[i]);
                     f.setAccessible(true);
                     REMAP[d.ordinal()][i] = f.getInt(r);
                 }

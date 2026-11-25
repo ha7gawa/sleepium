@@ -40,7 +40,7 @@ public final class SurfaceConditions {
         try {
             Method m = notTarget;
             if (m == null) {
-                m = source.getClass().getDeclaredMethod("target");
+                m = dev.lull.Names.methodOf(source.getClass(), "target");
                 m.setAccessible(true);
                 notTarget = m;
             }

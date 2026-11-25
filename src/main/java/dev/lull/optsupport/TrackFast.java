@@ -33,7 +33,7 @@ public final class TrackFast {
         @Override
         protected Boolean computeValue(Class<?> c) {
             try {
-                return c.getMethod("getIndirectPassengers").getDeclaringClass() == net.minecraft.world.entity.Entity.class;
+                return dev.lull.Names.publicMethod(c, "getIndirectPassengers").getDeclaringClass() == net.minecraft.world.entity.Entity.class;
             } catch (NoSuchMethodException e) {
                 return false;
             }

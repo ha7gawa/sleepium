@@ -123,6 +123,8 @@ public final class FabricBench {
                     double fps = n / ((now - t0) / 1e9);
                     SleepMod.LOGGER.info(String.format(java.util.Locale.ROOT, "[fabricbench] %s: %.0f fps, frame p50 %.2f / p99 %.2f ms, %d frames, entities %d, at the view %s, view fixes %d",
                             LABEL, fps, n == 0 ? 0 : f[n / 2] / 1e6, n == 0 ? 0 : f[(int) (n * 0.99)] / 1e6, n, mc.level.getEntityCount(), atView(mc), fixes));
+                    if (Boolean.getBoolean("lab.opt.RenderCacheMixin"))
+                        SleepMod.LOGGER.info("[fabricbench] " + dev.lull.optsupport.RenderCache.report().replace("\n", "\n[fabricbench] "));
                     mc.stop();
                 }
             }

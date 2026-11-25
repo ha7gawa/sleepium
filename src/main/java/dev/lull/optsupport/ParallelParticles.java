@@ -296,7 +296,7 @@ public final class ParallelParticles {
         if (random == null) return null;
         for (Class<?> x = random.getClass(); x != null && x != Object.class; x = x.getSuperclass())
             for (java.lang.reflect.Field f : x.getDeclaredFields())
-                if (f.getName().equals("seed") && !java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
+                if (dev.lull.Names.officialMember(f.getName()).equals("seed") && !java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
                     f.setAccessible(true);
                     return f;
                 }
@@ -329,7 +329,7 @@ public final class ParallelParticles {
     }
 
     private static Object fieldValue(Particle p, String name) throws ReflectiveOperationException {
-        for (java.lang.reflect.Field f : fields(p.getClass())) if (f.getName().equals(name)) return f.get(p);
+        for (java.lang.reflect.Field f : fields(p.getClass())) if (dev.lull.Names.officialMember(f.getName()).equals(name)) return f.get(p);
         return null;
     }
 

@@ -18,7 +18,7 @@ public final class NeighborReact {
         protected Boolean computeValue(Class<?> type) {
             for (Class<?> c = type; c != null && c != BlockBehaviour.class && c != Object.class; c = c.getSuperclass()) {
                 try {
-                    c.getDeclaredMethod("neighborChanged", BlockState.class, Level.class, BlockPos.class, Block.class, BlockPos.class, boolean.class);
+                    dev.lull.Names.methodOf(c, "neighborChanged", BlockState.class, Level.class, BlockPos.class, Block.class, BlockPos.class, boolean.class);
                     return true;
                 } catch (NoSuchMethodException ignored) {
                 }

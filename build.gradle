@@ -43,7 +43,8 @@ processResources {
     // only the two configs the Fabric build lists (the integrations' and the test configs stay out)
     exclude { it.name.endsWith('.mixins.json') && !(it.name in ['sleepium.mixins.json', 'sleepium-opt.mixins.json']) }
     exclude 'META-INF/accesstransformer.cfg'
-    from('defaults.txt') {
+    from('defaults-fabric.txt') {
+        rename { 'defaults.txt' }
         into 'sleepium'
         filter { line -> line.contains('NetLagMixin') ? null : line }
     }

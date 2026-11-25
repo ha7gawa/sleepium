@@ -124,7 +124,7 @@ public final class SignalProof {
     private static Object conductor(BlockState state) throws ReflectiveOperationException {
         Field f = conductorField;
         if (f == null) {
-            f = BlockBehaviour.BlockStateBase.class.getDeclaredField("isRedstoneConductor");
+            f = dev.lull.Names.fieldOf(BlockBehaviour.BlockStateBase.class, "isRedstoneConductor");
             f.setAccessible(true);
             conductorField = f;
         }

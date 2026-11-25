@@ -201,7 +201,7 @@ public final class ServerParallelItems {
     /** an Item class without an onEntityItemUpdate of its own (NeoForge's IItemExtension default: false) */
     private static boolean plainItem(Class<?> c) {
         try {
-            return c.getMethod("onEntityItemUpdate", net.minecraft.world.item.ItemStack.class, ItemEntity.class).getDeclaringClass().isInterface();
+            return dev.lull.Names.publicMethod(c, "onEntityItemUpdate", net.minecraft.world.item.ItemStack.class, ItemEntity.class).getDeclaringClass().isInterface();
         } catch (NoSuchMethodException ex) {
             return false;
         }
@@ -212,7 +212,7 @@ public final class ServerParallelItems {
         if (!c.getName().startsWith("net.minecraft.")) return false;
         for (String m : new String[] {"entityInside", "stepOn", "fallOn", "updateEntityAfterFallOn"})
             for (Class<?> x = c; x != null && x != Block.class && x != net.minecraft.world.level.block.state.BlockBehaviour.class; x = x.getSuperclass())
-                for (java.lang.reflect.Method dm : x.getDeclaredMethods()) if (dm.getName().equals(m)) return false;
+                for (java.lang.reflect.Method dm : x.getDeclaredMethods()) if (dev.lull.Names.officialMember(dm.getName()).equals(m)) return false;
         return true;
     }
 

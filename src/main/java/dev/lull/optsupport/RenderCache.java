@@ -321,7 +321,7 @@ public final class RenderCache {
         protected java.lang.invoke.MethodHandle computeValue(Class<?> c) {
             if (c == MultiBufferSource.BufferSource.class) return null;
             try {
-                return java.lang.invoke.MethodHandles.publicLookup().findVirtual(c, "getUsedSize", java.lang.invoke.MethodType.methodType(long.class))
+                return java.lang.invoke.MethodHandles.publicLookup().findVirtual(c, dev.lull.Names.methodName(c, "getUsedSize", null), java.lang.invoke.MethodType.methodType(long.class))
                         .asType(java.lang.invoke.MethodType.methodType(long.class, Object.class));
             } catch (ReflectiveOperationException e) {
                 return null;

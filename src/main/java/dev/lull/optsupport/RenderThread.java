@@ -53,7 +53,7 @@ public final class RenderThread {
     private static void setRenderThread(Thread t) {
         try {
             if (renderThreadField == null) {
-                renderThreadField = com.mojang.blaze3d.systems.RenderSystem.class.getDeclaredField("renderThread");
+                renderThreadField = dev.lull.Names.fieldOf(com.mojang.blaze3d.systems.RenderSystem.class, "renderThread");
                 renderThreadField.setAccessible(true);
             }
             renderThreadField.set(null, t);

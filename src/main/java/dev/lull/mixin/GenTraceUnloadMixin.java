@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.At;
 public abstract class GenTraceUnloadMixin {
     @Shadow @Final ServerLevel level;
 
-    @WrapOperation(method = "lambda$scheduleUnload$12", at = @At(value = "INVOKE",
+    @WrapOperation(method = {"lambda$scheduleUnload$12", "method_60440"}, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/level/ChunkMap;save(Lnet/minecraft/world/level/chunk/ChunkAccess;)Z"))
     private boolean sleep$save(ChunkMap self, ChunkAccess chunk, Operation<Boolean> original) {
         level.getProfiler().push("unload_save");
@@ -27,7 +27,7 @@ public abstract class GenTraceUnloadMixin {
         }
     }
 
-    @WrapOperation(method = "lambda$scheduleUnload$12", at = @At(value = "INVOKE",
+    @WrapOperation(method = {"lambda$scheduleUnload$12", "method_60440"}, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerLevel;unload(Lnet/minecraft/world/level/chunk/LevelChunk;)V"))
     private void sleep$unload(ServerLevel self, LevelChunk chunk, Operation<Void> original) {
         level.getProfiler().push("unload_level");

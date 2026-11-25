@@ -282,7 +282,7 @@ public final class EntitySleep {
             int best = -1;
             for (int i = pt.off; i < pt.off + pt.f.length; i++) {
                 Field x = f[i];
-                if (!x.getName().equals(name) || !x.getDeclaringClass().isAssignableFrom(owner)) continue;
+                if (!dev.lull.Names.officialMember(x.getName()).equals(name) || !x.getDeclaringClass().isAssignableFrom(owner)) continue;
                 if (best < 0 || f[best].getDeclaringClass().isAssignableFrom(x.getDeclaringClass())) best = i;
             }
             return best;
@@ -333,7 +333,7 @@ public final class EntitySleep {
             List<Field> fl = new ArrayList<>();
             for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
                 for (Field x : k.getDeclaredFields()) {
-                    if (x.getName().equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
+                    if (dev.lull.Names.officialMember(x.getName()).equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
                     if (Modifier.isStatic(x.getModifiers())) continue;
                     try {
                         x.setAccessible(true);
@@ -370,7 +370,7 @@ public final class EntitySleep {
                         Class<?> t = x.getType();
                         if (epochObject) continue;
                         // GoalSelector's goal set: only addGoal / removeGoal change it, and they change its counter
-                        if (o instanceof MobSleepHooks.GoalEpoch && x.getName().equals("availableGoals")) continue;
+                        if (o instanceof MobSleepHooks.GoalEpoch && dev.lull.Names.officialMember(x.getName()).equals("availableGoals")) continue;
                         if (Modifier.isFinal(x.getModifiers()) && !t.isPrimitive() && !t.isArray() && !java.util.Collection.class.isAssignableFrom(t)
                                 && !java.util.Map.class.isAssignableFrom(t)) continue;   // the same object for life (a context has its own part)
                         fl.add(x);
@@ -395,7 +395,7 @@ public final class EntitySleep {
             List<Integer> cl = new ArrayList<>(), nu = new ArrayList<>(), er = new ArrayList<>(), ze = new ArrayList<>();
             for (int i = 0; i < n; i++) {
                 Field x = f[i];
-                if (x.getName().equals("tickCount") && x.getDeclaringClass() == Entity.class) {
+                if (dev.lull.Names.officialMember(x.getName()).equals("tickCount") && x.getDeclaringClass() == Entity.class) {
                     tickCount = i;
                     special[i] = true;
                     continue;
@@ -436,7 +436,7 @@ public final class EntitySleep {
                 if (plan.nulls().contains(x)) nu.add(i);
                 if (plan.zeros().contains(x)) ze.add(i);
                 if (Entity.class.isAssignableFrom(x.getType())) er.add(i);
-                forbidV[i] = FORBID_V.contains(x.getName()) && x.getDeclaringClass() == Entity.class;
+                forbidV[i] = FORBID_V.contains(dev.lull.Names.officialMember(x.getName())) && x.getDeclaringClass() == Entity.class;
             }
             if (tickCount < 0) refuse = "no tickCount";
             if (refuse != null) return;
@@ -2465,7 +2465,7 @@ public final class EntitySleep {
         return PLAIN_COLLIDE.computeIfAbsent(c, k -> {
             for (Class<?> x = k; x != null && x != Entity.class; x = x.getSuperclass())
                 for (java.lang.reflect.Method m : x.getDeclaredMethods())
-                    if (m.getName().equals("canCollideWith") && m.getParameterCount() == 1) return false;
+                    if (dev.lull.Names.officialMember(m.getName()).equals("canCollideWith") && m.getParameterCount() == 1) return false;
             return !dev.lull.optsupport.MixinTouch.touched("net/minecraft/world/entity/Entity", "canCollideWith");
         });
     }
@@ -2707,7 +2707,7 @@ public final class EntitySleep {
         List<Field> out = new ArrayList<>();
         for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass()) {
             for (Field f : k.getDeclaredFields()) {
-                if (f.getName().equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
+                if (dev.lull.Names.officialMember(f.getName()).equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
                 if (Modifier.isStatic(f.getModifiers())) continue;
                 try {
                     f.setAccessible(true);

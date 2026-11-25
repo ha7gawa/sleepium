@@ -155,32 +155,32 @@ public final class ClientAuto {
     private static void resetAnimations() {
         try {
             var tm = Minecraft.getInstance().getTextureManager();
-            java.lang.reflect.Field byPath = net.minecraft.client.renderer.texture.TextureManager.class.getDeclaredField("byPath");
+            java.lang.reflect.Field byPath = dev.lull.Names.fieldOf(net.minecraft.client.renderer.texture.TextureManager.class, "byPath");
             byPath.setAccessible(true);
-            java.lang.reflect.Field animated = net.minecraft.client.renderer.texture.TextureAtlas.class.getDeclaredField("animatedTextures");
+            java.lang.reflect.Field animated = dev.lull.Names.fieldOf(net.minecraft.client.renderer.texture.TextureAtlas.class, "animatedTextures");
             animated.setAccessible(true);
             int n = 0;
             for (Object t : ((java.util.Map<?, ?>) byPath.get(tm)).values()) {
                 if (!(t instanceof net.minecraft.client.renderer.texture.TextureAtlas atlas)) continue;
                 atlas.bind();
                 for (Object tk : (java.util.List<?>) animated.get(atlas)) {
-                    java.lang.reflect.Field st = tk.getClass().getDeclaredField("val$spriteticker"), owner = tk.getClass().getDeclaredField("this$0");
+                    java.lang.reflect.Field st = dev.lull.Names.fieldOf(tk.getClass(), "val$spriteticker"), owner = dev.lull.Names.fieldOf(tk.getClass(), "this$0");
                     st.setAccessible(true);
                     owner.setAccessible(true);
                     Object ticker = st.get(tk);
                     var sprite = (net.minecraft.client.renderer.texture.TextureAtlasSprite) owner.get(tk);
                     Class<?> tc = ticker.getClass();
-                    java.lang.reflect.Field frame = tc.getDeclaredField("frame"), sub = tc.getDeclaredField("subFrame"), info = tc.getDeclaredField("animationInfo");
+                    java.lang.reflect.Field frame = dev.lull.Names.fieldOf(tc, "frame"), sub = dev.lull.Names.fieldOf(tc, "subFrame"), info = dev.lull.Names.fieldOf(tc, "animationInfo");
                     frame.setAccessible(true);
                     sub.setAccessible(true);
                     info.setAccessible(true);
                     Object anim = info.get(ticker);
-                    java.lang.reflect.Field frames = anim.getClass().getDeclaredField("frames");
+                    java.lang.reflect.Field frames = dev.lull.Names.fieldOf(anim.getClass(), "frames");
                     frames.setAccessible(true);
                     Object first = ((java.util.List<?>) frames.get(anim)).get(0);
-                    java.lang.reflect.Field index = first.getClass().getDeclaredField("index");
+                    java.lang.reflect.Field index = dev.lull.Names.fieldOf(first.getClass(), "index");
                     index.setAccessible(true);
-                    java.lang.reflect.Method upload = anim.getClass().getDeclaredMethod("uploadFrame", int.class, int.class, int.class);
+                    java.lang.reflect.Method upload = dev.lull.Names.methodOf(anim.getClass(), "uploadFrame", int.class, int.class, int.class);
                     upload.setAccessible(true);
                     frame.setInt(ticker, 0);
                     sub.setInt(ticker, 0);
@@ -360,7 +360,7 @@ public final class ClientAuto {
         if (FLIP == null) return;
         try {
             String cls = FLIP.substring(0, FLIP.indexOf('#')), name = FLIP.substring(FLIP.indexOf('#') + 1, FLIP.indexOf('@'));
-            flipField = Class.forName(cls).getDeclaredField(name);
+            flipField = dev.lull.Names.fieldOf(Class.forName(cls), name);
             flipField.setAccessible(true);
             flipA = flipField.getBoolean(null);
             flipFrom = ticks;
@@ -395,7 +395,7 @@ public final class ClientAuto {
     private static void abTick(Minecraft mc) {
         try {
             String cls = AB.substring(0, AB.indexOf('#')), name = AB.substring(AB.indexOf('#') + 1, AB.indexOf('@'));
-            java.lang.reflect.Field f = Class.forName(cls).getDeclaredField(name);
+            java.lang.reflect.Field f = dev.lull.Names.fieldOf(Class.forName(cls), name);
             f.setAccessible(true);
             Path dir = SleepOut.dir(mc.gameDirectory.toPath(), "frame", LABEL);
             Files.createDirectories(dir);
@@ -1109,7 +1109,7 @@ public final class ClientAuto {
         for (ClassLoader cl : new ClassLoader[] {ClientAuto.class.getClassLoader(), Thread.currentThread().getContextClassLoader()}) {
             try {
                 Class<?> z = Class.forName("dev.lull.zoo.Zoo", true, cl);
-                sb.append("  ").append(z.getMethod("report").invoke(null)).append('\n');
+                sb.append("  ").append(dev.lull.Names.publicMethod(z, "report").invoke(null)).append('\n');
                 break;
             } catch (Throwable ignored) {
             }

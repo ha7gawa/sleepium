@@ -34,7 +34,7 @@ public final class GeoParts {
 
     static {
         try {
-            NO_FIELD = GeoParts.class.getDeclaredField("NO_FIELD");
+            NO_FIELD = dev.lull.Names.fieldOf(GeoParts.class, "NO_FIELD");
         } catch (NoSuchFieldException e) {
             throw new IllegalStateException(e);
         }
@@ -45,13 +45,13 @@ public final class GeoParts {
         protected java.lang.reflect.Field computeValue(Class<?> c) {
             java.lang.reflect.Field out = null;
             try {
-                Method cube = c.getMethod("renderCube", PoseStack.class, GeoCube.class, VertexConsumer.class, int.class, int.class, int.class);
-                Method quad = c.getMethod("createVerticesOfQuad", GeoQuad.class, Matrix4f.class, Vector3f.class, VertexConsumer.class, int.class, int.class, int.class);
+                Method cube = dev.lull.Names.publicMethod(c, "renderCube", PoseStack.class, GeoCube.class, VertexConsumer.class, int.class, int.class, int.class);
+                Method quad = dev.lull.Names.publicMethod(c, "createVerticesOfQuad", GeoQuad.class, Matrix4f.class, Vector3f.class, VertexConsumer.class, int.class, int.class, int.class);
                 Class<?> qd = quad.getDeclaringClass();
                 if (cube.getDeclaringClass() == GeoRenderer.class) {
                     if (qd == GeoRenderer.class) out = NO_FIELD;
                     else if (qd.getName().startsWith("software.bernie.geckolib.renderer.specialty.DynamicGeo")) {
-                        java.lang.reflect.Field f = qd.getDeclaredField("textureOverride");
+                        java.lang.reflect.Field f = dev.lull.Names.fieldOf(qd, "textureOverride");
                         f.setAccessible(true);
                         out = f;
                     }

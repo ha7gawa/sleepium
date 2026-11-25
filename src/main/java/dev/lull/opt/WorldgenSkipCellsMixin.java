@@ -61,9 +61,9 @@ public abstract class WorldgenSkipCellsMixin implements CellProof.Host {
         int[] r = PROBE$VEIN_RANGES;
         if (r == null) {
             try {
-                Class<?> t = Class.forName("net.minecraft.world.level.levelgen.OreVeinifier$VeinType");
+                Class<?> t = Class.forName(dev.lull.Names.cls("net.minecraft.world.level.levelgen.OreVeinifier$VeinType"));
                 Object[] vs = t.getEnumConstants();
-                java.lang.reflect.Field mn = t.getDeclaredField("minY"), mx = t.getDeclaredField("maxY");
+                java.lang.reflect.Field mn = dev.lull.Names.fieldOf(t, "minY"), mx = dev.lull.Names.fieldOf(t, "maxY");
                 mn.setAccessible(true);
                 mx.setAccessible(true);
                 r = new int[vs.length * 2];
@@ -119,7 +119,7 @@ public abstract class WorldgenSkipCellsMixin implements CellProof.Host {
         for (NoiseChunk.NoiseInterpolator it : interpolators) {
             DensityFunction inner;
             try {
-                java.lang.reflect.Field f = NoiseChunk.NoiseInterpolator.class.getDeclaredField("noiseFiller");
+                java.lang.reflect.Field f = dev.lull.Names.fieldOf(NoiseChunk.NoiseInterpolator.class, "noiseFiller");
                 f.setAccessible(true);
                 inner = (DensityFunction) f.get(it);
             } catch (ReflectiveOperationException e) {

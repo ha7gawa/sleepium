@@ -44,7 +44,7 @@ public final class EventCounter {
                 Class<?> c = busListener.getClass();
                 while (c != null && !c.getName().equals("net.neoforged.bus.ConsumerEventHandler")) c = c.getSuperclass();
                 if (c == null) return false;
-                f = c.getDeclaredField("consumer");
+                f = dev.lull.Names.fieldOf(c, "consumer");
                 f.setAccessible(true);
                 consumerField = f;
             }
@@ -91,10 +91,10 @@ public final class EventCounter {
         this.bus = bus;
         try {
             Object real = bus instanceof dev.lull.optsupport.CompositeEventBus c ? c.delegate() : bus;
-            Field f = real.getClass().getDeclaredField("listenerLists");
+            Field f = dev.lull.Names.fieldOf(real.getClass(), "listenerLists");
             f.setAccessible(true);
             listenerLists = f.get(real);
-            getReadMap = listenerLists.getClass().getDeclaredMethod("getReadMap");
+            getReadMap = dev.lull.Names.methodOf(listenerLists.getClass(), "getReadMap");
             getReadMap.setAccessible(true);
         } catch (ReflectiveOperationException | RuntimeException e) {
             SleepMod.LOGGER.error("Cannot reach EventBus internals ({}); event counting disabled", bus.getClass(), e);
@@ -188,7 +188,7 @@ public final class EventCounter {
             for (Counter c : counters.values()) {
                 Object list = map.get(c.type);
                 if (list != null) {
-                    Object[] arr = (Object[]) list.getClass().getMethod("getListeners").invoke(list);
+                    Object[] arr = (Object[]) dev.lull.Names.publicMethod(list.getClass(), "getListeners").invoke(list);
                     c.listeners = arr.length - (c.listener != null ? 1 : 0);
                 }
             }

@@ -26,7 +26,7 @@ public final class BulkData {
 
     private static boolean declaredBy(Class<?> c, Class<?>[] params, Class<?> expected) {
         try {
-            return c.getMethod("putBulkData", params).getDeclaringClass() == expected;
+            return dev.lull.Names.publicMethod(c, "putBulkData", params).getDeclaringClass() == expected;
         } catch (NoSuchMethodException | RuntimeException e) {
             return false;
         }

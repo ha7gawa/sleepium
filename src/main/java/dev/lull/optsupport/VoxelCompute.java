@@ -656,9 +656,9 @@ public final class VoxelCompute {
         OFFSET_TABLES.clear();
         List<float[]> quads = new ArrayList<>();
         dynamicStates = seedStates = offsetFallbacks = 0;
-        java.lang.reflect.Field wlist = net.minecraft.client.resources.model.WeightedBakedModel.class.getDeclaredField("list");
+        java.lang.reflect.Field wlist = dev.lull.Names.fieldOf(net.minecraft.client.resources.model.WeightedBakedModel.class, "list");
         wlist.setAccessible(true);
-        java.lang.reflect.Field mselectors = net.minecraft.client.resources.model.MultiPartBakedModel.class.getDeclaredField("selectors");
+        java.lang.reflect.Field mselectors = dev.lull.Names.fieldOf(net.minecraft.client.resources.model.MultiPartBakedModel.class, "selectors");
         mselectors.setAccessible(true);
         for (int i = 0; i < stateCount; i++) {
             BlockState st = states.get(i);
@@ -1007,16 +1007,16 @@ public final class VoxelCompute {
     }
 
     static IntBuffer aoTables() throws ReflectiveOperationException {
-        Class<?> adj = Class.forName("net.minecraft.client.renderer.block.ModelBlockRenderer$AdjacencyInfo");
-        Class<?> remap = Class.forName("net.minecraft.client.renderer.block.ModelBlockRenderer$AmbientVertexRemap");
-        Class<?> size = Class.forName("net.minecraft.client.renderer.block.ModelBlockRenderer$SizeInfo");
-        var fromA = adj.getDeclaredMethod("fromFacing", Direction.class);
-        var fromR = remap.getDeclaredMethod("fromFacing", Direction.class);
+        Class<?> adj = Class.forName(dev.lull.Names.cls("net.minecraft.client.renderer.block.ModelBlockRenderer$AdjacencyInfo"));
+        Class<?> remap = Class.forName(dev.lull.Names.cls("net.minecraft.client.renderer.block.ModelBlockRenderer$AmbientVertexRemap"));
+        Class<?> size = Class.forName(dev.lull.Names.cls("net.minecraft.client.renderer.block.ModelBlockRenderer$SizeInfo"));
+        var fromA = dev.lull.Names.methodOf(adj, "fromFacing", Direction.class);
+        var fromR = dev.lull.Names.methodOf(remap, "fromFacing", Direction.class);
         fromA.setAccessible(true);
         fromR.setAccessible(true);
-        var corners = adj.getDeclaredField("corners");
+        var corners = dev.lull.Names.fieldOf(adj, "corners");
         corners.setAccessible(true);
-        var shapeF = size.getDeclaredField("shape");
+        var shapeF = dev.lull.Names.fieldOf(size, "shape");
         shapeF.setAccessible(true);
         IntBuffer t = MemoryUtil.memAllocInt(6 * 40);
         for (Direction dir : Direction.values()) {
@@ -1025,12 +1025,12 @@ public final class VoxelCompute {
             Direction[] cs = (Direction[]) corners.get(a);
             for (int k = 0; k < 4; k++) t.put(base + k, cs[k].get3DDataValue());
             for (int k = 0; k < 4; k++) {
-                var vf = remap.getDeclaredField("vert" + k);
+                var vf = dev.lull.Names.fieldOf(remap, "vert" + k);
                 vf.setAccessible(true);
                 t.put(base + 4 + k, vf.getInt(r));
             }
             for (int k = 0; k < 4; k++) {
-                var wf = adj.getDeclaredField("vert" + k + "Weights");
+                var wf = dev.lull.Names.fieldOf(adj, "vert" + k + "Weights");
                 wf.setAccessible(true);
                 Object[] ws = (Object[]) wf.get(a);
                 for (int j = 0; j < 8; j++) t.put(base + 8 + k * 8 + j, shapeF.getInt(ws[j]));

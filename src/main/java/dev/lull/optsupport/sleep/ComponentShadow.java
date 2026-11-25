@@ -36,7 +36,7 @@ public final class ComponentShadow {
             List<Field> l = new ArrayList<>();
             for (Class<?> x = k; x != null && x != Object.class; x = x.getSuperclass())
                 for (Field f : x.getDeclaredFields()) {
-                    if (f.getName().equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
+                    if (dev.lull.Names.officialMember(f.getName()).equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
                     if (Modifier.isStatic(f.getModifiers())) continue;
                     try {
                         f.setAccessible(true);
@@ -50,7 +50,7 @@ public final class ComponentShadow {
     }
 
     private static Field mobField(String name) {
-        for (Field f : fields(Mob.class)) if (f.getName().equals(name)) return f;
+        for (Field f : fields(Mob.class)) if (dev.lull.Names.officialMember(f.getName()).equals(name)) return f;
         return null;
     }
 

@@ -32,7 +32,7 @@ final class ParallelEntitiesCheck {
             List<Field> l = new ArrayList<>();
             for (Class<?> x = k; x != null && x != Object.class; x = x.getSuperclass())
                 for (Field f : x.getDeclaredFields()) {
-                    if (Modifier.isStatic(f.getModifiers()) || f.getName().equals(SKIP) || cache(f)) continue;
+                    if (Modifier.isStatic(f.getModifiers()) || dev.lull.Names.officialMember(f.getName()).equals(SKIP) || cache(f)) continue;
                     try {
                         f.setAccessible(true);
                         l.add(f);

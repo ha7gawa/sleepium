@@ -69,9 +69,9 @@ public final class CompositeDispatcher {
 
     static {
         try {
-            SEL_HANDLER = SubscribeEventListener.class.getDeclaredField("handler");
-            SEL_INFO = SubscribeEventListener.class.getDeclaredField("subInfo");
-            CEH_CONSUMER = ConsumerEventHandler.class.getDeclaredField("consumer");
+            SEL_HANDLER = dev.lull.Names.fieldOf(SubscribeEventListener.class, "handler");
+            SEL_INFO = dev.lull.Names.fieldOf(SubscribeEventListener.class, "subInfo");
+            CEH_CONSUMER = dev.lull.Names.fieldOf(ConsumerEventHandler.class, "consumer");
             SEL_HANDLER.setAccessible(true);
             SEL_INFO.setAccessible(true);
             CEH_CONSUMER.setAccessible(true);

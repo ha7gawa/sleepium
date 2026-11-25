@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
         "net.minecraft.world.level.levelgen.DensityFunctions$ShiftedNoise", "net.minecraft.world.level.levelgen.DensityFunctions$WeirdScaledSampler",
         "net.minecraft.world.level.levelgen.NoiseRouter"})
 public abstract class WorldgenMapMemoMixin {
-    @Redirect(method = "mapAll", at = @At(value = "INVOKE",
+    @Redirect(method = {"mapAll", "method_41544", "method_41080"}, at = @At(value = "INVOKE",   // (Fabric production: the build names "mapAll" after DensityFunction's for every target; NoiseRouter's is method_41544, Mapped's covariant one method_41080)
             target = "Lnet/minecraft/world/level/levelgen/DensityFunction;mapAll(Lnet/minecraft/world/level/levelgen/DensityFunction$Visitor;)Lnet/minecraft/world/level/levelgen/DensityFunction;"))
     private DensityFunction sleep$memo(DensityFunction child, DensityFunction.Visitor visitor) {
         return MapAllMemo.map(child, visitor);

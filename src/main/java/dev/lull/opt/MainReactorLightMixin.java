@@ -19,12 +19,12 @@ public abstract class MainReactorLightMixin {
     @Shadow
     public abstract void tryScheduleUpdate();
 
-    @Inject(method = "lambda$addTask$15", at = @At("TAIL"))
+    @Inject(method = {"lambda$addTask$15", "method_17313"}, at = @At("TAIL"))
     private void sleep$schedule(CallbackInfo ci) {
         this.tryScheduleUpdate();
     }
 
-    @Inject(method = "lambda$tryScheduleUpdate$27", at = @At("TAIL"))
+    @Inject(method = {"lambda$tryScheduleUpdate$27", "method_19505"}, at = @At("TAIL"))
     private void sleep$again(CallbackInfo ci) {
         this.tryScheduleUpdate();
     }

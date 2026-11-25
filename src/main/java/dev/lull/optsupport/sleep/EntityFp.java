@@ -20,14 +20,14 @@ public final class EntityFp {
         VarHandle items = null, dirty = null, itemDirty = null, legacy = null, single = null;
         try {
             MethodHandles.Lookup l = MethodHandles.privateLookupIn(SynchedEntityData.class, MethodHandles.lookup());
-            items = l.findVarHandle(SynchedEntityData.class, "itemsById", SynchedEntityData.DataItem[].class);
-            dirty = l.findVarHandle(SynchedEntityData.class, "isDirty", boolean.class);
+            items = l.findVarHandle(SynchedEntityData.class, dev.lull.Names.fieldName(SynchedEntityData.class, "itemsById"), SynchedEntityData.DataItem[].class);
+            dirty = l.findVarHandle(SynchedEntityData.class, dev.lull.Names.fieldName(SynchedEntityData.class, "isDirty"), boolean.class);
             itemDirty = MethodHandles.privateLookupIn(SynchedEntityData.DataItem.class, MethodHandles.lookup())
-                    .findVarHandle(SynchedEntityData.DataItem.class, "dirty", boolean.class);
+                    .findVarHandle(SynchedEntityData.DataItem.class, dev.lull.Names.fieldName(SynchedEntityData.DataItem.class, "dirty"), boolean.class);
             Class<?> lr = net.minecraft.world.level.levelgen.LegacyRandomSource.class;
-            legacy = MethodHandles.privateLookupIn(lr, MethodHandles.lookup()).findVarHandle(lr, "seed", java.util.concurrent.atomic.AtomicLong.class);
+            legacy = MethodHandles.privateLookupIn(lr, MethodHandles.lookup()).findVarHandle(lr, dev.lull.Names.fieldName(lr, "seed"), java.util.concurrent.atomic.AtomicLong.class);
             Class<?> sr = net.minecraft.world.level.levelgen.SingleThreadedRandomSource.class;
-            single = MethodHandles.privateLookupIn(sr, MethodHandles.lookup()).findVarHandle(sr, "seed", long.class);
+            single = MethodHandles.privateLookupIn(sr, MethodHandles.lookup()).findVarHandle(sr, dev.lull.Names.fieldName(sr, "seed"), long.class);
         } catch (ReflectiveOperationException | RuntimeException e) {
             System.out.println("[sleep/entsleep] fingerprint handles unavailable: " + e);
         }

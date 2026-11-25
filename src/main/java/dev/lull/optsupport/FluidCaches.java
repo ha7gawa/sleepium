@@ -32,7 +32,7 @@ public final class FluidCaches {
                     || MixinTouch.touched("net/minecraft/world/level/material/FlowingFluid", "getSlopeDistance")) return false;
             for (Class<?> k = c; k != null && k != FlowingFluid.class; k = k.getSuperclass()) {
                 for (var m : k.getDeclaredMethods()) {
-                    if (m.getName().equals("getSpread") || m.getName().equals("getSlopeDistance")) return false;
+                    if (dev.lull.Names.officialMember(m.getName()).equals("getSpread") || dev.lull.Names.officialMember(m.getName()).equals("getSlopeDistance")) return false;
                 }
             }
             return true;

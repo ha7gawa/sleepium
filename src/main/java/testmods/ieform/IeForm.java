@@ -59,7 +59,7 @@ public final class IeForm {
                     if (be == null) continue;
                     String off = "";
                     try {
-                        var f = be.getClass().getField("offset");
+                        var f = dev.lull.Names.publicField(be.getClass(), "offset");
                         off = java.util.Arrays.toString((int[]) f.get(be));
                     } catch (ReflectiveOperationException | ClassCastException e) {
                         // no offset field
@@ -82,9 +82,9 @@ public final class IeForm {
         try {
             Class<?> handler = Class.forName("blusunrize.immersiveengineering.api.multiblocks.MultiblockHandler");
             Class<?> imb = Class.forName("blusunrize.immersiveengineering.api.multiblocks.MultiblockHandler$IMultiblock");
-            Method all = handler.getMethod("getMultiblocks");
-            Method name = imb.getMethod("getUniqueName"), structure = imb.getMethod("getStructure", Level.class), trigger = imb.getMethod("getTriggerOffset");
-            Method create = imb.getMethod("createStructure", Level.class, BlockPos.class, Direction.class, Player.class);
+            Method all = dev.lull.Names.publicMethod(handler, "getMultiblocks");
+            Method name = dev.lull.Names.publicMethod(imb, "getUniqueName"), structure = dev.lull.Names.publicMethod(imb, "getStructure", Level.class), trigger = dev.lull.Names.publicMethod(imb, "getTriggerOffset");
+            Method create = dev.lull.Names.publicMethod(imb, "createStructure", Level.class, BlockPos.class, Direction.class, Player.class);
             Player fake = net.neoforged.neoforge.common.util.FakePlayerFactory.getMinecraft(level);
             List<?> mbs = (List<?>) all.invoke(null);
             StringBuilder sb = new StringBuilder();

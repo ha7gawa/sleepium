@@ -616,7 +616,7 @@ final class SnapCompiler {
     static {
         sun.misc.Unsafe u = null;
         try {
-            Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            Field f = dev.lull.Names.fieldOf(sun.misc.Unsafe.class, "theUnsafe");
             f.setAccessible(true);
             u = (sun.misc.Unsafe) f.get(null);
         } catch (Throwable t) {

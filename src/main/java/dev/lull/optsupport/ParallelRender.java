@@ -729,7 +729,7 @@ public final class ParallelRender {
         /** a stored choice used at once; the prior until measured. False: decided, nothing to measure */
         private static boolean calibrated() {
             calibChecked = true;
-            String c = Calibration.get("cache");
+            String c = System.getProperty("lab.rcache.tune", Calibration.get("cache"));   // (lab.rcache.tune=cache|workers: a test's fixed choice)
             if ("workers".equals(c) || "cache".equals(c)) {   // measured on this machine before: no measuring
                 RenderCache.bypass = "workers".equals(c);
                 phase = 4;

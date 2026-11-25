@@ -1028,7 +1028,7 @@ public final class SleepEngine {
             // the class chain: a mod's random may extend vanilla's (C2ME's CheckedThreadLocalRandom extends SingleThreadedRandomSource)
             for (Class<?> c = level.random.getClass(); c != null && seedField == null; c = c.getSuperclass()) {
                 try {
-                    Field f = c.getDeclaredField("seed");
+                    Field f = dev.lull.Names.fieldOf(c, "seed");
                     f.setAccessible(true);
                     seedField = f;
                 } catch (ReflectiveOperationException | RuntimeException e) {

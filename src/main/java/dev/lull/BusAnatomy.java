@@ -31,10 +31,10 @@ final class BusAnatomy {
 
     static ListenerList listenerList(IEventBus bus, Class<?> type) throws ReflectiveOperationException {
         Object real = bus instanceof dev.lull.optsupport.CompositeEventBus c ? c.delegate() : bus;
-        Field f = real.getClass().getDeclaredField("listenerLists");
+        Field f = dev.lull.Names.fieldOf(real.getClass(), "listenerLists");
         f.setAccessible(true);
         Object helper = f.get(real);
-        Method m = helper.getClass().getDeclaredMethod("getReadMap");
+        Method m = dev.lull.Names.methodOf(helper.getClass(), "getReadMap");
         m.setAccessible(true);
         return (ListenerList) ((Map<?, ?>) m.invoke(helper)).get(type);
     }
@@ -71,7 +71,7 @@ final class BusAnatomy {
         })));
 
         // one annotation proxy call (what SubscribeEventListener.invoke does per listener on cancellable events)
-        SubscribeEvent ann = ScaleListeners.class.getMethod("onC50_0", ScaleListeners.Scale50Cancellable.class)
+        SubscribeEvent ann = dev.lull.Names.publicMethod(ScaleListeners.class, "onC50_0", ScaleListeners.Scale50Cancellable.class)
                 .getAnnotation(SubscribeEvent.class);
         rows.add(new Row("SubscribeEvent.receiveCanceled() proxy call", time(n * 10, k -> {
             int c = 0;

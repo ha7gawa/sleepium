@@ -725,7 +725,7 @@ final class SleepCommand {
     private static String blockEntityTickers(Level level) {
         try {
             if (tickersField == null) {
-                tickersField = Level.class.getDeclaredField("blockEntityTickers");
+                tickersField = dev.lull.Names.fieldOf(Level.class, "blockEntityTickers");
                 tickersField.setAccessible(true);
             }
             return String.valueOf(((List<?>) tickersField.get(level)).size());

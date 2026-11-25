@@ -18,7 +18,7 @@ public final class KeyframeLookup {
         @Override
         protected Boolean computeValue(Class<?> c) {
             try {
-                return c.getMethod("getAnyDescendantWithName", String.class).getDeclaringClass() == HierarchicalModel.class;
+                return dev.lull.Names.publicMethod(c, "getAnyDescendantWithName", String.class).getDeclaringClass() == HierarchicalModel.class;
             } catch (NoSuchMethodException e) {
                 return false;
             }

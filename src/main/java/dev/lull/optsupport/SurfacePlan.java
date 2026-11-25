@@ -74,7 +74,7 @@ public final class SurfacePlan {
         Class<?> c = record.getClass();
         Method m = METHODS.get(c.getName() + "." + component);
         if (m == null) {
-            m = c.getDeclaredMethod(component);
+            m = dev.lull.Names.methodOf(c, component);
             m.setAccessible(true);
             METHODS.put(c.getName() + "." + component, m);
         }

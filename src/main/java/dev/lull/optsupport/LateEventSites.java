@@ -35,8 +35,8 @@ public final class LateEventSites implements IExtension {
         try {
             if (!(MixinEnvironment.getCurrentEnvironment().getActiveTransformer() instanceof IMixinTransformer t)
                     || !(t.getExtensions() instanceof Extensions ext)) return false;
-            all = Extensions.class.getDeclaredField("extensions");
-            active = Extensions.class.getDeclaredField("activeExtensions");
+            all = dev.lull.Names.fieldOf(Extensions.class, "extensions");
+            active = dev.lull.Names.fieldOf(Extensions.class, "activeExtensions");
             all.setAccessible(true);
             active.setAccessible(true);
             LateEventSites self = new LateEventSites();

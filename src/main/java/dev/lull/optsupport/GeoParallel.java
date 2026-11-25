@@ -48,7 +48,7 @@ public final class GeoParallel {
             for (Field f : BoneSnapshot.class.getDeclaredFields()) {
                 if (Modifier.isStatic(f.getModifiers())) continue;
                 f.setAccessible(true);
-                if (f.getName().equals("bone")) sb = f;
+                if (dev.lull.Names.officialMember(f.getName()).equals("bone")) sb = f;
                 else snap.add(f);
             }
             SNAP_BONE = sb;
@@ -59,7 +59,7 @@ public final class GeoParallel {
     }
 
     private static Field bf(String name) throws NoSuchFieldException {
-        Field f = GeoBone.class.getDeclaredField(name);
+        Field f = dev.lull.Names.fieldOf(GeoBone.class, name);
         f.setAccessible(true);
         return f;
     }
@@ -101,7 +101,7 @@ public final class GeoParallel {
     }
 
     private static float snapFloat(BoneSnapshot s, String name) throws ReflectiveOperationException {
-        for (Field f : SNAP_FIELDS) if (f.getName().equals(name)) return f.getFloat(s);
+        for (Field f : SNAP_FIELDS) if (dev.lull.Names.officialMember(f.getName()).equals(name)) return f.getFloat(s);
         throw new NoSuchFieldException(name);
     }
 }

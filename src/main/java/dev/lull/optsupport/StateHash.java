@@ -43,8 +43,8 @@ final class StateHash {
                     continue;
                 }
                 for (Field f : k.getDeclaredFields()) {
-                    if (f.getName().equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
-                    if (Modifier.isStatic(f.getModifiers()) || SKIP.contains(f.getName())) continue;
+                    if (dev.lull.Names.officialMember(f.getName()).equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
+                    if (Modifier.isStatic(f.getModifiers()) || SKIP.contains(dev.lull.Names.officialMember(f.getName()))) continue;
                     try {
                         hs.add(l.unreflectVarHandle(f));
                     } catch (IllegalAccessException | RuntimeException e) {

@@ -258,6 +258,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
             on = on && !(Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.MainReactor"));
         if (simple.equals("StructurePlaceLockMixin"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelWorldgenMixin");
+        if (simple.equals("StructurePaletteCacheMixin"))   // structure starts of several chunks at once (GenGraph, parallel worldgen)
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelWorldgenMixin") || Boolean.getBoolean("lab.opt.GenGraph");
         if (simple.equals("LightRecipeVerifyMixin")) on = Boolean.getBoolean("lab.lightrecipe.verify");   // measurement only
         if (simple.startsWith("LightScout")) on = Boolean.getBoolean("lab.lightscout");   // measurement only
         if (simple.startsWith("GenScout")) on = Boolean.getBoolean("lab.genscout");   // measurement only

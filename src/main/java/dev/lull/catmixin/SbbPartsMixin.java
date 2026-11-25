@@ -73,7 +73,7 @@ public abstract class SbbPartsMixin implements PartBatch.GeometrySource, dev.lul
         var mods = net.neoforged.fml.loading.LoadingModList.get();
         if (!Boolean.getBoolean("lab.opt.KineticMemoMixin") || mods == null || mods.getModFileById("create") == null) return;
         try {
-            Class.forName("dev.lull.optsupport.KineticMemo").getMethod("install").invoke(null);
+            dev.lull.Names.publicMethod(Class.forName("dev.lull.optsupport.KineticMemo"), "install").invoke(null);
         } catch (ReflectiveOperationException | LinkageError e) {
             System.out.println("[sleep/opt] kinetic memo not installed: " + e);
         }

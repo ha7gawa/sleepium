@@ -465,7 +465,7 @@ public final class Dfc {
 
     private static boolean simpleFill(Class<?> c) {
         try {
-            Method m = c.getMethod("fillArray", double[].class, DensityFunction.ContextProvider.class);
+            Method m = dev.lull.Names.publicMethod(c, "fillArray", double[].class, DensityFunction.ContextProvider.class);
             return m.getDeclaringClass() == DensityFunction.SimpleFunction.class;
         } catch (NoSuchMethodException e) {
             return false;
@@ -822,7 +822,7 @@ public final class Dfc {
                 if (st.acc != null) {
                     Method m;
                     try {
-                        m = e.cls.getMethod(st.acc);
+                        m = dev.lull.Names.publicMethod(e.cls, st.acc);
                     } catch (NoSuchMethodException x) {
                         throw new IllegalStateException(x);
                     }

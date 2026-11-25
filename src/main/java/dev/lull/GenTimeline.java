@@ -36,7 +36,7 @@ final class GenTimeline {
         TreeMap<String, Integer> counts = new TreeMap<>();
         try {
             if (visible == null) {
-                visible = ChunkMap.class.getDeclaredMethod("getVisibleChunkIfPresent", long.class);
+                visible = dev.lull.Names.methodOf(ChunkMap.class, "getVisibleChunkIfPresent", long.class);
                 visible.setAccessible(true);
             }
             ChunkMap map = level.getChunkSource().chunkMap;

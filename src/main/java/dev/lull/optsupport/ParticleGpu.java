@@ -120,7 +120,7 @@ public final class ParticleGpu {
 
     private static boolean declares(Class<?> c, String name) {
         for (Class<?> k = c; k != null && k != SingleQuadParticle.class; k = k.getSuperclass())
-            for (java.lang.reflect.Method m : k.getDeclaredMethods()) if (m.getName().equals(name)) return false;   // overridden below SingleQuadParticle
+            for (java.lang.reflect.Method m : k.getDeclaredMethods()) if (dev.lull.Names.officialMember(m.getName()).equals(name)) return false;   // overridden below SingleQuadParticle
         return true;
     }
 

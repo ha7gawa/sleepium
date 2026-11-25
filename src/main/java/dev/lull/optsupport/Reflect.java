@@ -19,7 +19,7 @@ public final class Reflect {
         Field f = FIELDS.get(cls).computeIfAbsent(name, n -> {
             for (Class<?> c = cls; c != null; c = c.getSuperclass()) {
                 try {
-                    Field x = c.getDeclaredField(n);
+                    Field x = dev.lull.Names.fieldOf(c, n);
                     x.setAccessible(true);
                     return x;
                 } catch (NoSuchFieldException ignored) {

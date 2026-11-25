@@ -73,7 +73,7 @@ public final class MoveMemo {
             List<Field> fl = new ArrayList<>();
             for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass())
                 for (Field x : k.getDeclaredFields()) {
-                    if (x.getName().equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
+                    if (dev.lull.Names.officialMember(x.getName()).equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
                     if (Modifier.isStatic(x.getModifiers())) continue;
                     try {
                         x.setAccessible(true);
@@ -88,7 +88,7 @@ public final class MoveMemo {
             rw.addAll(WRITE_SETS.getOrDefault(c, Set.of()));
             fl.removeIf(x -> !rw.contains(x.getName()));
             // synched data: by its modification counter (MoveMemoDataMixin), not a deep fingerprint of every item
-            fl.removeIf(x -> x.getName().equals("entityData") && x.getDeclaringClass() == Entity.class);
+            fl.removeIf(x -> dev.lull.Names.officialMember(x.getName()).equals("entityData") && x.getDeclaringClass() == Entity.class);
             f = fl.toArray(new Field[0]);
             skip = new boolean[f.length];
             for (int i = 0; i < f.length; i++) {
@@ -386,13 +386,13 @@ public final class MoveMemo {
             }
             try {
                 for (Method m : c.getDeclaredMethods()) {   // protected entityInside overrides are not in getMethods
-                    if (m.getName().equals("entityInside") || m.getName().equals("stepOn") || m.getName().equals("fallOn")
-                            || m.getName().equals("updateEntityAfterFallOn")) return false;
+                    if (dev.lull.Names.officialMember(m.getName()).equals("entityInside") || dev.lull.Names.officialMember(m.getName()).equals("stepOn") || dev.lull.Names.officialMember(m.getName()).equals("fallOn")
+                            || dev.lull.Names.officialMember(m.getName()).equals("updateEntityAfterFallOn")) return false;
                 }
                 for (Class<?> s = c.getSuperclass(); s != null && s != Block.class && s != BlockBehaviour.class; s = s.getSuperclass())
                     for (Method m : s.getDeclaredMethods())
-                        if (m.getName().equals("entityInside") || m.getName().equals("stepOn") || m.getName().equals("fallOn")
-                                || m.getName().equals("updateEntityAfterFallOn")) return false;
+                        if (dev.lull.Names.officialMember(m.getName()).equals("entityInside") || dev.lull.Names.officialMember(m.getName()).equals("stepOn") || dev.lull.Names.officialMember(m.getName()).equals("fallOn")
+                                || dev.lull.Names.officialMember(m.getName()).equals("updateEntityAfterFallOn")) return false;
             } catch (RuntimeException e) {
                 return false;
             }

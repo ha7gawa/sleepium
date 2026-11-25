@@ -35,7 +35,7 @@ public abstract class UnloadRecheckMixin {
         throw new AssertionError();
     }
 
-    @Redirect(method = "lambda$scheduleUnload$12", at = @At(value = "INVOKE",
+    @Redirect(method = {"lambda$scheduleUnload$12", "method_60440"}, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/level/ChunkMap;scheduleUnload(JLnet/minecraft/server/level/ChunkHolder;)V"))
     private void sleep$later(ChunkMap self, long chunkPos, ChunkHolder holder) {
         sleep$recheck.put(chunkPos, holder);   // main thread (the unload queue runs there)

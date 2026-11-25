@@ -47,7 +47,7 @@ final class MobSleep {
         Field r = null;
         for (Class<?> k = c; k != null && k != Object.class && r == null; k = k.getSuperclass())
             try {
-                Field f = k.getDeclaredField(name);
+                Field f = dev.lull.Names.fieldOf(k, name);
                 if (!Modifier.isStatic(f.getModifiers())) {
                     f.setAccessible(true);
                     r = f;
@@ -186,7 +186,7 @@ final class MobSleep {
         List<Field> out = new ArrayList<>();
         for (Class<?> k = c; k != null && k != Object.class; k = k.getSuperclass())
             for (Field f : k.getDeclaredFields()) {
-                if (f.getName().equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
+                if (dev.lull.Names.officialMember(f.getName()).equals("sleep$w")) continue;   // the write barrier's watcher (WriteBarrier), not state
                 if (Modifier.isStatic(f.getModifiers())) continue;
                 f.setAccessible(true);
                 out.add(f);
@@ -546,7 +546,7 @@ final class MobSleep {
             Method m = null;
             for (Class<?> c = holder.getClass(); c != null && c != Object.class && m == null; c = c.getSuperclass())
                 for (Method x : c.getDeclaredMethods())
-                    if (x.getName().equals(mn) && x.getReturnType() == boolean.class
+                    if (dev.lull.Names.officialMember(x.getName()).equals(mn) && x.getReturnType() == boolean.class
                             && (hash < 0 ? x.getParameterCount() == 0 : x.getParameterCount() == 1 && x.getParameterTypes()[0] == int.class)) {
                         x.setAccessible(true);
                         m = x;
@@ -621,7 +621,7 @@ final class MobSleep {
         if (m == null && !METHODS.containsKey(ck)) {
             for (Class<?> c = holder.getClass(); c != null && c != Object.class && m == null; c = c.getSuperclass())
                 for (Method x : c.getDeclaredMethods())
-                    if (x.getName().equals(mn) && x.getReturnType() == boolean.class
+                    if (dev.lull.Names.officialMember(x.getName()).equals(mn) && x.getReturnType() == boolean.class
                             && (hash < 0 ? x.getParameterCount() == 0 : x.getParameterCount() == 1 && x.getParameterTypes()[0] == int.class)) {
                         x.setAccessible(true);
                         m = x;

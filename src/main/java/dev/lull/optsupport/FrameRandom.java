@@ -38,10 +38,10 @@ public final class FrameRandom implements RandomSource {
         if (level == null || level == lastLevel) return;
         lastLevel = level;
         try {
-            java.lang.reflect.Field uf = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            java.lang.reflect.Field uf = dev.lull.Names.fieldOf(sun.misc.Unsafe.class, "theUnsafe");
             uf.setAccessible(true);
             sun.misc.Unsafe u = (sun.misc.Unsafe) uf.get(null);
-            if (offset < 0) offset = u.objectFieldOffset(net.minecraft.world.level.Level.class.getDeclaredField("random"));
+            if (offset < 0) offset = u.objectFieldOffset(dev.lull.Names.fieldOf(net.minecraft.world.level.Level.class, "random"));
             Object cur = u.getObject(level, offset);
             if (!(cur instanceof FrameRandom)) u.putObject(level, offset, new FrameRandom((RandomSource) cur));
         } catch (Throwable t) {

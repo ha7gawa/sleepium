@@ -30,7 +30,7 @@ public final class WB {
         for (int k = 0; k < o.length; k++) {
             try {
                 Class<?> c = Class.forName(WriteBarrier.ROOTS[k].replace('/', '.'), false, WB.class.getClassLoader());
-                o[k] = U.objectFieldOffset(c.getDeclaredField(WriteBarrier.FIELD));
+                o[k] = U.objectFieldOffset(dev.lull.Names.fieldOf(c, WriteBarrier.FIELD));
             } catch (ReflectiveOperationException e) {
                 throw new IllegalStateException("[sleep/wb] no watch word in " + WriteBarrier.ROOTS[k], e);
             }
@@ -278,7 +278,7 @@ public final class WB {
         sample(m.getBrain());
         try {
             if (bodyRot == null) {
-                bodyRot = Mob.class.getDeclaredField("bodyRotationControl");
+                bodyRot = dev.lull.Names.fieldOf(Mob.class, "bodyRotationControl");
                 bodyRot.setAccessible(true);
             }
             sample(bodyRot.get(m));

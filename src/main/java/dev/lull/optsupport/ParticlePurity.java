@@ -180,7 +180,7 @@ public final class ParticlePurity {
     private static boolean finalField(ClassLoader loader, String owner, String name) {
         try {
             for (Class<?> k = Class.forName(owner.replace('/', '.'), false, loader); k != null; k = k.getSuperclass())
-                for (Field f : k.getDeclaredFields()) if (f.getName().equals(name)) return Modifier.isFinal(f.getModifiers());
+                for (Field f : k.getDeclaredFields()) if (dev.lull.Names.officialMember(f.getName()).equals(name)) return Modifier.isFinal(f.getModifiers());
         } catch (Throwable ignored) {
         }
         return false;

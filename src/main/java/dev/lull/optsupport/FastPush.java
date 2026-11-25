@@ -30,9 +30,9 @@ public final class FastPush {
         protected Boolean computeValue(Class<?> c) {
             try {
                 // (LivingEntity's push(Entity) only skips a sleeping one: push() below does the same)
-                Class<?> d = c.getMethod("push", Entity.class).getDeclaringClass();
+                Class<?> d = dev.lull.Names.publicMethod(c, "push", Entity.class).getDeclaringClass();
                 return (d == Entity.class || d == net.minecraft.world.entity.LivingEntity.class)
-                        && c.getMethod("push", double.class, double.class, double.class).getDeclaringClass() == Entity.class;
+                        && dev.lull.Names.publicMethod(c, "push", double.class, double.class, double.class).getDeclaringClass() == Entity.class;
             } catch (NoSuchMethodException e) {
                 return false;
             }

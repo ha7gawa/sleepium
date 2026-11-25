@@ -22,15 +22,15 @@ public final class VertexTags {
         MethodHandle ge = null, gb = null, gi = null, se = null, sb = null, si = null;
         try {
             Class<?> c = Class.forName("net.irisshaders.iris.uniforms.CapturedRenderingState");
-            Object inst = c.getField("INSTANCE").get(null);
+            Object inst = dev.lull.Names.publicField(c, "INSTANCE").get(null);
             MethodHandles.Lookup l = MethodHandles.publicLookup();
             MethodType get = MethodType.methodType(int.class), set = MethodType.methodType(void.class, int.class);
-            ge = l.findVirtual(c, "getCurrentRenderedEntity", get).bindTo(inst);
-            gb = l.findVirtual(c, "getCurrentRenderedBlockEntity", get).bindTo(inst);
-            gi = l.findVirtual(c, "getCurrentRenderedItem", get).bindTo(inst);
-            se = l.findVirtual(c, "setCurrentEntity", set).bindTo(inst);
-            sb = l.findVirtual(c, "setCurrentBlockEntity", set).bindTo(inst);
-            si = l.findVirtual(c, "setCurrentRenderedItem", set).bindTo(inst);
+            ge = l.findVirtual(c, dev.lull.Names.methodName(c, "getCurrentRenderedEntity", null), get).bindTo(inst);
+            gb = l.findVirtual(c, dev.lull.Names.methodName(c, "getCurrentRenderedBlockEntity", null), get).bindTo(inst);
+            gi = l.findVirtual(c, dev.lull.Names.methodName(c, "getCurrentRenderedItem", null), get).bindTo(inst);
+            se = l.findVirtual(c, dev.lull.Names.methodName(c, "setCurrentEntity", null), set).bindTo(inst);
+            sb = l.findVirtual(c, dev.lull.Names.methodName(c, "setCurrentBlockEntity", null), set).bindTo(inst);
+            si = l.findVirtual(c, dev.lull.Names.methodName(c, "setCurrentRenderedItem", null), set).bindTo(inst);
         } catch (Throwable t) {
             ge = null;
         }

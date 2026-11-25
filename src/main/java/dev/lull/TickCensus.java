@@ -251,7 +251,7 @@ public final class TickCensus {
         if (cur == null || Thread.currentThread() != thread) return;
         try {
             if (fromState == null) {
-                var m = net.minecraft.world.level.pathfinder.WalkNodeEvaluator.class.getDeclaredMethod("getPathTypeFromState", net.minecraft.world.level.BlockGetter.class, net.minecraft.core.BlockPos.class);
+                var m = dev.lull.Names.methodOf(net.minecraft.world.level.pathfinder.WalkNodeEvaluator.class, "getPathTypeFromState", net.minecraft.world.level.BlockGetter.class, net.minecraft.core.BlockPos.class);
                 m.setAccessible(true);
                 fromState = java.lang.invoke.MethodHandles.lookup().unreflect(m);
             }
@@ -376,7 +376,7 @@ public final class TickCensus {
             w(m.getNavigation().getPath(), o);
             try {
                 if (bodyRot == null) {
-                    bodyRot = Mob.class.getDeclaredField("bodyRotationControl");
+                    bodyRot = dev.lull.Names.fieldOf(Mob.class, "bodyRotationControl");
                     bodyRot.setAccessible(true);
                 }
                 w(bodyRot.get(m), o);
@@ -398,8 +398,8 @@ public final class TickCensus {
 
     static void wrapRandom(Level level) {
         try {
-            Field fr = Level.class.getDeclaredField("random");
-            Field uf = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            Field fr = dev.lull.Names.fieldOf(Level.class, "random");
+            Field uf = dev.lull.Names.fieldOf(sun.misc.Unsafe.class, "theUnsafe");
             uf.setAccessible(true);
             sun.misc.Unsafe u = (sun.misc.Unsafe) uf.get(null);
             long off = u.objectFieldOffset(fr);

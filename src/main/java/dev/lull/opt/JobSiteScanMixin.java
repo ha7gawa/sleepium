@@ -22,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(PoiCompetitorScan.class)
 public abstract class JobSiteScanMixin {
-    @Redirect(method = "lambda$create$4", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/ai/village/poi/PoiManager;getType(Lnet/minecraft/core/BlockPos;)Ljava/util/Optional;"))
+    @Redirect(method = {"lambda$create$4", "method_47010"}, at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/ai/village/poi/PoiManager;getType(Lnet/minecraft/core/BlockPos;)Ljava/util/Optional;"))
     private static Optional<Holder<PoiType>> sleep$type(PoiManager poi, BlockPos pos) {
         return JobSiteIndex.alone(pos) ? Optional.empty() : poi.getType(pos);
     }

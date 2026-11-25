@@ -16,7 +16,7 @@ public final class EntityCollide {
         @Override
         protected Boolean computeValue(Class<?> c) {
             try {
-                return c.getMethod("canBeCollidedWith").getDeclaringClass() != Entity.class;
+                return dev.lull.Names.publicMethod(c, "canBeCollidedWith").getDeclaringClass() != Entity.class;
             } catch (Throwable t) {
                 return true;
             }
@@ -27,7 +27,7 @@ public final class EntityCollide {
         @Override
         protected Boolean computeValue(Class<?> c) {
             try {
-                return c.getMethod("canCollideWith", Entity.class).getDeclaringClass() == Entity.class;
+                return dev.lull.Names.publicMethod(c, "canCollideWith", Entity.class).getDeclaringClass() == Entity.class;
             } catch (Throwable t) {
                 return false;
             }

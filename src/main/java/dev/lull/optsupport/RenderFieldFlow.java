@@ -108,6 +108,8 @@ public final class RenderFieldFlow {
 
     /** D, W or null for an injection into target.method (official names; ALL: any method) */
     static String side(String target, String method) {
+        target = dev.lull.Names.official(target);   // (Fabric production: the index holds intermediary names)
+        method = dev.lull.Names.officialMember(method);
         boolean all = method.startsWith("*");   // MixinTouch: "*" any method, "*@member" a wildcard at a member
         if (target.equals(DISPATCHER)) {
             if (all || method.equals("render")) return "D";
@@ -144,7 +146,7 @@ public final class RenderFieldFlow {
         try {
             mc = processorConfig("sleepium-flow.mixins.json");
             if (mc != null) {
-                mixinsFor = mc.getClass().getMethod("getMixinsFor", String.class);
+                mixinsFor = dev.lull.Names.publicMethod(mc.getClass(), "getMixinsFor", String.class);
                 mixinsFor.setAccessible(true);
                 List<?> l = (List<?>) mixinsFor.invoke(mc, "dev.lull.optsupport.FlowCarrierTarget");
                 if (!l.isEmpty()) carrier = l.get(0);
@@ -156,7 +158,7 @@ public final class RenderFieldFlow {
         if (carrier == null) {
             String keys = "?";
             try {
-                java.lang.reflect.Field f = mc == null ? null : mc.getClass().getDeclaredField("mixinMapping");
+                java.lang.reflect.Field f = mc == null ? null : dev.lull.Names.fieldOf(mc.getClass(), "mixinMapping");
                 if (f != null) {
                     f.setAccessible(true);
                     keys = String.valueOf(((Map<?, ?>) f.get(mc)).keySet());
@@ -208,11 +210,11 @@ public final class RenderFieldFlow {
      */
     private static Object processorConfig(String name) throws ReflectiveOperationException {
         Object t = org.spongepowered.asm.mixin.MixinEnvironment.getCurrentEnvironment().getActiveTransformer();
-        java.lang.reflect.Field pf = t.getClass().getDeclaredField("processor");
+        java.lang.reflect.Field pf = dev.lull.Names.fieldOf(t.getClass(), "processor");
         pf.setAccessible(true);
         Object proc = pf.get(t);
         for (String list : new String[] {"pendingConfigs", "configs"}) {
-            java.lang.reflect.Field lf = proc.getClass().getDeclaredField(list);
+            java.lang.reflect.Field lf = dev.lull.Names.fieldOf(proc.getClass(), list);
             lf.setAccessible(true);
             for (Object c : (List<?>) lf.get(proc))
                 if (c instanceof org.spongepowered.asm.mixin.extensibility.IMixinConfig mc && mc.getName().equals(name)) return c;
@@ -292,7 +294,7 @@ public final class RenderFieldFlow {
             for (org.spongepowered.asm.mixin.transformer.Config c : org.spongepowered.asm.mixin.Mixins.getConfigs()) {
                 Object mc = c.getConfig();
                 if (mc == null) continue;
-                java.lang.reflect.Field f = mc.getClass().getDeclaredField("mixinMapping");
+                java.lang.reflect.Field f = dev.lull.Names.fieldOf(mc.getClass(), "mixinMapping");
                 f.setAccessible(true);
                 if (!(f.get(mc) instanceof Map<?, ?> mapping) || mapping.isEmpty()) continue;
                 Set<String> names = new HashSet<>();
@@ -317,6 +319,7 @@ public final class RenderFieldFlow {
 
     /** objects one entity's draw owns (its entity, its renderer set's models / parts / renderers / layers, its pose stack) */
     static boolean perObject(String vanillaClass) {
+        vanillaClass = dev.lull.Names.official(vanillaClass);
         return vanillaClass.startsWith("net/minecraft/client/model/")
                 || vanillaClass.startsWith("net/minecraft/client/renderer/entity/") && !vanillaClass.equals(DISPATCHER)
                         && !vanillaClass.equals("net/minecraft/client/renderer/entity/ItemRenderer")
