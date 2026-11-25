@@ -4,6 +4,18 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.12 - 2026-11-25
+
+- **Put the HUD anywhere.** Options -> Sleepium -> HUD -> "Place the boxes: Move..." opens a screen over the game
+  where you drag each HUD box with the mouse. The arrow keys move the chosen box one pixel (Shift: ten), the mouse
+  wheel changes the size, and "Back to corners" puts everything back. Positions are kept relative to the screen, so a
+  box stays where you put it at any window size.
+- **A box of its own.** Besides the four corners, a widget can now be set to "Own box" and placed on its own, for
+  example the clock at the bottom while the frame numbers stay at the top.
+- **Any size.** The HUD size is now any percent from 25 % to 400 % in 1 % steps (a slider; the arrow keys step one
+  percent) instead of six fixed sizes.
+- Requested by a player on the mod page. The default layout is unchanged; old HUD settings files keep working.
+
 ## 1.4.11 - 2026-11-25
 
 - **New terrain reaches you faster while you fly or run.** When a freshly generated chunk starts ticking, the server

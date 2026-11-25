@@ -77,6 +77,11 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.4.12: the HUD where you want it
+
+Drag the HUD's boxes anywhere on the screen (Options -> Sleepium -> HUD -> Move...), give a widget a box of its own,
+and set the size to any percent from 25 % to 400 %.
+
 ## New in 1.4.11: new terrain faster while you fly
 
 New chunks are finished on the server's main thread before they start ticking, and in oceans and underground lakes
