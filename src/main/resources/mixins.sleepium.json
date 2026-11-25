@@ -1,0 +1,23 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.lull.sleepium.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "refmap": "mixins.sleepium.refmap.json",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": [
+    "BenchCelestialMixin"
+  ],
+  "client": [
+    "RenderItemModelMixin",
+    "ItemColorsAccessor",
+    "BlockModelListMixin",
+    "DebugSkipRenderMixin",
+    "DebugSkipTileMixin",
+    "BenchFlickerMixin",
+    "BenchFogMixin"
+  ],
+  "server": []
+}
