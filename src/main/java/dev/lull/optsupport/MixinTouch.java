@@ -41,6 +41,7 @@ public final class MixinTouch {
      */
     private static boolean ours(String config) {
         if (config.startsWith("sleepium-foreign-test")) return !Boolean.getBoolean("sleep.foreignTest");
+        if (config.startsWith("sleepium-modlike-test")) return !Boolean.getBoolean("sleep.test.modlike");   // (testmods.modlike: mods' mixins with unsafe state)
         return config.startsWith("sleepium") || config.startsWith("probe");
     }
 
