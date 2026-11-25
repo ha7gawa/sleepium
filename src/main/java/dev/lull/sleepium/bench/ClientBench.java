@@ -159,7 +159,7 @@ public final class ClientBench {
                             LABEL, fps, n == 0 ? 0 : f[n / 2] / 1e6, n == 0 ? 0 : f[(int) (n * 0.99)] / 1e6, n, mc.world.loadedEntityList.size(), at));
                     FrameParts.counting = false;
                     if (FrameParts.ON) Sleepium.LOGGER.info("[sleepbench] " + FrameParts.report(n));
-                    Sleepium.LOGGER.info("[sleepbench] " + dev.lull.sleepium.render.ItemModelCache.report() + "; " + dev.lull.sleepium.render.BlockModelListCache.report());
+                    Sleepium.LOGGER.info("[sleepbench] " + dev.lull.sleepium.render.ItemModelCache.report() + "; " + dev.lull.sleepium.render.BlockModelListCache.report() + "; " + dev.lull.sleepium.render.PartBatch.report() + "; " + dev.lull.sleepium.render.EntityCache.report());
                     // the frame for an exactness comparison (screenshots/bench-<label>.png; clouds off in the bench's options)
                     net.minecraft.util.ScreenShotHelper.saveScreenshot(mc.gameDir, "bench-" + LABEL + ".png", mc.displayWidth, mc.displayHeight, mc.getFramebuffer());
                     mc.shutdown();

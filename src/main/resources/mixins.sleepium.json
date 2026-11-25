@@ -28,7 +28,17 @@
     "ModelListFuseMixin",
     "ModelBoxAccessor",
     "TexturedQuadAccessor",
-    "GlErrorCheckMixin"
+    "GlErrorCheckMixin",
+    "PartBatchGlMixin",
+    "PartBatchLightmapMixin",
+    "PartBatchModelMixin",
+    "PartBatchScopeMixin",
+    "PartBatchTileScopeMixin",
+    "EntityCacheGlMixin",
+    "EntityCacheDrawMixin",
+    "EntityCachePassMixin",
+    "PartBatchForgeMatrixMixin",
+    "GlRealStateMixin"
   ],
   "server": []
 }

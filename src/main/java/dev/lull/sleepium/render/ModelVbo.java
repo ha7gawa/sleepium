@@ -110,6 +110,12 @@ public final class ModelVbo {
 
     public void draw() {
         if (vertices == 0) return;   // (vanilla's draw of an empty buffer issues nothing)
+        PartBatch.stateChange();   // batched model parts go first
+        if (EntityCache.capturing() && bytes != null) {   // a recording takes the vertices as they are drawn
+            ByteBuffer d = bytes.duplicate();
+            d.position(0);
+            EntityCache.buffer(d, format, mode, vertices);
+        }
         int stride = format.getSize();
         List<VertexFormatElement> els = format.getElements();
         if (vbo != null) vbo.bindBuffer();
