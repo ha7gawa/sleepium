@@ -1,6 +1,7 @@
 {
   "homepage": "https://modrinth.com/mod/sleepium",
   "1.21.1": {
+    "1.4.11": "New terrain faster while flying or running: still water and static blocks skip their post-processing (exact); 140 -> 206 chunks/s to a flying player (1.20.1).",
     "1.4.10": "Maximum speed: mods' mixin code inside vanilla mobs and blocks stays off the worker threads.",
     "1.4.9": "Safer Maximum speed / parallel ticks next to mods that change the same code: every guard of the parallel batches checked, the missing one named in the log.",
     "1.4.8": "Fix: world generation with C2ME no longer slower than C2ME alone (113 -> 149 chunks/s); Sleepium alone generates 307 chunks/s against C2ME's 168.",
@@ -44,12 +45,13 @@
     "1.0.0": "The first public release."
   },
   "promos": {
-    "1.21.1-latest": "1.4.10",
-    "1.21.1-recommended": "1.4.10",
-    "1.20.1-latest": "1.4.10",
-    "1.20.1-recommended": "1.4.10"
+    "1.21.1-latest": "1.4.11",
+    "1.21.1-recommended": "1.4.11",
+    "1.20.1-latest": "1.4.11",
+    "1.20.1-recommended": "1.4.11"
   },
   "1.20.1": {
+    "1.4.11": "New terrain faster while flying or running: still water and static blocks skip their post-processing (exact); 140 -> 206 chunks/s to a flying player (1.20.1).",
     "1.4.10": "Maximum speed: mods' mixin code inside vanilla mobs and blocks stays off the worker threads.",
     "1.4.9": "Safer Maximum speed / parallel ticks next to mods that change the same code: every guard of the parallel batches checked, the missing one named in the log.",
     "1.4.8": "Fix: world generation with C2ME no longer slower than C2ME alone (113 -> 149 chunks/s); Sleepium alone generates 307 chunks/s against C2ME's 168.",

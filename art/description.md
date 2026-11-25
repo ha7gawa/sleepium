@@ -77,6 +77,13 @@ Client, entity / block-entity scene (armour stands, item frames, chests, signs, 
 - Intel N100: **36-42 → 134-135 fps**
 - Ryzen 7 5800X + RTX 4070 SUPER: **69 → 2 152 fps**
 
+## New in 1.4.11: new terrain faster while you fly
+
+New chunks are finished on the server's main thread before they start ticking, and in oceans and underground lakes
+that meant a fluid tick for every water block - water that never flows anywhere. Sleepium now skips those ticks and
+the shape updates that cannot change anything, exactly as vanilla would end up. A player flying over new terrain gets
+206 chunks/s instead of 140 (1.20.1) and 237 instead of 203 (1.21.1, view distance 16).
+
 ## New in 1.4.5: a fix for flicker with some mods, raiders in parallel
 
 **Fixed:** flicker, stray stretched textures, dark frames and rare crashes with mods that draw in an entity's render

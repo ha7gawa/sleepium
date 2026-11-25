@@ -4,6 +4,21 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.11 - 2026-11-25
+
+- **New terrain reaches you faster while you fly or run.** When a freshly generated chunk starts ticking, the server
+  finishes it on its main thread: every block the generation marked gets its shape updated, and every marked water
+  block gets a fluid tick. Oceans and underground lakes mark every water block - millions per minute of flying - and
+  water in the middle of an ocean never flows anywhere. Sleepium now skips the ticks of water surrounded by water and
+  the shape updates of blocks whose shape never depends on their neighbours; every other block runs as in vanilla.
+  A player flying over new terrain (a test bot, 120 blocks/s, 1.20.1 server) now gets 206 chunks/s instead of 140;
+  on 1.21.1 (view distance 16, 90 blocks/s) 237 instead of 203.
+- Exact: every skipped tick or update is one that changes nothing in vanilla. Checked by running all 26 million
+  skipped cases anyway: no block written, no shape changed. If another mod changes the fluid or shape code, Sleepium
+  leaves it alone.
+- Found through a player's report: Sleepium together with FastChunkGen felt much faster in normal play than either
+  alone. Pre-generation with Chunky showed no difference; a flying player did.
+
 ## 1.4.10 - 2026-11-25
 
 - **Maximum speed keeps mods' code off the worker threads also when it sits inside vanilla mobs and blocks.** Mods often
