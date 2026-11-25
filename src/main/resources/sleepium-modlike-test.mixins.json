@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "testmods.modlike",
+  "plugin": "testmods.modlike.ModLikePlugin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ModLikeSheepMixin",
+    "ModLikeCropMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
