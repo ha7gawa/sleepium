@@ -87,3 +87,4 @@
 -Dlab.opt.NoiseLazyInterpMixin=true
 -Dlab.opt.DfcNoiseChunkMixin=true
 -Dlab.dfc.batch=true
+-Dlab.opt.UnloadRecheckMixin=true
