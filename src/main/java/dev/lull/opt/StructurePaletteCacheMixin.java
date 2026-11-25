@@ -18,7 +18,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * demand (blocks(Block) -> computeIfAbsent). Vanilla fills it from one worldgen thread; with STRUCTURE_STARTS of
  * different chunks running at once, two jigsaw structures sharing a template filled it together - a
  * ConcurrentModificationException out of HashMap.computeIfAbsent ("Exception generating new chunk"). A concurrent map:
- * the mapping (a filter of the palette's own list) never touches the map, so the cached lists are the same.
+ * the mapping (a filter of the palette's own list) never touches the map, so the cached lists are the same. NeoForge
+ * 1.21.1 builds this map with Maps.newConcurrentMap itself (its MC-271899 fix); Forge 1.20.1 has the same mixin.
  */
 @Mixin(StructureTemplate.Palette.class)
 public abstract class StructurePaletteCacheMixin {
