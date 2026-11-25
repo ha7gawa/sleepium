@@ -4,7 +4,9 @@
   "package": "dev.lull.opt",
   "plugin": "dev.lull.opt.OptMixinPlugin",
   "compatibilityLevel": "JAVA_21",
-  "overwrites": { "conformVisibility": true },
+  "overwrites": {
+    "conformVisibility": true
+  },
   "mixins": [
     "InWallMaskMixin",
     "TrackDeliverListenerMixin",
@@ -307,7 +309,9 @@
     "BeCensusMiscMixin",
     "BeCensusTicksMixin",
     "BeCensusRandomMixin",
-    "BeCensusEntityMixin"
+    "BeCensusEntityMixin",
+    "PostProcessStaticMixin",
+    "PostProcessVerifyMixin"
   ],
   "client": [
     "ClientTickProfileMixin",
