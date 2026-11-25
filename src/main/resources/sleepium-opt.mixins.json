@@ -4,7 +4,9 @@
   "package": "dev.lull.opt",
   "plugin": "dev.lull.opt.OptMixinPlugin",
   "compatibilityLevel": "JAVA_17",
-  "overwrites": { "conformVisibility": true },
+  "overwrites": {
+    "conformVisibility": true
+  },
   "refmap": "sleepium.refmap.json",
   "mixins": [
     "InWallMaskMixin",
@@ -219,6 +221,8 @@
     "LightSnapshotBlockMixin",
     "LightSnapshotSkyMixin",
     "TicketWindowMixin",
+    "PostProcessStaticMixin",
+    "PostProcessVerifyMixin",
     "ChunkIoWorkerMixin",
     "ChunkIoPendingMixin",
     "ChunkIoRegionMixin",
