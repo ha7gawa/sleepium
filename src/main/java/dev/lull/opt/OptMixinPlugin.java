@@ -231,6 +231,7 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         // only replaces BlockableEventLoop's park, so the flush before the wait stays this mixin's)
         if (simple.equals("StructurePlaceLockMixin") || simple.equals("StructurePaletteCacheMixin"))   // parallel generation's guards
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.ParallelWorldgenMixin");
+        if (simple.equals("PostProcessVerifyMixin")) on = Boolean.getBoolean("lab.postprocess.verify");   // measurement only
         if (simple.equals("LightRecipeVerifyMixin")) on = Boolean.getBoolean("lab.lightrecipe.verify");   // measurement only
         if (simple.startsWith("LightScout")) on = Boolean.getBoolean("lab.lightscout");   // measurement only
         if (simple.startsWith("GenScout")) on = Boolean.getBoolean("lab.genscout");   // measurement only
