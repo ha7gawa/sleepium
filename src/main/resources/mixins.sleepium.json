@@ -9,7 +9,10 @@
   },
   "mixins": [
     "BenchCelestialMixin",
-    "WorldServerTickIndexMixin"
+    "WorldServerTickIndexMixin",
+    "IntCacheThreadMixin",
+    "TerrainPrefetchMixin",
+    "TerrainCarverBiomeMixin"
   ],
   "client": [
     "RenderItemModelMixin",
