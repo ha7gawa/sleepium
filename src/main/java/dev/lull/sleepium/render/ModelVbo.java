@@ -17,20 +17,24 @@ import org.lwjgl.opengl.GL11;
  * way vanilla's draw does it - the attribute pointers set exactly as Forge's preDraw / postDraw set them for a
  * Tessellator draw (types, strides, offsets), one glDrawArrays.
  *
- * <p>Default: from client memory (a direct buffer kept) - vanilla's own path, the frame identical to vanilla's to the
- * pixel (client bench screenshots, NVIDIA, 11-25): 78 -> 116 fps. Saved: the per-frame rebuild of the vertices and, for
- * block models, one draw per quad.
+ * <p>Default (hybrid): positions, colours and texture coordinates from a GL buffer object, the normals from client
+ * memory - the frame identical to vanilla's to the pixel, 78 -> 191 fps (client bench, NVIDIA, 11-25). The normals are
+ * what differs between the two sources: the driver widens client-memory byte normals its own way, the GPU fetches a
+ * buffer's as c/127 (float normals widened as c/127 reproduce the buffer path exactly; (2c+1)/255 does not reproduce the
+ * client path), so lit items and item frames came out 1 LSB apart on ~5000 pixels with everything in a buffer. Leaving
+ * only the normals (3 bytes a vertex) for the driver to copy keeps vanilla's values.
  *
- * <p>-Dsleep.render.modelGpuBuffers=true: the bytes in a GL buffer object - 210 fps, but NOT exact: lit items and item
- * frames come out 1 LSB apart on ~5000 pixels (the GPU fetches a buffer's byte normals as c/127, matched to the pixel
- * by float normals widened that way; the driver's client-memory path gives other values, and widening by (2c+1)/255
- * does not reproduce them either). -Dsleep.render.normalRule=old|new (measuring) widens the normals to floats.
+ * <p>-Dsleep.render.modelClientMemory=true: everything from client memory (78 -> 110-116 fps, exact).
+ * -Dsleep.render.modelGpuBuffers=true: everything from the buffer (210 fps, NOT exact).
+ * -Dsleep.render.normalRule=old|new (measuring): float normals widened by that rule, in the buffer.
  */
 public final class ModelVbo {
     private static final BufferBuilder BUILD = new BufferBuilder(1 << 16);
     static final boolean GPU = Boolean.getBoolean("sleep.render.modelGpuBuffers");
     /** (measuring) GPU buffers with the byte normals widened to floats by a rule: "old" (2c+1)/255, "new" max(c/127, -1) */
     static final String NORMAL_RULE = System.getProperty("sleep.render.normalRule", "");
+    /** the default: a GL buffer for every attribute but the normals, which stay in client memory as vanilla sends them */
+    static final boolean HYBRID = !GPU && !Boolean.getBoolean("sleep.render.modelClientMemory");
     private static VertexFormat floatNormals;
 
     /** the format with its byte normal as 3 floats and without the normal's pad byte */
@@ -48,8 +52,8 @@ public final class ModelVbo {
     private static float widen(byte c) {
         return NORMAL_RULE.equals("old") ? (2 * c + 1) / 255f : Math.max(c / 127f, -1f);
     }
-    private final ByteBuffer bytes;      // client memory (default, exact)
-    private final VertexBuffer vbo;      // a GL buffer (-Dsleep.render.modelGpuBuffers, not exact)
+    private final ByteBuffer bytes;      // client memory (the normals by default; everything with modelClientMemory)
+    private final VertexBuffer vbo;      // a GL buffer (the other attributes by default; everything with modelGpuBuffers)
     private final VertexFormat format;
     private final int mode, vertices;
 
@@ -84,10 +88,16 @@ public final class ModelVbo {
             VertexBuffer v = new VertexBuffer(nf);
             v.bufferData(w);
             m = new ModelVbo(null, v, nf, mode, n);
-        } else if (GPU) {
+        } else if (GPU || HYBRID) {
+            ByteBuffer copy = null;
+            if (HYBRID) {   // the client copy for the normals (the whole vertex, as vanilla's pointer reads it)
+                copy = GLAllocation.createDirectByteBuffer(src.remaining());
+                copy.put(src.duplicate());
+                copy.flip();
+            }
             VertexBuffer v = new VertexBuffer(format);
             v.bufferData(src);
-            m = new ModelVbo(null, v, format, mode, n);
+            m = new ModelVbo(copy, v, format, mode, n);
         } else {
             ByteBuffer copy = GLAllocation.createDirectByteBuffer(src.remaining());
             copy.put(src);
@@ -108,25 +118,30 @@ public final class ModelVbo {
             int off = format.getOffset(j);
             int type = e.getType().getGlConstant(), count = e.getElementCount();
             if (bytes != null) bytes.position(off);
+            boolean client = bytes != null && (vbo == null || e.getUsage() == VertexFormatElement.EnumUsage.NORMAL);
+            if (vbo != null && bytes != null) {   // hybrid: bind or unbind the buffer for this attribute's pointer
+                if (client) vbo.unbindBuffer();
+                else vbo.bindBuffer();
+            }
             switch (e.getUsage()) {
                 case POSITION -> {
-                    if (bytes != null) GlStateManager.glVertexPointer(count, type, stride, bytes);
+                    if (client) GlStateManager.glVertexPointer(count, type, stride, bytes);
                     else GL11.glVertexPointer(count, type, stride, off);
                     GlStateManager.glEnableClientState(GL11.GL_VERTEX_ARRAY);
                 }
                 case NORMAL -> {
-                    if (bytes != null) GlStateManager.glNormalPointer(type, stride, bytes);
+                    if (client) GlStateManager.glNormalPointer(type, stride, bytes);
                     else GL11.glNormalPointer(type, stride, off);
                     GlStateManager.glEnableClientState(GL11.GL_NORMAL_ARRAY);
                 }
                 case COLOR -> {
-                    if (bytes != null) GlStateManager.glColorPointer(count, type, stride, bytes);
+                    if (client) GlStateManager.glColorPointer(count, type, stride, bytes);
                     else GL11.glColorPointer(count, type, stride, off);
                     GlStateManager.glEnableClientState(GL11.GL_COLOR_ARRAY);
                 }
                 case UV -> {
                     OpenGlHelper.setClientActiveTexture(OpenGlHelper.defaultTexUnit + e.getIndex());
-                    if (bytes != null) GlStateManager.glTexCoordPointer(count, type, stride, bytes);
+                    if (client) GlStateManager.glTexCoordPointer(count, type, stride, bytes);
                     else GL11.glTexCoordPointer(count, type, stride, off);
                     GlStateManager.glEnableClientState(GL11.GL_TEXTURE_COORD_ARRAY);
                     OpenGlHelper.setClientActiveTexture(OpenGlHelper.defaultTexUnit);
