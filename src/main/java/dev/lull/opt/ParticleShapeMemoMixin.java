@@ -15,12 +15,12 @@ public abstract class ParticleShapeMemoMixin {
         dev.lull.optsupport.ParticleStats.start();
     }
 
-    @Inject(method = "render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;Ljava/util/function/Predicate;)V", at = @At("HEAD"))
+    @Inject(method = "render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;F)V", at = @At("HEAD"))
     private void sleep$renderStart(CallbackInfo ci) {
         dev.lull.optsupport.ParticleStats.renderStart();
     }
 
-    @Inject(method = "render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;Ljava/util/function/Predicate;)V", at = @At("RETURN"))
+    @Inject(method = "render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;F)V", at = @At("RETURN"))
     private void sleep$renderEnd(CallbackInfo ci) {
         dev.lull.optsupport.ParticleStats.renderEnd();
     }

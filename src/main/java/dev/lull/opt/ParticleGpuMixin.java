@@ -19,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /** exp/particle-gpu (client): ParticleEngine.render's lists of plain particles drawn from records (ParticleGpu). */
 @Mixin(ParticleEngine.class)
 public abstract class ParticleGpuMixin {
-    private static final String RENDER = "render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;FLnet/minecraft/client/renderer/culling/Frustum;Ljava/util/function/Predicate;)V";
+    private static final String RENDER = "render(Lnet/minecraft/client/renderer/LightTexture;Lnet/minecraft/client/Camera;F)V";
 
     @Inject(method = RENDER, at = @At("HEAD"))
     private void sleep$lightOpen(CallbackInfo ci) {
