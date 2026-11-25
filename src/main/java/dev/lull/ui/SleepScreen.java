@@ -488,16 +488,9 @@ public final class SleepScreen extends Screen {
             rate.setMessage(Component.literal(Hud.refreshMs + " ms"));
             return null;
         }, Component.translatable("sleepium.ui.hud.rate.tip"), rate));
-        Button size = Button.builder(Component.empty(), x -> {
-            int i = 0;
-            while (i < Hud.SCALES.length && Hud.SCALES[i] != Hud.scale) i++;
-            Hud.scale = Hud.SCALES[(i + 1) % Hud.SCALES.length];
-            Hud.save();
-        }).size(110, 20).build();
-        list.add(new Row(() -> Component.translatable("sleepium.ui.hud.scale"), () -> {
-            size.setMessage(Component.literal(Math.round(Hud.scale * 100) + " %"));
-            return null;
-        }, Component.translatable("sleepium.ui.hud.scale.tip"), size));
+        list.add(new Row(() -> Component.translatable("sleepium.ui.hud.scale"), null, Component.translatable("sleepium.ui.hud.scale.tip"), new HudScaleSlider(110)));
+        Button move = Button.builder(Component.translatable("sleepium.ui.hud.move.button"), x -> minecraft.setScreen(new HudLayoutScreen(this))).size(110, 20).build();
+        list.add(new Row(() -> Component.translatable("sleepium.ui.hud.move"), null, Component.translatable("sleepium.ui.hud.move.tip"), move));
         for (String w : Hud.WIDGETS) {
             Button b = Button.builder(Component.empty(), x -> {
                 int i = java.util.Arrays.asList(Hud.CORNERS).indexOf(Hud.corner(w));
