@@ -9,6 +9,7 @@ version = mod_version
 group = mod_group_id
 base { archivesName = mod_id }
 tasks.named('jar', Jar).configure { archiveVersion = "${mod_version}+mc${minecraft_version}-fabric" }
+tasks.named('remapJar').configure { archiveVersion = "${mod_version}+mc${minecraft_version}-fabric" }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
