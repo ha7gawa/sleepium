@@ -497,13 +497,7 @@
     "LightScoutAoMixin",
     "LightScoutFlatMixin",
     "LightScoutFluidMixin",
-    "LightRecipeVerifyMixin",
-    "ShaderLightCompileMixin",
-    "ShaderLightMeshMixin",
-    "ShaderLightChunkCacheMixin",
-    "ShaderLightFrameMixin",
-    "ShaderLightFluidMixin",
-    "ShaderLightTranslucentMixin"
+    "LightRecipeVerifyMixin"
   ],
   "injectors": {
     "defaultRequire": 0

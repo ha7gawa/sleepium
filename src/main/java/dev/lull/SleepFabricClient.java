@@ -5,5 +5,6 @@ public final class SleepFabricClient implements net.fabricmc.api.ClientModInitia
     @Override
     public void onInitializeClient() {
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.START.register(ctx -> dev.lull.optsupport.RenderCache.frame());
+        FabricBench.register();
     }
 }
