@@ -142,6 +142,7 @@ public final class ClientBench {
             case 3 -> {
                 if (now - mark > SETTLE * 1_000_000_000L) {
                     state = 4;
+                    FrameParts.counting = true;
                     last = 0;
                     n = 0;
                     t0 = now;
@@ -156,6 +157,8 @@ public final class ClientBench {
                     boolean at = Math.abs(mc.player.posX - TP[0]) < 1 && Math.abs(mc.player.posY - TP[1]) < 1 && Math.abs(mc.player.posZ - TP[2]) < 1;
                     Sleepium.LOGGER.info(String.format(Locale.ROOT, "[sleepbench] %s: %.0f fps, frame p50 %.2f / p99 %.2f ms, %d frames, entities %d, at the view %s",
                             LABEL, fps, n == 0 ? 0 : f[n / 2] / 1e6, n == 0 ? 0 : f[(int) (n * 0.99)] / 1e6, n, mc.world.loadedEntityList.size(), at));
+                    FrameParts.counting = false;
+                    if (FrameParts.ON) Sleepium.LOGGER.info("[sleepbench] " + FrameParts.report(n));
                     Sleepium.LOGGER.info("[sleepbench] " + dev.lull.sleepium.render.ItemModelCache.report() + "; " + dev.lull.sleepium.render.BlockModelListCache.report());
                     // the frame for an exactness comparison (screenshots/bench-<label>.png; clouds off in the bench's options)
                     net.minecraft.util.ScreenShotHelper.saveScreenshot(mc.gameDir, "bench-" + LABEL + ".png", mc.displayWidth, mc.displayHeight, mc.getFramebuffer());

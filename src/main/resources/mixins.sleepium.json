@@ -8,7 +8,8 @@
     "defaultRequire": 1
   },
   "mixins": [
-    "BenchCelestialMixin"
+    "BenchCelestialMixin",
+    "WorldServerTickIndexMixin"
   ],
   "client": [
     "RenderItemModelMixin",
@@ -17,7 +18,10 @@
     "DebugSkipRenderMixin",
     "DebugSkipTileMixin",
     "BenchFlickerMixin",
-    "BenchFogMixin"
+    "BenchFogMixin",
+    "BenchTimingMixin",
+    "BenchEntityTimingMixin",
+    "BenchTileTimingMixin"
   ],
   "server": []
 }

@@ -55,7 +55,7 @@ public final class GenBench extends CommandBase {
         }
         double s = (System.nanoTime() - t0) / 1e9;
         String line = String.format(java.util.Locale.ROOT, "[sleepbench] gen %d chunks in %.1f s = %.1f chunks/s", n, s, n / s);
-        Sleepium.LOGGER.info(line);
+        Sleepium.LOGGER.info(line + "; " + dev.lull.sleepium.server.TickIndex.report());
         if (sender != null) sender.sendMessage(new TextComponentString(line));
         p.queueUnloadAll();
     }
