@@ -370,8 +370,32 @@ public final class SpecTicks {
                 && !(e instanceof net.minecraft.world.entity.boss.wither.WitherBoss) && !(e instanceof net.minecraft.world.entity.monster.Shulker);
     }
 
+    /**
+     * A vanilla mob class another mod's mixin changes (that class or its own vanilla ancestors below the shared bases):
+     * its tick runs that mod's code, not made for several threads - mods' code then, kept out of the runs like a mod's
+     * own mob (testmods.modlike: a mixin into Sheep.aiStep with a plain HashMap lost updates on the workers). The shared
+     * bases (Entity, LivingEntity, Mob, PathfinderMob, AgeableMob, Animal, Monster) are left out: nearly every
+     * optimisation mod changes them, and counting them would keep every mob serial.
+     */
+    static final ClassValue<Boolean> MOD_TOUCHED = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> c) {
+            for (Class<?> x = c; x != null && !SHARED_BASES.contains(x.getName()); x = x.getSuperclass()) {
+                if (!x.getName().startsWith("net.minecraft.")) continue;
+                if (MixinTouch.anyForeign(x.getName().replace('.', '/'))) {
+                    System.out.println("[sleep/spec] " + c.getSimpleName() + " stays serial: another mod's mixin changes " + x.getSimpleName());
+                    return true;
+                }
+            }
+            return false;
+        }
+    };
+    static final java.util.Set<String> SHARED_BASES = java.util.Set.of("java.lang.Object", "net.minecraft.world.entity.Entity",
+            "net.minecraft.world.entity.LivingEntity", "net.minecraft.world.entity.Mob", "net.minecraft.world.entity.PathfinderMob",
+            "net.minecraft.world.entity.AgeableMob", "net.minecraft.world.entity.animal.Animal", "net.minecraft.world.entity.monster.Monster");
+
     static boolean eligible(Entity e) {
-        return kindOk(e) && !e.isRemoved() && !e.isPassenger() && !e.isVehicle() && (e.getClass().getName().startsWith("net.minecraft.") || FAST_MOD_MOBS)
+        return kindOk(e) && !e.isRemoved() && !e.isPassenger() && !e.isVehicle() && (e.getClass().getName().startsWith("net.minecraft.") && !MOD_TOUCHED.get(e.getClass()) || FAST_MOD_MOBS)
                 && (!EXACT || dev.lull.optsupport.sleep.EntitySleep.plainNext(e) && noBrain(e)) && (!FAST || fastOk(e)) && (TYPES == null || TYPES.contains(e.getType().toShortString()));
     }
 
@@ -1383,10 +1407,26 @@ public final class SpecTicks {
 
     /** ServerParallelItemsRandomTickMixin: a mod's block's random tick during the pass, kept whole for its end (true) */
     public static boolean keepModRandomTick(Class<?> code, Runnable tick) {
-        if (!running || current() < 0 || VANILLA_CODE.get(code)) return false;
+        if (!running || current() < 0 || VANILLA_CODE.get(code) && !RANDOM_TICK_TOUCHED.get(code)) return false;
         ctModTicks++;
         return deferWorld(tick);
     }
+
+    /**
+     * a vanilla block / fluid class whose random tick another mod's mixin changes (its own randomTick or an ancestor's, up
+     * to BlockBehaviour / Fluid, or BlockStateBase's / FluidState's call): kept whole for the pass's end like a mod's block
+     * (testmods.modlike: a mixin into CropBlock.randomTick with a plain HashMap lost updates and threw on the workers)
+     */
+    private static final ClassValue<Boolean> RANDOM_TICK_TOUCHED = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> c) {
+            if (MixinTouch.touched("net/minecraft/world/level/block/state/BlockBehaviour$BlockStateBase", "randomTick")
+                    || MixinTouch.touched("net/minecraft/world/level/material/FluidState", "randomTick")) return true;
+            for (Class<?> x = c; x != null && x != Object.class; x = x.getSuperclass())
+                if (MixinTouch.touched(x.getName().replace('.', '/'), "randomTick")) return true;
+            return false;
+        }
+    };
 
     private static final ClassValue<Boolean> VANILLA_CODE = new ClassValue<>() {
         @Override
