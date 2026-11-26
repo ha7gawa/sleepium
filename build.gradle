@@ -383,6 +383,13 @@ tasks.register('prioritizeCoremods') {
                 it.renameTo(new File(it.parentFile, "!${it.name}"))
             }
         }
+        // -Pobf_extra_mods=a.jar,b.jar: other mods next to ours in the obfuscated runs (compatibility tests, e.g. OptiFine)
+        if (project.hasProperty('obf_extra_mods')) {
+            project.property('obf_extra_mods').toString().split(',').each { p ->
+                def f = new File(p.trim())
+                if (f.isFile()) java.nio.file.Files.copy(f.toPath(), new File(project.file('run/obfuscated/mods'), f.name).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
     }
 }
 

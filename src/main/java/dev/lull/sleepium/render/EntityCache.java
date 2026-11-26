@@ -121,7 +121,7 @@ public final class EntityCache {
             if (!allowed) unsupported("a renderer inside not the game's");
             return false;
         }
-        if (!allowed || !StateHash.available() || !SleepGlState.init()) return false;
+        if (!allowed || !StateHash.available() || !SleepGlState.init() || shadersActive()) return false;
         long tick = tick();
         Rec r = RECS.get(key);
         if (r == null) RECS.put(key, r = new Rec());
@@ -159,6 +159,27 @@ public final class EntityCache {
     }
 
     private static int[] cStart;
+
+    /** OptiFine with a shader pack: entities drawn by its GL programs (attributes, passes of its own) - left to it */
+    private static java.lang.reflect.Field ofShaders;
+    private static boolean ofLooked;
+
+    private static boolean shadersActive() {
+        if (!ofLooked) {
+            ofLooked = true;
+            try {
+                ofShaders = Class.forName("net.optifine.shaders.Shaders", false, EntityCache.class.getClassLoader()).getField("shaderPackLoaded");
+            } catch (ReflectiveOperationException | LinkageError e) {
+                ofShaders = null;   // no OptiFine
+            }
+        }
+        if (ofShaders == null) return false;
+        try {
+            return ofShaders.getBoolean(null);
+        } catch (IllegalAccessException e) {
+            return true;
+        }
+    }
 
     private static void startCapture() {
         cStart = SleepGlState.normalized(SleepGlState.snapshot());
