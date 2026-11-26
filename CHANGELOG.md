@@ -4,6 +4,16 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.13 - 2026-11-26
+
+- **Fixed: a dedicated server could freeze for good while new chunks were loading** ([#15](https://github.com/ha7gawa/sleepium/issues/15)).
+  Sleepium holds back the last step of new chunks so they do not all land in one tick. When a mod read a chunk a bit
+  farther away while a new chunk was being finished (Sable's physics does, during a fluid tick there), the server
+  waited for that chunk while Sleepium kept its step held back - the watchdog then stopped the server. While the server
+  waits for a chunk, those steps now run at once. Reproduced with a test mod doing what Sable does: before, the server
+  hung while preparing the spawn area; now it starts in 15-20 s. Both versions.
+- Workaround for 1.4.12 and older: `lab.opt.GenGraph=false` in `config/sleepium.properties`.
+
 ## 1.4.12 - 2026-11-25
 
 - **Put the HUD anywhere.** Options -> Sleepium -> HUD -> "Place the boxes: Move..." opens a screen over the game
