@@ -6,6 +6,6 @@
   "target": "@env(DEFAULT)",
   "compatibilityLevel": "JAVA_8",
   "mixins": ["WorldServerTickIndexMixin"],
-  "client": ["MinecraftStartMixin"],
+  "client": ["MinecraftStartMixin", "TessellatorCaptureMixin", "RenderManagerCacheMixin", "TileRendererCacheMixin", "RenderGlobalPassMixin", "OpenGlHelperTrackMixin"],
   "server": []
 }

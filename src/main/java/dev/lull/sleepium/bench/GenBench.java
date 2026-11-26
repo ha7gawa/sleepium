@@ -32,6 +32,20 @@ public final class GenBench extends CommandBase {
 
     @Override
     public void processCommand(ICommandSender sender, String[] args) {
+        // bench changes (1.7.10 has no /entitydata): the n frames nearest the sender get an item / turn a step
+        if (args.length == 3 && ("frameitem".equals(args[0]) || "framerot".equals(args[0]))) {
+            net.minecraft.entity.Entity at = (net.minecraft.entity.Entity) sender;
+            java.util.List<net.minecraft.entity.item.EntityItemFrame> frames = new java.util.ArrayList<>();
+            for (Object o : at.worldObj.loadedEntityList) if (o instanceof net.minecraft.entity.item.EntityItemFrame) frames.add((net.minecraft.entity.item.EntityItemFrame) o);
+            frames.sort(java.util.Comparator.comparingDouble(f -> f.getDistanceSqToEntity(at)));
+            int n = Math.min(frames.size(), parseInt(sender, args[2]));
+            for (int i = 0; i < n; i++) {
+                net.minecraft.entity.item.EntityItemFrame f = frames.get(i);
+                if ("frameitem".equals(args[0])) f.setDisplayedItem(new net.minecraft.item.ItemStack(net.minecraft.item.Item.getItemById(parseInt(sender, args[1]))));
+                else f.setItemRotation((f.getRotation() + parseInt(sender, args[1])) % 8);
+            }
+            return;
+        }
         if (args.length != 4 || !"gen".equals(args[0])) throw new WrongUsageException(getCommandUsage(sender));
         run(MinecraftServer.getServer(), parseInt(sender, args[1]), parseInt(sender, args[2]), parseIntBounded(sender, args[3], 1, 4096), sender);
     }
