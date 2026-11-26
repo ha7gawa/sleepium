@@ -5,7 +5,7 @@
   "refmap": "mixins.sleepium.refmap.json",
   "target": "@env(DEFAULT)",
   "compatibilityLevel": "JAVA_8",
-  "mixins": [],
+  "mixins": ["WorldServerTickIndexMixin"],
   "client": ["MinecraftStartMixin"],
   "server": []
 }
