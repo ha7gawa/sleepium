@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 /** Applies the mod-like test mixins only with -Dsleep.test.modlike=true. */
 public final class ModLikePlugin implements IMixinConfigPlugin {
     @Override public boolean shouldApplyMixin(String target, String mixin) {
+        if (mixin.endsWith("FarChunkPostProcessMixin")) return Boolean.getBoolean("sleep.test.farChunk");   // (issue #15)
         return Boolean.getBoolean("sleep.test.modlike");
     }
     @Override public void onLoad(String mixinPackage) {}
