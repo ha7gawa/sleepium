@@ -19,6 +19,7 @@ public class Sleepium {
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent e) {
         LOGGER.info("[sleep] Sleepium {} for 1.7.10 (lab)", Tags.VERSION);
+        if (e.getSide().isClient()) dev.lull.sleepium.bench.ClientBench.register();   // -Dsleep.bench
     }
 
     @Mod.EventHandler

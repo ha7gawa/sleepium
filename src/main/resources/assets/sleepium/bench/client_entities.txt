@@ -1,0 +1,3362 @@
+gamerule doDaylightCycle false
+time set 6000
+weather clear
+setblock 0 149 16 minecraft:stone
+setblock 0 149 17 minecraft:stone
+setblock 0 149 18 minecraft:stone
+setblock 0 149 19 minecraft:stone
+setblock 0 149 20 minecraft:stone
+setblock 0 149 21 minecraft:stone
+setblock 0 149 22 minecraft:stone
+setblock 0 149 23 minecraft:stone
+setblock 0 149 24 minecraft:stone
+setblock 0 149 25 minecraft:stone
+setblock 0 149 26 minecraft:stone
+setblock 0 149 27 minecraft:stone
+setblock 0 149 28 minecraft:stone
+setblock 0 149 29 minecraft:stone
+setblock 0 149 30 minecraft:stone
+setblock 0 149 31 minecraft:stone
+setblock 0 149 32 minecraft:stone
+setblock 0 149 33 minecraft:stone
+setblock 0 149 34 minecraft:stone
+setblock 0 149 35 minecraft:stone
+setblock 0 149 36 minecraft:stone
+setblock 0 149 37 minecraft:stone
+setblock 0 149 38 minecraft:stone
+setblock 0 149 39 minecraft:stone
+setblock 0 149 40 minecraft:stone
+setblock 0 149 41 minecraft:stone
+setblock 0 149 42 minecraft:stone
+setblock 0 149 43 minecraft:stone
+setblock 0 149 44 minecraft:stone
+setblock 0 149 45 minecraft:stone
+setblock 0 149 46 minecraft:stone
+setblock 0 149 47 minecraft:stone
+setblock 0 149 48 minecraft:stone
+setblock 0 149 49 minecraft:stone
+setblock 0 149 50 minecraft:stone
+setblock 0 149 51 minecraft:stone
+setblock 0 149 52 minecraft:stone
+setblock 0 149 53 minecraft:stone
+setblock 0 149 54 minecraft:stone
+setblock 0 149 55 minecraft:stone
+setblock 0 149 56 minecraft:stone
+setblock 0 149 57 minecraft:stone
+setblock 0 149 58 minecraft:stone
+setblock 0 149 59 minecraft:stone
+setblock 0 149 60 minecraft:stone
+setblock 0 149 61 minecraft:stone
+setblock 0 149 62 minecraft:stone
+setblock 0 149 63 minecraft:stone
+setblock 0 149 64 minecraft:stone
+setblock 1 149 16 minecraft:stone
+setblock 1 149 17 minecraft:stone
+setblock 1 149 18 minecraft:stone
+setblock 1 149 19 minecraft:stone
+setblock 1 149 20 minecraft:stone
+setblock 1 149 21 minecraft:stone
+setblock 1 149 22 minecraft:stone
+setblock 1 149 23 minecraft:stone
+setblock 1 149 24 minecraft:stone
+setblock 1 149 25 minecraft:stone
+setblock 1 149 26 minecraft:stone
+setblock 1 149 27 minecraft:stone
+setblock 1 149 28 minecraft:stone
+setblock 1 149 29 minecraft:stone
+setblock 1 149 30 minecraft:stone
+setblock 1 149 31 minecraft:stone
+setblock 1 149 32 minecraft:stone
+setblock 1 149 33 minecraft:stone
+setblock 1 149 34 minecraft:stone
+setblock 1 149 35 minecraft:stone
+setblock 1 149 36 minecraft:stone
+setblock 1 149 37 minecraft:stone
+setblock 1 149 38 minecraft:stone
+setblock 1 149 39 minecraft:stone
+setblock 1 149 40 minecraft:stone
+setblock 1 149 41 minecraft:stone
+setblock 1 149 42 minecraft:stone
+setblock 1 149 43 minecraft:stone
+setblock 1 149 44 minecraft:stone
+setblock 1 149 45 minecraft:stone
+setblock 1 149 46 minecraft:stone
+setblock 1 149 47 minecraft:stone
+setblock 1 149 48 minecraft:stone
+setblock 1 149 49 minecraft:stone
+setblock 1 149 50 minecraft:stone
+setblock 1 149 51 minecraft:stone
+setblock 1 149 52 minecraft:stone
+setblock 1 149 53 minecraft:stone
+setblock 1 149 54 minecraft:stone
+setblock 1 149 55 minecraft:stone
+setblock 1 149 56 minecraft:stone
+setblock 1 149 57 minecraft:stone
+setblock 1 149 58 minecraft:stone
+setblock 1 149 59 minecraft:stone
+setblock 1 149 60 minecraft:stone
+setblock 1 149 61 minecraft:stone
+setblock 1 149 62 minecraft:stone
+setblock 1 149 63 minecraft:stone
+setblock 1 149 64 minecraft:stone
+setblock 2 149 16 minecraft:stone
+setblock 2 149 17 minecraft:stone
+setblock 2 149 18 minecraft:stone
+setblock 2 149 19 minecraft:stone
+setblock 2 149 20 minecraft:stone
+setblock 2 149 21 minecraft:stone
+setblock 2 149 22 minecraft:stone
+setblock 2 149 23 minecraft:stone
+setblock 2 149 24 minecraft:stone
+setblock 2 149 25 minecraft:stone
+setblock 2 149 26 minecraft:stone
+setblock 2 149 27 minecraft:stone
+setblock 2 149 28 minecraft:stone
+setblock 2 149 29 minecraft:stone
+setblock 2 149 30 minecraft:stone
+setblock 2 149 31 minecraft:stone
+setblock 2 149 32 minecraft:stone
+setblock 2 149 33 minecraft:stone
+setblock 2 149 34 minecraft:stone
+setblock 2 149 35 minecraft:stone
+setblock 2 149 36 minecraft:stone
+setblock 2 149 37 minecraft:stone
+setblock 2 149 38 minecraft:stone
+setblock 2 149 39 minecraft:stone
+setblock 2 149 40 minecraft:stone
+setblock 2 149 41 minecraft:stone
+setblock 2 149 42 minecraft:stone
+setblock 2 149 43 minecraft:stone
+setblock 2 149 44 minecraft:stone
+setblock 2 149 45 minecraft:stone
+setblock 2 149 46 minecraft:stone
+setblock 2 149 47 minecraft:stone
+setblock 2 149 48 minecraft:stone
+setblock 2 149 49 minecraft:stone
+setblock 2 149 50 minecraft:stone
+setblock 2 149 51 minecraft:stone
+setblock 2 149 52 minecraft:stone
+setblock 2 149 53 minecraft:stone
+setblock 2 149 54 minecraft:stone
+setblock 2 149 55 minecraft:stone
+setblock 2 149 56 minecraft:stone
+setblock 2 149 57 minecraft:stone
+setblock 2 149 58 minecraft:stone
+setblock 2 149 59 minecraft:stone
+setblock 2 149 60 minecraft:stone
+setblock 2 149 61 minecraft:stone
+setblock 2 149 62 minecraft:stone
+setblock 2 149 63 minecraft:stone
+setblock 2 149 64 minecraft:stone
+setblock 3 149 16 minecraft:stone
+setblock 3 149 17 minecraft:stone
+setblock 3 149 18 minecraft:stone
+setblock 3 149 19 minecraft:stone
+setblock 3 149 20 minecraft:stone
+setblock 3 149 21 minecraft:stone
+setblock 3 149 22 minecraft:stone
+setblock 3 149 23 minecraft:stone
+setblock 3 149 24 minecraft:stone
+setblock 3 149 25 minecraft:stone
+setblock 3 149 26 minecraft:stone
+setblock 3 149 27 minecraft:stone
+setblock 3 149 28 minecraft:stone
+setblock 3 149 29 minecraft:stone
+setblock 3 149 30 minecraft:stone
+setblock 3 149 31 minecraft:stone
+setblock 3 149 32 minecraft:stone
+setblock 3 149 33 minecraft:stone
+setblock 3 149 34 minecraft:stone
+setblock 3 149 35 minecraft:stone
+setblock 3 149 36 minecraft:stone
+setblock 3 149 37 minecraft:stone
+setblock 3 149 38 minecraft:stone
+setblock 3 149 39 minecraft:stone
+setblock 3 149 40 minecraft:stone
+setblock 3 149 41 minecraft:stone
+setblock 3 149 42 minecraft:stone
+setblock 3 149 43 minecraft:stone
+setblock 3 149 44 minecraft:stone
+setblock 3 149 45 minecraft:stone
+setblock 3 149 46 minecraft:stone
+setblock 3 149 47 minecraft:stone
+setblock 3 149 48 minecraft:stone
+setblock 3 149 49 minecraft:stone
+setblock 3 149 50 minecraft:stone
+setblock 3 149 51 minecraft:stone
+setblock 3 149 52 minecraft:stone
+setblock 3 149 53 minecraft:stone
+setblock 3 149 54 minecraft:stone
+setblock 3 149 55 minecraft:stone
+setblock 3 149 56 minecraft:stone
+setblock 3 149 57 minecraft:stone
+setblock 3 149 58 minecraft:stone
+setblock 3 149 59 minecraft:stone
+setblock 3 149 60 minecraft:stone
+setblock 3 149 61 minecraft:stone
+setblock 3 149 62 minecraft:stone
+setblock 3 149 63 minecraft:stone
+setblock 3 149 64 minecraft:stone
+setblock 4 149 16 minecraft:stone
+setblock 4 149 17 minecraft:stone
+setblock 4 149 18 minecraft:stone
+setblock 4 149 19 minecraft:stone
+setblock 4 149 20 minecraft:stone
+setblock 4 149 21 minecraft:stone
+setblock 4 149 22 minecraft:stone
+setblock 4 149 23 minecraft:stone
+setblock 4 149 24 minecraft:stone
+setblock 4 149 25 minecraft:stone
+setblock 4 149 26 minecraft:stone
+setblock 4 149 27 minecraft:stone
+setblock 4 149 28 minecraft:stone
+setblock 4 149 29 minecraft:stone
+setblock 4 149 30 minecraft:stone
+setblock 4 149 31 minecraft:stone
+setblock 4 149 32 minecraft:stone
+setblock 4 149 33 minecraft:stone
+setblock 4 149 34 minecraft:stone
+setblock 4 149 35 minecraft:stone
+setblock 4 149 36 minecraft:stone
+setblock 4 149 37 minecraft:stone
+setblock 4 149 38 minecraft:stone
+setblock 4 149 39 minecraft:stone
+setblock 4 149 40 minecraft:stone
+setblock 4 149 41 minecraft:stone
+setblock 4 149 42 minecraft:stone
+setblock 4 149 43 minecraft:stone
+setblock 4 149 44 minecraft:stone
+setblock 4 149 45 minecraft:stone
+setblock 4 149 46 minecraft:stone
+setblock 4 149 47 minecraft:stone
+setblock 4 149 48 minecraft:stone
+setblock 4 149 49 minecraft:stone
+setblock 4 149 50 minecraft:stone
+setblock 4 149 51 minecraft:stone
+setblock 4 149 52 minecraft:stone
+setblock 4 149 53 minecraft:stone
+setblock 4 149 54 minecraft:stone
+setblock 4 149 55 minecraft:stone
+setblock 4 149 56 minecraft:stone
+setblock 4 149 57 minecraft:stone
+setblock 4 149 58 minecraft:stone
+setblock 4 149 59 minecraft:stone
+setblock 4 149 60 minecraft:stone
+setblock 4 149 61 minecraft:stone
+setblock 4 149 62 minecraft:stone
+setblock 4 149 63 minecraft:stone
+setblock 4 149 64 minecraft:stone
+setblock 5 149 16 minecraft:stone
+setblock 5 149 17 minecraft:stone
+setblock 5 149 18 minecraft:stone
+setblock 5 149 19 minecraft:stone
+setblock 5 149 20 minecraft:stone
+setblock 5 149 21 minecraft:stone
+setblock 5 149 22 minecraft:stone
+setblock 5 149 23 minecraft:stone
+setblock 5 149 24 minecraft:stone
+setblock 5 149 25 minecraft:stone
+setblock 5 149 26 minecraft:stone
+setblock 5 149 27 minecraft:stone
+setblock 5 149 28 minecraft:stone
+setblock 5 149 29 minecraft:stone
+setblock 5 149 30 minecraft:stone
+setblock 5 149 31 minecraft:stone
+setblock 5 149 32 minecraft:stone
+setblock 5 149 33 minecraft:stone
+setblock 5 149 34 minecraft:stone
+setblock 5 149 35 minecraft:stone
+setblock 5 149 36 minecraft:stone
+setblock 5 149 37 minecraft:stone
+setblock 5 149 38 minecraft:stone
+setblock 5 149 39 minecraft:stone
+setblock 5 149 40 minecraft:stone
+setblock 5 149 41 minecraft:stone
+setblock 5 149 42 minecraft:stone
+setblock 5 149 43 minecraft:stone
+setblock 5 149 44 minecraft:stone
+setblock 5 149 45 minecraft:stone
+setblock 5 149 46 minecraft:stone
+setblock 5 149 47 minecraft:stone
+setblock 5 149 48 minecraft:stone
+setblock 5 149 49 minecraft:stone
+setblock 5 149 50 minecraft:stone
+setblock 5 149 51 minecraft:stone
+setblock 5 149 52 minecraft:stone
+setblock 5 149 53 minecraft:stone
+setblock 5 149 54 minecraft:stone
+setblock 5 149 55 minecraft:stone
+setblock 5 149 56 minecraft:stone
+setblock 5 149 57 minecraft:stone
+setblock 5 149 58 minecraft:stone
+setblock 5 149 59 minecraft:stone
+setblock 5 149 60 minecraft:stone
+setblock 5 149 61 minecraft:stone
+setblock 5 149 62 minecraft:stone
+setblock 5 149 63 minecraft:stone
+setblock 5 149 64 minecraft:stone
+setblock 6 149 16 minecraft:stone
+setblock 6 149 17 minecraft:stone
+setblock 6 149 18 minecraft:stone
+setblock 6 149 19 minecraft:stone
+setblock 6 149 20 minecraft:stone
+setblock 6 149 21 minecraft:stone
+setblock 6 149 22 minecraft:stone
+setblock 6 149 23 minecraft:stone
+setblock 6 149 24 minecraft:stone
+setblock 6 149 25 minecraft:stone
+setblock 6 149 26 minecraft:stone
+setblock 6 149 27 minecraft:stone
+setblock 6 149 28 minecraft:stone
+setblock 6 149 29 minecraft:stone
+setblock 6 149 30 minecraft:stone
+setblock 6 149 31 minecraft:stone
+setblock 6 149 32 minecraft:stone
+setblock 6 149 33 minecraft:stone
+setblock 6 149 34 minecraft:stone
+setblock 6 149 35 minecraft:stone
+setblock 6 149 36 minecraft:stone
+setblock 6 149 37 minecraft:stone
+setblock 6 149 38 minecraft:stone
+setblock 6 149 39 minecraft:stone
+setblock 6 149 40 minecraft:stone
+setblock 6 149 41 minecraft:stone
+setblock 6 149 42 minecraft:stone
+setblock 6 149 43 minecraft:stone
+setblock 6 149 44 minecraft:stone
+setblock 6 149 45 minecraft:stone
+setblock 6 149 46 minecraft:stone
+setblock 6 149 47 minecraft:stone
+setblock 6 149 48 minecraft:stone
+setblock 6 149 49 minecraft:stone
+setblock 6 149 50 minecraft:stone
+setblock 6 149 51 minecraft:stone
+setblock 6 149 52 minecraft:stone
+setblock 6 149 53 minecraft:stone
+setblock 6 149 54 minecraft:stone
+setblock 6 149 55 minecraft:stone
+setblock 6 149 56 minecraft:stone
+setblock 6 149 57 minecraft:stone
+setblock 6 149 58 minecraft:stone
+setblock 6 149 59 minecraft:stone
+setblock 6 149 60 minecraft:stone
+setblock 6 149 61 minecraft:stone
+setblock 6 149 62 minecraft:stone
+setblock 6 149 63 minecraft:stone
+setblock 6 149 64 minecraft:stone
+setblock 7 149 16 minecraft:stone
+setblock 7 149 17 minecraft:stone
+setblock 7 149 18 minecraft:stone
+setblock 7 149 19 minecraft:stone
+setblock 7 149 20 minecraft:stone
+setblock 7 149 21 minecraft:stone
+setblock 7 149 22 minecraft:stone
+setblock 7 149 23 minecraft:stone
+setblock 7 149 24 minecraft:stone
+setblock 7 149 25 minecraft:stone
+setblock 7 149 26 minecraft:stone
+setblock 7 149 27 minecraft:stone
+setblock 7 149 28 minecraft:stone
+setblock 7 149 29 minecraft:stone
+setblock 7 149 30 minecraft:stone
+setblock 7 149 31 minecraft:stone
+setblock 7 149 32 minecraft:stone
+setblock 7 149 33 minecraft:stone
+setblock 7 149 34 minecraft:stone
+setblock 7 149 35 minecraft:stone
+setblock 7 149 36 minecraft:stone
+setblock 7 149 37 minecraft:stone
+setblock 7 149 38 minecraft:stone
+setblock 7 149 39 minecraft:stone
+setblock 7 149 40 minecraft:stone
+setblock 7 149 41 minecraft:stone
+setblock 7 149 42 minecraft:stone
+setblock 7 149 43 minecraft:stone
+setblock 7 149 44 minecraft:stone
+setblock 7 149 45 minecraft:stone
+setblock 7 149 46 minecraft:stone
+setblock 7 149 47 minecraft:stone
+setblock 7 149 48 minecraft:stone
+setblock 7 149 49 minecraft:stone
+setblock 7 149 50 minecraft:stone
+setblock 7 149 51 minecraft:stone
+setblock 7 149 52 minecraft:stone
+setblock 7 149 53 minecraft:stone
+setblock 7 149 54 minecraft:stone
+setblock 7 149 55 minecraft:stone
+setblock 7 149 56 minecraft:stone
+setblock 7 149 57 minecraft:stone
+setblock 7 149 58 minecraft:stone
+setblock 7 149 59 minecraft:stone
+setblock 7 149 60 minecraft:stone
+setblock 7 149 61 minecraft:stone
+setblock 7 149 62 minecraft:stone
+setblock 7 149 63 minecraft:stone
+setblock 7 149 64 minecraft:stone
+setblock 8 149 16 minecraft:stone
+setblock 8 149 17 minecraft:stone
+setblock 8 149 18 minecraft:stone
+setblock 8 149 19 minecraft:stone
+setblock 8 149 20 minecraft:stone
+setblock 8 149 21 minecraft:stone
+setblock 8 149 22 minecraft:stone
+setblock 8 149 23 minecraft:stone
+setblock 8 149 24 minecraft:stone
+setblock 8 149 25 minecraft:stone
+setblock 8 149 26 minecraft:stone
+setblock 8 149 27 minecraft:stone
+setblock 8 149 28 minecraft:stone
+setblock 8 149 29 minecraft:stone
+setblock 8 149 30 minecraft:stone
+setblock 8 149 31 minecraft:stone
+setblock 8 149 32 minecraft:stone
+setblock 8 149 33 minecraft:stone
+setblock 8 149 34 minecraft:stone
+setblock 8 149 35 minecraft:stone
+setblock 8 149 36 minecraft:stone
+setblock 8 149 37 minecraft:stone
+setblock 8 149 38 minecraft:stone
+setblock 8 149 39 minecraft:stone
+setblock 8 149 40 minecraft:stone
+setblock 8 149 41 minecraft:stone
+setblock 8 149 42 minecraft:stone
+setblock 8 149 43 minecraft:stone
+setblock 8 149 44 minecraft:stone
+setblock 8 149 45 minecraft:stone
+setblock 8 149 46 minecraft:stone
+setblock 8 149 47 minecraft:stone
+setblock 8 149 48 minecraft:stone
+setblock 8 149 49 minecraft:stone
+setblock 8 149 50 minecraft:stone
+setblock 8 149 51 minecraft:stone
+setblock 8 149 52 minecraft:stone
+setblock 8 149 53 minecraft:stone
+setblock 8 149 54 minecraft:stone
+setblock 8 149 55 minecraft:stone
+setblock 8 149 56 minecraft:stone
+setblock 8 149 57 minecraft:stone
+setblock 8 149 58 minecraft:stone
+setblock 8 149 59 minecraft:stone
+setblock 8 149 60 minecraft:stone
+setblock 8 149 61 minecraft:stone
+setblock 8 149 62 minecraft:stone
+setblock 8 149 63 minecraft:stone
+setblock 8 149 64 minecraft:stone
+setblock 9 149 16 minecraft:stone
+setblock 9 149 17 minecraft:stone
+setblock 9 149 18 minecraft:stone
+setblock 9 149 19 minecraft:stone
+setblock 9 149 20 minecraft:stone
+setblock 9 149 21 minecraft:stone
+setblock 9 149 22 minecraft:stone
+setblock 9 149 23 minecraft:stone
+setblock 9 149 24 minecraft:stone
+setblock 9 149 25 minecraft:stone
+setblock 9 149 26 minecraft:stone
+setblock 9 149 27 minecraft:stone
+setblock 9 149 28 minecraft:stone
+setblock 9 149 29 minecraft:stone
+setblock 9 149 30 minecraft:stone
+setblock 9 149 31 minecraft:stone
+setblock 9 149 32 minecraft:stone
+setblock 9 149 33 minecraft:stone
+setblock 9 149 34 minecraft:stone
+setblock 9 149 35 minecraft:stone
+setblock 9 149 36 minecraft:stone
+setblock 9 149 37 minecraft:stone
+setblock 9 149 38 minecraft:stone
+setblock 9 149 39 minecraft:stone
+setblock 9 149 40 minecraft:stone
+setblock 9 149 41 minecraft:stone
+setblock 9 149 42 minecraft:stone
+setblock 9 149 43 minecraft:stone
+setblock 9 149 44 minecraft:stone
+setblock 9 149 45 minecraft:stone
+setblock 9 149 46 minecraft:stone
+setblock 9 149 47 minecraft:stone
+setblock 9 149 48 minecraft:stone
+setblock 9 149 49 minecraft:stone
+setblock 9 149 50 minecraft:stone
+setblock 9 149 51 minecraft:stone
+setblock 9 149 52 minecraft:stone
+setblock 9 149 53 minecraft:stone
+setblock 9 149 54 minecraft:stone
+setblock 9 149 55 minecraft:stone
+setblock 9 149 56 minecraft:stone
+setblock 9 149 57 minecraft:stone
+setblock 9 149 58 minecraft:stone
+setblock 9 149 59 minecraft:stone
+setblock 9 149 60 minecraft:stone
+setblock 9 149 61 minecraft:stone
+setblock 9 149 62 minecraft:stone
+setblock 9 149 63 minecraft:stone
+setblock 9 149 64 minecraft:stone
+setblock 10 149 16 minecraft:stone
+setblock 10 149 17 minecraft:stone
+setblock 10 149 18 minecraft:stone
+setblock 10 149 19 minecraft:stone
+setblock 10 149 20 minecraft:stone
+setblock 10 149 21 minecraft:stone
+setblock 10 149 22 minecraft:stone
+setblock 10 149 23 minecraft:stone
+setblock 10 149 24 minecraft:stone
+setblock 10 149 25 minecraft:stone
+setblock 10 149 26 minecraft:stone
+setblock 10 149 27 minecraft:stone
+setblock 10 149 28 minecraft:stone
+setblock 10 149 29 minecraft:stone
+setblock 10 149 30 minecraft:stone
+setblock 10 149 31 minecraft:stone
+setblock 10 149 32 minecraft:stone
+setblock 10 149 33 minecraft:stone
+setblock 10 149 34 minecraft:stone
+setblock 10 149 35 minecraft:stone
+setblock 10 149 36 minecraft:stone
+setblock 10 149 37 minecraft:stone
+setblock 10 149 38 minecraft:stone
+setblock 10 149 39 minecraft:stone
+setblock 10 149 40 minecraft:stone
+setblock 10 149 41 minecraft:stone
+setblock 10 149 42 minecraft:stone
+setblock 10 149 43 minecraft:stone
+setblock 10 149 44 minecraft:stone
+setblock 10 149 45 minecraft:stone
+setblock 10 149 46 minecraft:stone
+setblock 10 149 47 minecraft:stone
+setblock 10 149 48 minecraft:stone
+setblock 10 149 49 minecraft:stone
+setblock 10 149 50 minecraft:stone
+setblock 10 149 51 minecraft:stone
+setblock 10 149 52 minecraft:stone
+setblock 10 149 53 minecraft:stone
+setblock 10 149 54 minecraft:stone
+setblock 10 149 55 minecraft:stone
+setblock 10 149 56 minecraft:stone
+setblock 10 149 57 minecraft:stone
+setblock 10 149 58 minecraft:stone
+setblock 10 149 59 minecraft:stone
+setblock 10 149 60 minecraft:stone
+setblock 10 149 61 minecraft:stone
+setblock 10 149 62 minecraft:stone
+setblock 10 149 63 minecraft:stone
+setblock 10 149 64 minecraft:stone
+setblock 11 149 16 minecraft:stone
+setblock 11 149 17 minecraft:stone
+setblock 11 149 18 minecraft:stone
+setblock 11 149 19 minecraft:stone
+setblock 11 149 20 minecraft:stone
+setblock 11 149 21 minecraft:stone
+setblock 11 149 22 minecraft:stone
+setblock 11 149 23 minecraft:stone
+setblock 11 149 24 minecraft:stone
+setblock 11 149 25 minecraft:stone
+setblock 11 149 26 minecraft:stone
+setblock 11 149 27 minecraft:stone
+setblock 11 149 28 minecraft:stone
+setblock 11 149 29 minecraft:stone
+setblock 11 149 30 minecraft:stone
+setblock 11 149 31 minecraft:stone
+setblock 11 149 32 minecraft:stone
+setblock 11 149 33 minecraft:stone
+setblock 11 149 34 minecraft:stone
+setblock 11 149 35 minecraft:stone
+setblock 11 149 36 minecraft:stone
+setblock 11 149 37 minecraft:stone
+setblock 11 149 38 minecraft:stone
+setblock 11 149 39 minecraft:stone
+setblock 11 149 40 minecraft:stone
+setblock 11 149 41 minecraft:stone
+setblock 11 149 42 minecraft:stone
+setblock 11 149 43 minecraft:stone
+setblock 11 149 44 minecraft:stone
+setblock 11 149 45 minecraft:stone
+setblock 11 149 46 minecraft:stone
+setblock 11 149 47 minecraft:stone
+setblock 11 149 48 minecraft:stone
+setblock 11 149 49 minecraft:stone
+setblock 11 149 50 minecraft:stone
+setblock 11 149 51 minecraft:stone
+setblock 11 149 52 minecraft:stone
+setblock 11 149 53 minecraft:stone
+setblock 11 149 54 minecraft:stone
+setblock 11 149 55 minecraft:stone
+setblock 11 149 56 minecraft:stone
+setblock 11 149 57 minecraft:stone
+setblock 11 149 58 minecraft:stone
+setblock 11 149 59 minecraft:stone
+setblock 11 149 60 minecraft:stone
+setblock 11 149 61 minecraft:stone
+setblock 11 149 62 minecraft:stone
+setblock 11 149 63 minecraft:stone
+setblock 11 149 64 minecraft:stone
+setblock 12 149 16 minecraft:stone
+setblock 12 149 17 minecraft:stone
+setblock 12 149 18 minecraft:stone
+setblock 12 149 19 minecraft:stone
+setblock 12 149 20 minecraft:stone
+setblock 12 149 21 minecraft:stone
+setblock 12 149 22 minecraft:stone
+setblock 12 149 23 minecraft:stone
+setblock 12 149 24 minecraft:stone
+setblock 12 149 25 minecraft:stone
+setblock 12 149 26 minecraft:stone
+setblock 12 149 27 minecraft:stone
+setblock 12 149 28 minecraft:stone
+setblock 12 149 29 minecraft:stone
+setblock 12 149 30 minecraft:stone
+setblock 12 149 31 minecraft:stone
+setblock 12 149 32 minecraft:stone
+setblock 12 149 33 minecraft:stone
+setblock 12 149 34 minecraft:stone
+setblock 12 149 35 minecraft:stone
+setblock 12 149 36 minecraft:stone
+setblock 12 149 37 minecraft:stone
+setblock 12 149 38 minecraft:stone
+setblock 12 149 39 minecraft:stone
+setblock 12 149 40 minecraft:stone
+setblock 12 149 41 minecraft:stone
+setblock 12 149 42 minecraft:stone
+setblock 12 149 43 minecraft:stone
+setblock 12 149 44 minecraft:stone
+setblock 12 149 45 minecraft:stone
+setblock 12 149 46 minecraft:stone
+setblock 12 149 47 minecraft:stone
+setblock 12 149 48 minecraft:stone
+setblock 12 149 49 minecraft:stone
+setblock 12 149 50 minecraft:stone
+setblock 12 149 51 minecraft:stone
+setblock 12 149 52 minecraft:stone
+setblock 12 149 53 minecraft:stone
+setblock 12 149 54 minecraft:stone
+setblock 12 149 55 minecraft:stone
+setblock 12 149 56 minecraft:stone
+setblock 12 149 57 minecraft:stone
+setblock 12 149 58 minecraft:stone
+setblock 12 149 59 minecraft:stone
+setblock 12 149 60 minecraft:stone
+setblock 12 149 61 minecraft:stone
+setblock 12 149 62 minecraft:stone
+setblock 12 149 63 minecraft:stone
+setblock 12 149 64 minecraft:stone
+setblock 13 149 16 minecraft:stone
+setblock 13 149 17 minecraft:stone
+setblock 13 149 18 minecraft:stone
+setblock 13 149 19 minecraft:stone
+setblock 13 149 20 minecraft:stone
+setblock 13 149 21 minecraft:stone
+setblock 13 149 22 minecraft:stone
+setblock 13 149 23 minecraft:stone
+setblock 13 149 24 minecraft:stone
+setblock 13 149 25 minecraft:stone
+setblock 13 149 26 minecraft:stone
+setblock 13 149 27 minecraft:stone
+setblock 13 149 28 minecraft:stone
+setblock 13 149 29 minecraft:stone
+setblock 13 149 30 minecraft:stone
+setblock 13 149 31 minecraft:stone
+setblock 13 149 32 minecraft:stone
+setblock 13 149 33 minecraft:stone
+setblock 13 149 34 minecraft:stone
+setblock 13 149 35 minecraft:stone
+setblock 13 149 36 minecraft:stone
+setblock 13 149 37 minecraft:stone
+setblock 13 149 38 minecraft:stone
+setblock 13 149 39 minecraft:stone
+setblock 13 149 40 minecraft:stone
+setblock 13 149 41 minecraft:stone
+setblock 13 149 42 minecraft:stone
+setblock 13 149 43 minecraft:stone
+setblock 13 149 44 minecraft:stone
+setblock 13 149 45 minecraft:stone
+setblock 13 149 46 minecraft:stone
+setblock 13 149 47 minecraft:stone
+setblock 13 149 48 minecraft:stone
+setblock 13 149 49 minecraft:stone
+setblock 13 149 50 minecraft:stone
+setblock 13 149 51 minecraft:stone
+setblock 13 149 52 minecraft:stone
+setblock 13 149 53 minecraft:stone
+setblock 13 149 54 minecraft:stone
+setblock 13 149 55 minecraft:stone
+setblock 13 149 56 minecraft:stone
+setblock 13 149 57 minecraft:stone
+setblock 13 149 58 minecraft:stone
+setblock 13 149 59 minecraft:stone
+setblock 13 149 60 minecraft:stone
+setblock 13 149 61 minecraft:stone
+setblock 13 149 62 minecraft:stone
+setblock 13 149 63 minecraft:stone
+setblock 13 149 64 minecraft:stone
+setblock 14 149 16 minecraft:stone
+setblock 14 149 17 minecraft:stone
+setblock 14 149 18 minecraft:stone
+setblock 14 149 19 minecraft:stone
+setblock 14 149 20 minecraft:stone
+setblock 14 149 21 minecraft:stone
+setblock 14 149 22 minecraft:stone
+setblock 14 149 23 minecraft:stone
+setblock 14 149 24 minecraft:stone
+setblock 14 149 25 minecraft:stone
+setblock 14 149 26 minecraft:stone
+setblock 14 149 27 minecraft:stone
+setblock 14 149 28 minecraft:stone
+setblock 14 149 29 minecraft:stone
+setblock 14 149 30 minecraft:stone
+setblock 14 149 31 minecraft:stone
+setblock 14 149 32 minecraft:stone
+setblock 14 149 33 minecraft:stone
+setblock 14 149 34 minecraft:stone
+setblock 14 149 35 minecraft:stone
+setblock 14 149 36 minecraft:stone
+setblock 14 149 37 minecraft:stone
+setblock 14 149 38 minecraft:stone
+setblock 14 149 39 minecraft:stone
+setblock 14 149 40 minecraft:stone
+setblock 14 149 41 minecraft:stone
+setblock 14 149 42 minecraft:stone
+setblock 14 149 43 minecraft:stone
+setblock 14 149 44 minecraft:stone
+setblock 14 149 45 minecraft:stone
+setblock 14 149 46 minecraft:stone
+setblock 14 149 47 minecraft:stone
+setblock 14 149 48 minecraft:stone
+setblock 14 149 49 minecraft:stone
+setblock 14 149 50 minecraft:stone
+setblock 14 149 51 minecraft:stone
+setblock 14 149 52 minecraft:stone
+setblock 14 149 53 minecraft:stone
+setblock 14 149 54 minecraft:stone
+setblock 14 149 55 minecraft:stone
+setblock 14 149 56 minecraft:stone
+setblock 14 149 57 minecraft:stone
+setblock 14 149 58 minecraft:stone
+setblock 14 149 59 minecraft:stone
+setblock 14 149 60 minecraft:stone
+setblock 14 149 61 minecraft:stone
+setblock 14 149 62 minecraft:stone
+setblock 14 149 63 minecraft:stone
+setblock 14 149 64 minecraft:stone
+setblock 15 149 16 minecraft:stone
+setblock 15 149 17 minecraft:stone
+setblock 15 149 18 minecraft:stone
+setblock 15 149 19 minecraft:stone
+setblock 15 149 20 minecraft:stone
+setblock 15 149 21 minecraft:stone
+setblock 15 149 22 minecraft:stone
+setblock 15 149 23 minecraft:stone
+setblock 15 149 24 minecraft:stone
+setblock 15 149 25 minecraft:stone
+setblock 15 149 26 minecraft:stone
+setblock 15 149 27 minecraft:stone
+setblock 15 149 28 minecraft:stone
+setblock 15 149 29 minecraft:stone
+setblock 15 149 30 minecraft:stone
+setblock 15 149 31 minecraft:stone
+setblock 15 149 32 minecraft:stone
+setblock 15 149 33 minecraft:stone
+setblock 15 149 34 minecraft:stone
+setblock 15 149 35 minecraft:stone
+setblock 15 149 36 minecraft:stone
+setblock 15 149 37 minecraft:stone
+setblock 15 149 38 minecraft:stone
+setblock 15 149 39 minecraft:stone
+setblock 15 149 40 minecraft:stone
+setblock 15 149 41 minecraft:stone
+setblock 15 149 42 minecraft:stone
+setblock 15 149 43 minecraft:stone
+setblock 15 149 44 minecraft:stone
+setblock 15 149 45 minecraft:stone
+setblock 15 149 46 minecraft:stone
+setblock 15 149 47 minecraft:stone
+setblock 15 149 48 minecraft:stone
+setblock 15 149 49 minecraft:stone
+setblock 15 149 50 minecraft:stone
+setblock 15 149 51 minecraft:stone
+setblock 15 149 52 minecraft:stone
+setblock 15 149 53 minecraft:stone
+setblock 15 149 54 minecraft:stone
+setblock 15 149 55 minecraft:stone
+setblock 15 149 56 minecraft:stone
+setblock 15 149 57 minecraft:stone
+setblock 15 149 58 minecraft:stone
+setblock 15 149 59 minecraft:stone
+setblock 15 149 60 minecraft:stone
+setblock 15 149 61 minecraft:stone
+setblock 15 149 62 minecraft:stone
+setblock 15 149 63 minecraft:stone
+setblock 15 149 64 minecraft:stone
+setblock 16 149 16 minecraft:stone
+setblock 16 149 17 minecraft:stone
+setblock 16 149 18 minecraft:stone
+setblock 16 149 19 minecraft:stone
+setblock 16 149 20 minecraft:stone
+setblock 16 149 21 minecraft:stone
+setblock 16 149 22 minecraft:stone
+setblock 16 149 23 minecraft:stone
+setblock 16 149 24 minecraft:stone
+setblock 16 149 25 minecraft:stone
+setblock 16 149 26 minecraft:stone
+setblock 16 149 27 minecraft:stone
+setblock 16 149 28 minecraft:stone
+setblock 16 149 29 minecraft:stone
+setblock 16 149 30 minecraft:stone
+setblock 16 149 31 minecraft:stone
+setblock 16 149 32 minecraft:stone
+setblock 16 149 33 minecraft:stone
+setblock 16 149 34 minecraft:stone
+setblock 16 149 35 minecraft:stone
+setblock 16 149 36 minecraft:stone
+setblock 16 149 37 minecraft:stone
+setblock 16 149 38 minecraft:stone
+setblock 16 149 39 minecraft:stone
+setblock 16 149 40 minecraft:stone
+setblock 16 149 41 minecraft:stone
+setblock 16 149 42 minecraft:stone
+setblock 16 149 43 minecraft:stone
+setblock 16 149 44 minecraft:stone
+setblock 16 149 45 minecraft:stone
+setblock 16 149 46 minecraft:stone
+setblock 16 149 47 minecraft:stone
+setblock 16 149 48 minecraft:stone
+setblock 16 149 49 minecraft:stone
+setblock 16 149 50 minecraft:stone
+setblock 16 149 51 minecraft:stone
+setblock 16 149 52 minecraft:stone
+setblock 16 149 53 minecraft:stone
+setblock 16 149 54 minecraft:stone
+setblock 16 149 55 minecraft:stone
+setblock 16 149 56 minecraft:stone
+setblock 16 149 57 minecraft:stone
+setblock 16 149 58 minecraft:stone
+setblock 16 149 59 minecraft:stone
+setblock 16 149 60 minecraft:stone
+setblock 16 149 61 minecraft:stone
+setblock 16 149 62 minecraft:stone
+setblock 16 149 63 minecraft:stone
+setblock 16 149 64 minecraft:stone
+setblock 17 149 16 minecraft:stone
+setblock 17 149 17 minecraft:stone
+setblock 17 149 18 minecraft:stone
+setblock 17 149 19 minecraft:stone
+setblock 17 149 20 minecraft:stone
+setblock 17 149 21 minecraft:stone
+setblock 17 149 22 minecraft:stone
+setblock 17 149 23 minecraft:stone
+setblock 17 149 24 minecraft:stone
+setblock 17 149 25 minecraft:stone
+setblock 17 149 26 minecraft:stone
+setblock 17 149 27 minecraft:stone
+setblock 17 149 28 minecraft:stone
+setblock 17 149 29 minecraft:stone
+setblock 17 149 30 minecraft:stone
+setblock 17 149 31 minecraft:stone
+setblock 17 149 32 minecraft:stone
+setblock 17 149 33 minecraft:stone
+setblock 17 149 34 minecraft:stone
+setblock 17 149 35 minecraft:stone
+setblock 17 149 36 minecraft:stone
+setblock 17 149 37 minecraft:stone
+setblock 17 149 38 minecraft:stone
+setblock 17 149 39 minecraft:stone
+setblock 17 149 40 minecraft:stone
+setblock 17 149 41 minecraft:stone
+setblock 17 149 42 minecraft:stone
+setblock 17 149 43 minecraft:stone
+setblock 17 149 44 minecraft:stone
+setblock 17 149 45 minecraft:stone
+setblock 17 149 46 minecraft:stone
+setblock 17 149 47 minecraft:stone
+setblock 17 149 48 minecraft:stone
+setblock 17 149 49 minecraft:stone
+setblock 17 149 50 minecraft:stone
+setblock 17 149 51 minecraft:stone
+setblock 17 149 52 minecraft:stone
+setblock 17 149 53 minecraft:stone
+setblock 17 149 54 minecraft:stone
+setblock 17 149 55 minecraft:stone
+setblock 17 149 56 minecraft:stone
+setblock 17 149 57 minecraft:stone
+setblock 17 149 58 minecraft:stone
+setblock 17 149 59 minecraft:stone
+setblock 17 149 60 minecraft:stone
+setblock 17 149 61 minecraft:stone
+setblock 17 149 62 minecraft:stone
+setblock 17 149 63 minecraft:stone
+setblock 17 149 64 minecraft:stone
+setblock 18 149 16 minecraft:stone
+setblock 18 149 17 minecraft:stone
+setblock 18 149 18 minecraft:stone
+setblock 18 149 19 minecraft:stone
+setblock 18 149 20 minecraft:stone
+setblock 18 149 21 minecraft:stone
+setblock 18 149 22 minecraft:stone
+setblock 18 149 23 minecraft:stone
+setblock 18 149 24 minecraft:stone
+setblock 18 149 25 minecraft:stone
+setblock 18 149 26 minecraft:stone
+setblock 18 149 27 minecraft:stone
+setblock 18 149 28 minecraft:stone
+setblock 18 149 29 minecraft:stone
+setblock 18 149 30 minecraft:stone
+setblock 18 149 31 minecraft:stone
+setblock 18 149 32 minecraft:stone
+setblock 18 149 33 minecraft:stone
+setblock 18 149 34 minecraft:stone
+setblock 18 149 35 minecraft:stone
+setblock 18 149 36 minecraft:stone
+setblock 18 149 37 minecraft:stone
+setblock 18 149 38 minecraft:stone
+setblock 18 149 39 minecraft:stone
+setblock 18 149 40 minecraft:stone
+setblock 18 149 41 minecraft:stone
+setblock 18 149 42 minecraft:stone
+setblock 18 149 43 minecraft:stone
+setblock 18 149 44 minecraft:stone
+setblock 18 149 45 minecraft:stone
+setblock 18 149 46 minecraft:stone
+setblock 18 149 47 minecraft:stone
+setblock 18 149 48 minecraft:stone
+setblock 18 149 49 minecraft:stone
+setblock 18 149 50 minecraft:stone
+setblock 18 149 51 minecraft:stone
+setblock 18 149 52 minecraft:stone
+setblock 18 149 53 minecraft:stone
+setblock 18 149 54 minecraft:stone
+setblock 18 149 55 minecraft:stone
+setblock 18 149 56 minecraft:stone
+setblock 18 149 57 minecraft:stone
+setblock 18 149 58 minecraft:stone
+setblock 18 149 59 minecraft:stone
+setblock 18 149 60 minecraft:stone
+setblock 18 149 61 minecraft:stone
+setblock 18 149 62 minecraft:stone
+setblock 18 149 63 minecraft:stone
+setblock 18 149 64 minecraft:stone
+setblock 19 149 16 minecraft:stone
+setblock 19 149 17 minecraft:stone
+setblock 19 149 18 minecraft:stone
+setblock 19 149 19 minecraft:stone
+setblock 19 149 20 minecraft:stone
+setblock 19 149 21 minecraft:stone
+setblock 19 149 22 minecraft:stone
+setblock 19 149 23 minecraft:stone
+setblock 19 149 24 minecraft:stone
+setblock 19 149 25 minecraft:stone
+setblock 19 149 26 minecraft:stone
+setblock 19 149 27 minecraft:stone
+setblock 19 149 28 minecraft:stone
+setblock 19 149 29 minecraft:stone
+setblock 19 149 30 minecraft:stone
+setblock 19 149 31 minecraft:stone
+setblock 19 149 32 minecraft:stone
+setblock 19 149 33 minecraft:stone
+setblock 19 149 34 minecraft:stone
+setblock 19 149 35 minecraft:stone
+setblock 19 149 36 minecraft:stone
+setblock 19 149 37 minecraft:stone
+setblock 19 149 38 minecraft:stone
+setblock 19 149 39 minecraft:stone
+setblock 19 149 40 minecraft:stone
+setblock 19 149 41 minecraft:stone
+setblock 19 149 42 minecraft:stone
+setblock 19 149 43 minecraft:stone
+setblock 19 149 44 minecraft:stone
+setblock 19 149 45 minecraft:stone
+setblock 19 149 46 minecraft:stone
+setblock 19 149 47 minecraft:stone
+setblock 19 149 48 minecraft:stone
+setblock 19 149 49 minecraft:stone
+setblock 19 149 50 minecraft:stone
+setblock 19 149 51 minecraft:stone
+setblock 19 149 52 minecraft:stone
+setblock 19 149 53 minecraft:stone
+setblock 19 149 54 minecraft:stone
+setblock 19 149 55 minecraft:stone
+setblock 19 149 56 minecraft:stone
+setblock 19 149 57 minecraft:stone
+setblock 19 149 58 minecraft:stone
+setblock 19 149 59 minecraft:stone
+setblock 19 149 60 minecraft:stone
+setblock 19 149 61 minecraft:stone
+setblock 19 149 62 minecraft:stone
+setblock 19 149 63 minecraft:stone
+setblock 19 149 64 minecraft:stone
+setblock 20 149 16 minecraft:stone
+setblock 20 149 17 minecraft:stone
+setblock 20 149 18 minecraft:stone
+setblock 20 149 19 minecraft:stone
+setblock 20 149 20 minecraft:stone
+setblock 20 149 21 minecraft:stone
+setblock 20 149 22 minecraft:stone
+setblock 20 149 23 minecraft:stone
+setblock 20 149 24 minecraft:stone
+setblock 20 149 25 minecraft:stone
+setblock 20 149 26 minecraft:stone
+setblock 20 149 27 minecraft:stone
+setblock 20 149 28 minecraft:stone
+setblock 20 149 29 minecraft:stone
+setblock 20 149 30 minecraft:stone
+setblock 20 149 31 minecraft:stone
+setblock 20 149 32 minecraft:stone
+setblock 20 149 33 minecraft:stone
+setblock 20 149 34 minecraft:stone
+setblock 20 149 35 minecraft:stone
+setblock 20 149 36 minecraft:stone
+setblock 20 149 37 minecraft:stone
+setblock 20 149 38 minecraft:stone
+setblock 20 149 39 minecraft:stone
+setblock 20 149 40 minecraft:stone
+setblock 20 149 41 minecraft:stone
+setblock 20 149 42 minecraft:stone
+setblock 20 149 43 minecraft:stone
+setblock 20 149 44 minecraft:stone
+setblock 20 149 45 minecraft:stone
+setblock 20 149 46 minecraft:stone
+setblock 20 149 47 minecraft:stone
+setblock 20 149 48 minecraft:stone
+setblock 20 149 49 minecraft:stone
+setblock 20 149 50 minecraft:stone
+setblock 20 149 51 minecraft:stone
+setblock 20 149 52 minecraft:stone
+setblock 20 149 53 minecraft:stone
+setblock 20 149 54 minecraft:stone
+setblock 20 149 55 minecraft:stone
+setblock 20 149 56 minecraft:stone
+setblock 20 149 57 minecraft:stone
+setblock 20 149 58 minecraft:stone
+setblock 20 149 59 minecraft:stone
+setblock 20 149 60 minecraft:stone
+setblock 20 149 61 minecraft:stone
+setblock 20 149 62 minecraft:stone
+setblock 20 149 63 minecraft:stone
+setblock 20 149 64 minecraft:stone
+setblock 21 149 16 minecraft:stone
+setblock 21 149 17 minecraft:stone
+setblock 21 149 18 minecraft:stone
+setblock 21 149 19 minecraft:stone
+setblock 21 149 20 minecraft:stone
+setblock 21 149 21 minecraft:stone
+setblock 21 149 22 minecraft:stone
+setblock 21 149 23 minecraft:stone
+setblock 21 149 24 minecraft:stone
+setblock 21 149 25 minecraft:stone
+setblock 21 149 26 minecraft:stone
+setblock 21 149 27 minecraft:stone
+setblock 21 149 28 minecraft:stone
+setblock 21 149 29 minecraft:stone
+setblock 21 149 30 minecraft:stone
+setblock 21 149 31 minecraft:stone
+setblock 21 149 32 minecraft:stone
+setblock 21 149 33 minecraft:stone
+setblock 21 149 34 minecraft:stone
+setblock 21 149 35 minecraft:stone
+setblock 21 149 36 minecraft:stone
+setblock 21 149 37 minecraft:stone
+setblock 21 149 38 minecraft:stone
+setblock 21 149 39 minecraft:stone
+setblock 21 149 40 minecraft:stone
+setblock 21 149 41 minecraft:stone
+setblock 21 149 42 minecraft:stone
+setblock 21 149 43 minecraft:stone
+setblock 21 149 44 minecraft:stone
+setblock 21 149 45 minecraft:stone
+setblock 21 149 46 minecraft:stone
+setblock 21 149 47 minecraft:stone
+setblock 21 149 48 minecraft:stone
+setblock 21 149 49 minecraft:stone
+setblock 21 149 50 minecraft:stone
+setblock 21 149 51 minecraft:stone
+setblock 21 149 52 minecraft:stone
+setblock 21 149 53 minecraft:stone
+setblock 21 149 54 minecraft:stone
+setblock 21 149 55 minecraft:stone
+setblock 21 149 56 minecraft:stone
+setblock 21 149 57 minecraft:stone
+setblock 21 149 58 minecraft:stone
+setblock 21 149 59 minecraft:stone
+setblock 21 149 60 minecraft:stone
+setblock 21 149 61 minecraft:stone
+setblock 21 149 62 minecraft:stone
+setblock 21 149 63 minecraft:stone
+setblock 21 149 64 minecraft:stone
+setblock 22 149 16 minecraft:stone
+setblock 22 149 17 minecraft:stone
+setblock 22 149 18 minecraft:stone
+setblock 22 149 19 minecraft:stone
+setblock 22 149 20 minecraft:stone
+setblock 22 149 21 minecraft:stone
+setblock 22 149 22 minecraft:stone
+setblock 22 149 23 minecraft:stone
+setblock 22 149 24 minecraft:stone
+setblock 22 149 25 minecraft:stone
+setblock 22 149 26 minecraft:stone
+setblock 22 149 27 minecraft:stone
+setblock 22 149 28 minecraft:stone
+setblock 22 149 29 minecraft:stone
+setblock 22 149 30 minecraft:stone
+setblock 22 149 31 minecraft:stone
+setblock 22 149 32 minecraft:stone
+setblock 22 149 33 minecraft:stone
+setblock 22 149 34 minecraft:stone
+setblock 22 149 35 minecraft:stone
+setblock 22 149 36 minecraft:stone
+setblock 22 149 37 minecraft:stone
+setblock 22 149 38 minecraft:stone
+setblock 22 149 39 minecraft:stone
+setblock 22 149 40 minecraft:stone
+setblock 22 149 41 minecraft:stone
+setblock 22 149 42 minecraft:stone
+setblock 22 149 43 minecraft:stone
+setblock 22 149 44 minecraft:stone
+setblock 22 149 45 minecraft:stone
+setblock 22 149 46 minecraft:stone
+setblock 22 149 47 minecraft:stone
+setblock 22 149 48 minecraft:stone
+setblock 22 149 49 minecraft:stone
+setblock 22 149 50 minecraft:stone
+setblock 22 149 51 minecraft:stone
+setblock 22 149 52 minecraft:stone
+setblock 22 149 53 minecraft:stone
+setblock 22 149 54 minecraft:stone
+setblock 22 149 55 minecraft:stone
+setblock 22 149 56 minecraft:stone
+setblock 22 149 57 minecraft:stone
+setblock 22 149 58 minecraft:stone
+setblock 22 149 59 minecraft:stone
+setblock 22 149 60 minecraft:stone
+setblock 22 149 61 minecraft:stone
+setblock 22 149 62 minecraft:stone
+setblock 22 149 63 minecraft:stone
+setblock 22 149 64 minecraft:stone
+setblock 23 149 16 minecraft:stone
+setblock 23 149 17 minecraft:stone
+setblock 23 149 18 minecraft:stone
+setblock 23 149 19 minecraft:stone
+setblock 23 149 20 minecraft:stone
+setblock 23 149 21 minecraft:stone
+setblock 23 149 22 minecraft:stone
+setblock 23 149 23 minecraft:stone
+setblock 23 149 24 minecraft:stone
+setblock 23 149 25 minecraft:stone
+setblock 23 149 26 minecraft:stone
+setblock 23 149 27 minecraft:stone
+setblock 23 149 28 minecraft:stone
+setblock 23 149 29 minecraft:stone
+setblock 23 149 30 minecraft:stone
+setblock 23 149 31 minecraft:stone
+setblock 23 149 32 minecraft:stone
+setblock 23 149 33 minecraft:stone
+setblock 23 149 34 minecraft:stone
+setblock 23 149 35 minecraft:stone
+setblock 23 149 36 minecraft:stone
+setblock 23 149 37 minecraft:stone
+setblock 23 149 38 minecraft:stone
+setblock 23 149 39 minecraft:stone
+setblock 23 149 40 minecraft:stone
+setblock 23 149 41 minecraft:stone
+setblock 23 149 42 minecraft:stone
+setblock 23 149 43 minecraft:stone
+setblock 23 149 44 minecraft:stone
+setblock 23 149 45 minecraft:stone
+setblock 23 149 46 minecraft:stone
+setblock 23 149 47 minecraft:stone
+setblock 23 149 48 minecraft:stone
+setblock 23 149 49 minecraft:stone
+setblock 23 149 50 minecraft:stone
+setblock 23 149 51 minecraft:stone
+setblock 23 149 52 minecraft:stone
+setblock 23 149 53 minecraft:stone
+setblock 23 149 54 minecraft:stone
+setblock 23 149 55 minecraft:stone
+setblock 23 149 56 minecraft:stone
+setblock 23 149 57 minecraft:stone
+setblock 23 149 58 minecraft:stone
+setblock 23 149 59 minecraft:stone
+setblock 23 149 60 minecraft:stone
+setblock 23 149 61 minecraft:stone
+setblock 23 149 62 minecraft:stone
+setblock 23 149 63 minecraft:stone
+setblock 23 149 64 minecraft:stone
+setblock 24 149 16 minecraft:stone
+setblock 24 149 17 minecraft:stone
+setblock 24 149 18 minecraft:stone
+setblock 24 149 19 minecraft:stone
+setblock 24 149 20 minecraft:stone
+setblock 24 149 21 minecraft:stone
+setblock 24 149 22 minecraft:stone
+setblock 24 149 23 minecraft:stone
+setblock 24 149 24 minecraft:stone
+setblock 24 149 25 minecraft:stone
+setblock 24 149 26 minecraft:stone
+setblock 24 149 27 minecraft:stone
+setblock 24 149 28 minecraft:stone
+setblock 24 149 29 minecraft:stone
+setblock 24 149 30 minecraft:stone
+setblock 24 149 31 minecraft:stone
+setblock 24 149 32 minecraft:stone
+setblock 24 149 33 minecraft:stone
+setblock 24 149 34 minecraft:stone
+setblock 24 149 35 minecraft:stone
+setblock 24 149 36 minecraft:stone
+setblock 24 149 37 minecraft:stone
+setblock 24 149 38 minecraft:stone
+setblock 24 149 39 minecraft:stone
+setblock 24 149 40 minecraft:stone
+setblock 24 149 41 minecraft:stone
+setblock 24 149 42 minecraft:stone
+setblock 24 149 43 minecraft:stone
+setblock 24 149 44 minecraft:stone
+setblock 24 149 45 minecraft:stone
+setblock 24 149 46 minecraft:stone
+setblock 24 149 47 minecraft:stone
+setblock 24 149 48 minecraft:stone
+setblock 24 149 49 minecraft:stone
+setblock 24 149 50 minecraft:stone
+setblock 24 149 51 minecraft:stone
+setblock 24 149 52 minecraft:stone
+setblock 24 149 53 minecraft:stone
+setblock 24 149 54 minecraft:stone
+setblock 24 149 55 minecraft:stone
+setblock 24 149 56 minecraft:stone
+setblock 24 149 57 minecraft:stone
+setblock 24 149 58 minecraft:stone
+setblock 24 149 59 minecraft:stone
+setblock 24 149 60 minecraft:stone
+setblock 24 149 61 minecraft:stone
+setblock 24 149 62 minecraft:stone
+setblock 24 149 63 minecraft:stone
+setblock 24 149 64 minecraft:stone
+setblock 25 149 16 minecraft:stone
+setblock 25 149 17 minecraft:stone
+setblock 25 149 18 minecraft:stone
+setblock 25 149 19 minecraft:stone
+setblock 25 149 20 minecraft:stone
+setblock 25 149 21 minecraft:stone
+setblock 25 149 22 minecraft:stone
+setblock 25 149 23 minecraft:stone
+setblock 25 149 24 minecraft:stone
+setblock 25 149 25 minecraft:stone
+setblock 25 149 26 minecraft:stone
+setblock 25 149 27 minecraft:stone
+setblock 25 149 28 minecraft:stone
+setblock 25 149 29 minecraft:stone
+setblock 25 149 30 minecraft:stone
+setblock 25 149 31 minecraft:stone
+setblock 25 149 32 minecraft:stone
+setblock 25 149 33 minecraft:stone
+setblock 25 149 34 minecraft:stone
+setblock 25 149 35 minecraft:stone
+setblock 25 149 36 minecraft:stone
+setblock 25 149 37 minecraft:stone
+setblock 25 149 38 minecraft:stone
+setblock 25 149 39 minecraft:stone
+setblock 25 149 40 minecraft:stone
+setblock 25 149 41 minecraft:stone
+setblock 25 149 42 minecraft:stone
+setblock 25 149 43 minecraft:stone
+setblock 25 149 44 minecraft:stone
+setblock 25 149 45 minecraft:stone
+setblock 25 149 46 minecraft:stone
+setblock 25 149 47 minecraft:stone
+setblock 25 149 48 minecraft:stone
+setblock 25 149 49 minecraft:stone
+setblock 25 149 50 minecraft:stone
+setblock 25 149 51 minecraft:stone
+setblock 25 149 52 minecraft:stone
+setblock 25 149 53 minecraft:stone
+setblock 25 149 54 minecraft:stone
+setblock 25 149 55 minecraft:stone
+setblock 25 149 56 minecraft:stone
+setblock 25 149 57 minecraft:stone
+setblock 25 149 58 minecraft:stone
+setblock 25 149 59 minecraft:stone
+setblock 25 149 60 minecraft:stone
+setblock 25 149 61 minecraft:stone
+setblock 25 149 62 minecraft:stone
+setblock 25 149 63 minecraft:stone
+setblock 25 149 64 minecraft:stone
+setblock 26 149 16 minecraft:stone
+setblock 26 149 17 minecraft:stone
+setblock 26 149 18 minecraft:stone
+setblock 26 149 19 minecraft:stone
+setblock 26 149 20 minecraft:stone
+setblock 26 149 21 minecraft:stone
+setblock 26 149 22 minecraft:stone
+setblock 26 149 23 minecraft:stone
+setblock 26 149 24 minecraft:stone
+setblock 26 149 25 minecraft:stone
+setblock 26 149 26 minecraft:stone
+setblock 26 149 27 minecraft:stone
+setblock 26 149 28 minecraft:stone
+setblock 26 149 29 minecraft:stone
+setblock 26 149 30 minecraft:stone
+setblock 26 149 31 minecraft:stone
+setblock 26 149 32 minecraft:stone
+setblock 26 149 33 minecraft:stone
+setblock 26 149 34 minecraft:stone
+setblock 26 149 35 minecraft:stone
+setblock 26 149 36 minecraft:stone
+setblock 26 149 37 minecraft:stone
+setblock 26 149 38 minecraft:stone
+setblock 26 149 39 minecraft:stone
+setblock 26 149 40 minecraft:stone
+setblock 26 149 41 minecraft:stone
+setblock 26 149 42 minecraft:stone
+setblock 26 149 43 minecraft:stone
+setblock 26 149 44 minecraft:stone
+setblock 26 149 45 minecraft:stone
+setblock 26 149 46 minecraft:stone
+setblock 26 149 47 minecraft:stone
+setblock 26 149 48 minecraft:stone
+setblock 26 149 49 minecraft:stone
+setblock 26 149 50 minecraft:stone
+setblock 26 149 51 minecraft:stone
+setblock 26 149 52 minecraft:stone
+setblock 26 149 53 minecraft:stone
+setblock 26 149 54 minecraft:stone
+setblock 26 149 55 minecraft:stone
+setblock 26 149 56 minecraft:stone
+setblock 26 149 57 minecraft:stone
+setblock 26 149 58 minecraft:stone
+setblock 26 149 59 minecraft:stone
+setblock 26 149 60 minecraft:stone
+setblock 26 149 61 minecraft:stone
+setblock 26 149 62 minecraft:stone
+setblock 26 149 63 minecraft:stone
+setblock 26 149 64 minecraft:stone
+setblock 27 149 16 minecraft:stone
+setblock 27 149 17 minecraft:stone
+setblock 27 149 18 minecraft:stone
+setblock 27 149 19 minecraft:stone
+setblock 27 149 20 minecraft:stone
+setblock 27 149 21 minecraft:stone
+setblock 27 149 22 minecraft:stone
+setblock 27 149 23 minecraft:stone
+setblock 27 149 24 minecraft:stone
+setblock 27 149 25 minecraft:stone
+setblock 27 149 26 minecraft:stone
+setblock 27 149 27 minecraft:stone
+setblock 27 149 28 minecraft:stone
+setblock 27 149 29 minecraft:stone
+setblock 27 149 30 minecraft:stone
+setblock 27 149 31 minecraft:stone
+setblock 27 149 32 minecraft:stone
+setblock 27 149 33 minecraft:stone
+setblock 27 149 34 minecraft:stone
+setblock 27 149 35 minecraft:stone
+setblock 27 149 36 minecraft:stone
+setblock 27 149 37 minecraft:stone
+setblock 27 149 38 minecraft:stone
+setblock 27 149 39 minecraft:stone
+setblock 27 149 40 minecraft:stone
+setblock 27 149 41 minecraft:stone
+setblock 27 149 42 minecraft:stone
+setblock 27 149 43 minecraft:stone
+setblock 27 149 44 minecraft:stone
+setblock 27 149 45 minecraft:stone
+setblock 27 149 46 minecraft:stone
+setblock 27 149 47 minecraft:stone
+setblock 27 149 48 minecraft:stone
+setblock 27 149 49 minecraft:stone
+setblock 27 149 50 minecraft:stone
+setblock 27 149 51 minecraft:stone
+setblock 27 149 52 minecraft:stone
+setblock 27 149 53 minecraft:stone
+setblock 27 149 54 minecraft:stone
+setblock 27 149 55 minecraft:stone
+setblock 27 149 56 minecraft:stone
+setblock 27 149 57 minecraft:stone
+setblock 27 149 58 minecraft:stone
+setblock 27 149 59 minecraft:stone
+setblock 27 149 60 minecraft:stone
+setblock 27 149 61 minecraft:stone
+setblock 27 149 62 minecraft:stone
+setblock 27 149 63 minecraft:stone
+setblock 27 149 64 minecraft:stone
+setblock 28 149 16 minecraft:stone
+setblock 28 149 17 minecraft:stone
+setblock 28 149 18 minecraft:stone
+setblock 28 149 19 minecraft:stone
+setblock 28 149 20 minecraft:stone
+setblock 28 149 21 minecraft:stone
+setblock 28 149 22 minecraft:stone
+setblock 28 149 23 minecraft:stone
+setblock 28 149 24 minecraft:stone
+setblock 28 149 25 minecraft:stone
+setblock 28 149 26 minecraft:stone
+setblock 28 149 27 minecraft:stone
+setblock 28 149 28 minecraft:stone
+setblock 28 149 29 minecraft:stone
+setblock 28 149 30 minecraft:stone
+setblock 28 149 31 minecraft:stone
+setblock 28 149 32 minecraft:stone
+setblock 28 149 33 minecraft:stone
+setblock 28 149 34 minecraft:stone
+setblock 28 149 35 minecraft:stone
+setblock 28 149 36 minecraft:stone
+setblock 28 149 37 minecraft:stone
+setblock 28 149 38 minecraft:stone
+setblock 28 149 39 minecraft:stone
+setblock 28 149 40 minecraft:stone
+setblock 28 149 41 minecraft:stone
+setblock 28 149 42 minecraft:stone
+setblock 28 149 43 minecraft:stone
+setblock 28 149 44 minecraft:stone
+setblock 28 149 45 minecraft:stone
+setblock 28 149 46 minecraft:stone
+setblock 28 149 47 minecraft:stone
+setblock 28 149 48 minecraft:stone
+setblock 28 149 49 minecraft:stone
+setblock 28 149 50 minecraft:stone
+setblock 28 149 51 minecraft:stone
+setblock 28 149 52 minecraft:stone
+setblock 28 149 53 minecraft:stone
+setblock 28 149 54 minecraft:stone
+setblock 28 149 55 minecraft:stone
+setblock 28 149 56 minecraft:stone
+setblock 28 149 57 minecraft:stone
+setblock 28 149 58 minecraft:stone
+setblock 28 149 59 minecraft:stone
+setblock 28 149 60 minecraft:stone
+setblock 28 149 61 minecraft:stone
+setblock 28 149 62 minecraft:stone
+setblock 28 149 63 minecraft:stone
+setblock 28 149 64 minecraft:stone
+setblock 29 149 16 minecraft:stone
+setblock 29 149 17 minecraft:stone
+setblock 29 149 18 minecraft:stone
+setblock 29 149 19 minecraft:stone
+setblock 29 149 20 minecraft:stone
+setblock 29 149 21 minecraft:stone
+setblock 29 149 22 minecraft:stone
+setblock 29 149 23 minecraft:stone
+setblock 29 149 24 minecraft:stone
+setblock 29 149 25 minecraft:stone
+setblock 29 149 26 minecraft:stone
+setblock 29 149 27 minecraft:stone
+setblock 29 149 28 minecraft:stone
+setblock 29 149 29 minecraft:stone
+setblock 29 149 30 minecraft:stone
+setblock 29 149 31 minecraft:stone
+setblock 29 149 32 minecraft:stone
+setblock 29 149 33 minecraft:stone
+setblock 29 149 34 minecraft:stone
+setblock 29 149 35 minecraft:stone
+setblock 29 149 36 minecraft:stone
+setblock 29 149 37 minecraft:stone
+setblock 29 149 38 minecraft:stone
+setblock 29 149 39 minecraft:stone
+setblock 29 149 40 minecraft:stone
+setblock 29 149 41 minecraft:stone
+setblock 29 149 42 minecraft:stone
+setblock 29 149 43 minecraft:stone
+setblock 29 149 44 minecraft:stone
+setblock 29 149 45 minecraft:stone
+setblock 29 149 46 minecraft:stone
+setblock 29 149 47 minecraft:stone
+setblock 29 149 48 minecraft:stone
+setblock 29 149 49 minecraft:stone
+setblock 29 149 50 minecraft:stone
+setblock 29 149 51 minecraft:stone
+setblock 29 149 52 minecraft:stone
+setblock 29 149 53 minecraft:stone
+setblock 29 149 54 minecraft:stone
+setblock 29 149 55 minecraft:stone
+setblock 29 149 56 minecraft:stone
+setblock 29 149 57 minecraft:stone
+setblock 29 149 58 minecraft:stone
+setblock 29 149 59 minecraft:stone
+setblock 29 149 60 minecraft:stone
+setblock 29 149 61 minecraft:stone
+setblock 29 149 62 minecraft:stone
+setblock 29 149 63 minecraft:stone
+setblock 29 149 64 minecraft:stone
+setblock 30 149 16 minecraft:stone
+setblock 30 149 17 minecraft:stone
+setblock 30 149 18 minecraft:stone
+setblock 30 149 19 minecraft:stone
+setblock 30 149 20 minecraft:stone
+setblock 30 149 21 minecraft:stone
+setblock 30 149 22 minecraft:stone
+setblock 30 149 23 minecraft:stone
+setblock 30 149 24 minecraft:stone
+setblock 30 149 25 minecraft:stone
+setblock 30 149 26 minecraft:stone
+setblock 30 149 27 minecraft:stone
+setblock 30 149 28 minecraft:stone
+setblock 30 149 29 minecraft:stone
+setblock 30 149 30 minecraft:stone
+setblock 30 149 31 minecraft:stone
+setblock 30 149 32 minecraft:stone
+setblock 30 149 33 minecraft:stone
+setblock 30 149 34 minecraft:stone
+setblock 30 149 35 minecraft:stone
+setblock 30 149 36 minecraft:stone
+setblock 30 149 37 minecraft:stone
+setblock 30 149 38 minecraft:stone
+setblock 30 149 39 minecraft:stone
+setblock 30 149 40 minecraft:stone
+setblock 30 149 41 minecraft:stone
+setblock 30 149 42 minecraft:stone
+setblock 30 149 43 minecraft:stone
+setblock 30 149 44 minecraft:stone
+setblock 30 149 45 minecraft:stone
+setblock 30 149 46 minecraft:stone
+setblock 30 149 47 minecraft:stone
+setblock 30 149 48 minecraft:stone
+setblock 30 149 49 minecraft:stone
+setblock 30 149 50 minecraft:stone
+setblock 30 149 51 minecraft:stone
+setblock 30 149 52 minecraft:stone
+setblock 30 149 53 minecraft:stone
+setblock 30 149 54 minecraft:stone
+setblock 30 149 55 minecraft:stone
+setblock 30 149 56 minecraft:stone
+setblock 30 149 57 minecraft:stone
+setblock 30 149 58 minecraft:stone
+setblock 30 149 59 minecraft:stone
+setblock 30 149 60 minecraft:stone
+setblock 30 149 61 minecraft:stone
+setblock 30 149 62 minecraft:stone
+setblock 30 149 63 minecraft:stone
+setblock 30 149 64 minecraft:stone
+setblock 31 149 16 minecraft:stone
+setblock 31 149 17 minecraft:stone
+setblock 31 149 18 minecraft:stone
+setblock 31 149 19 minecraft:stone
+setblock 31 149 20 minecraft:stone
+setblock 31 149 21 minecraft:stone
+setblock 31 149 22 minecraft:stone
+setblock 31 149 23 minecraft:stone
+setblock 31 149 24 minecraft:stone
+setblock 31 149 25 minecraft:stone
+setblock 31 149 26 minecraft:stone
+setblock 31 149 27 minecraft:stone
+setblock 31 149 28 minecraft:stone
+setblock 31 149 29 minecraft:stone
+setblock 31 149 30 minecraft:stone
+setblock 31 149 31 minecraft:stone
+setblock 31 149 32 minecraft:stone
+setblock 31 149 33 minecraft:stone
+setblock 31 149 34 minecraft:stone
+setblock 31 149 35 minecraft:stone
+setblock 31 149 36 minecraft:stone
+setblock 31 149 37 minecraft:stone
+setblock 31 149 38 minecraft:stone
+setblock 31 149 39 minecraft:stone
+setblock 31 149 40 minecraft:stone
+setblock 31 149 41 minecraft:stone
+setblock 31 149 42 minecraft:stone
+setblock 31 149 43 minecraft:stone
+setblock 31 149 44 minecraft:stone
+setblock 31 149 45 minecraft:stone
+setblock 31 149 46 minecraft:stone
+setblock 31 149 47 minecraft:stone
+setblock 31 149 48 minecraft:stone
+setblock 31 149 49 minecraft:stone
+setblock 31 149 50 minecraft:stone
+setblock 31 149 51 minecraft:stone
+setblock 31 149 52 minecraft:stone
+setblock 31 149 53 minecraft:stone
+setblock 31 149 54 minecraft:stone
+setblock 31 149 55 minecraft:stone
+setblock 31 149 56 minecraft:stone
+setblock 31 149 57 minecraft:stone
+setblock 31 149 58 minecraft:stone
+setblock 31 149 59 minecraft:stone
+setblock 31 149 60 minecraft:stone
+setblock 31 149 61 minecraft:stone
+setblock 31 149 62 minecraft:stone
+setblock 31 149 63 minecraft:stone
+setblock 31 149 64 minecraft:stone
+setblock 32 149 16 minecraft:stone
+setblock 32 149 17 minecraft:stone
+setblock 32 149 18 minecraft:stone
+setblock 32 149 19 minecraft:stone
+setblock 32 149 20 minecraft:stone
+setblock 32 149 21 minecraft:stone
+setblock 32 149 22 minecraft:stone
+setblock 32 149 23 minecraft:stone
+setblock 32 149 24 minecraft:stone
+setblock 32 149 25 minecraft:stone
+setblock 32 149 26 minecraft:stone
+setblock 32 149 27 minecraft:stone
+setblock 32 149 28 minecraft:stone
+setblock 32 149 29 minecraft:stone
+setblock 32 149 30 minecraft:stone
+setblock 32 149 31 minecraft:stone
+setblock 32 149 32 minecraft:stone
+setblock 32 149 33 minecraft:stone
+setblock 32 149 34 minecraft:stone
+setblock 32 149 35 minecraft:stone
+setblock 32 149 36 minecraft:stone
+setblock 32 149 37 minecraft:stone
+setblock 32 149 38 minecraft:stone
+setblock 32 149 39 minecraft:stone
+setblock 32 149 40 minecraft:stone
+setblock 32 149 41 minecraft:stone
+setblock 32 149 42 minecraft:stone
+setblock 32 149 43 minecraft:stone
+setblock 32 149 44 minecraft:stone
+setblock 32 149 45 minecraft:stone
+setblock 32 149 46 minecraft:stone
+setblock 32 149 47 minecraft:stone
+setblock 32 149 48 minecraft:stone
+setblock 32 149 49 minecraft:stone
+setblock 32 149 50 minecraft:stone
+setblock 32 149 51 minecraft:stone
+setblock 32 149 52 minecraft:stone
+setblock 32 149 53 minecraft:stone
+setblock 32 149 54 minecraft:stone
+setblock 32 149 55 minecraft:stone
+setblock 32 149 56 minecraft:stone
+setblock 32 149 57 minecraft:stone
+setblock 32 149 58 minecraft:stone
+setblock 32 149 59 minecraft:stone
+setblock 32 149 60 minecraft:stone
+setblock 32 149 61 minecraft:stone
+setblock 32 149 62 minecraft:stone
+setblock 32 149 63 minecraft:stone
+setblock 32 149 64 minecraft:stone
+setblock 33 149 16 minecraft:stone
+setblock 33 149 17 minecraft:stone
+setblock 33 149 18 minecraft:stone
+setblock 33 149 19 minecraft:stone
+setblock 33 149 20 minecraft:stone
+setblock 33 149 21 minecraft:stone
+setblock 33 149 22 minecraft:stone
+setblock 33 149 23 minecraft:stone
+setblock 33 149 24 minecraft:stone
+setblock 33 149 25 minecraft:stone
+setblock 33 149 26 minecraft:stone
+setblock 33 149 27 minecraft:stone
+setblock 33 149 28 minecraft:stone
+setblock 33 149 29 minecraft:stone
+setblock 33 149 30 minecraft:stone
+setblock 33 149 31 minecraft:stone
+setblock 33 149 32 minecraft:stone
+setblock 33 149 33 minecraft:stone
+setblock 33 149 34 minecraft:stone
+setblock 33 149 35 minecraft:stone
+setblock 33 149 36 minecraft:stone
+setblock 33 149 37 minecraft:stone
+setblock 33 149 38 minecraft:stone
+setblock 33 149 39 minecraft:stone
+setblock 33 149 40 minecraft:stone
+setblock 33 149 41 minecraft:stone
+setblock 33 149 42 minecraft:stone
+setblock 33 149 43 minecraft:stone
+setblock 33 149 44 minecraft:stone
+setblock 33 149 45 minecraft:stone
+setblock 33 149 46 minecraft:stone
+setblock 33 149 47 minecraft:stone
+setblock 33 149 48 minecraft:stone
+setblock 33 149 49 minecraft:stone
+setblock 33 149 50 minecraft:stone
+setblock 33 149 51 minecraft:stone
+setblock 33 149 52 minecraft:stone
+setblock 33 149 53 minecraft:stone
+setblock 33 149 54 minecraft:stone
+setblock 33 149 55 minecraft:stone
+setblock 33 149 56 minecraft:stone
+setblock 33 149 57 minecraft:stone
+setblock 33 149 58 minecraft:stone
+setblock 33 149 59 minecraft:stone
+setblock 33 149 60 minecraft:stone
+setblock 33 149 61 minecraft:stone
+setblock 33 149 62 minecraft:stone
+setblock 33 149 63 minecraft:stone
+setblock 33 149 64 minecraft:stone
+setblock 34 149 16 minecraft:stone
+setblock 34 149 17 minecraft:stone
+setblock 34 149 18 minecraft:stone
+setblock 34 149 19 minecraft:stone
+setblock 34 149 20 minecraft:stone
+setblock 34 149 21 minecraft:stone
+setblock 34 149 22 minecraft:stone
+setblock 34 149 23 minecraft:stone
+setblock 34 149 24 minecraft:stone
+setblock 34 149 25 minecraft:stone
+setblock 34 149 26 minecraft:stone
+setblock 34 149 27 minecraft:stone
+setblock 34 149 28 minecraft:stone
+setblock 34 149 29 minecraft:stone
+setblock 34 149 30 minecraft:stone
+setblock 34 149 31 minecraft:stone
+setblock 34 149 32 minecraft:stone
+setblock 34 149 33 minecraft:stone
+setblock 34 149 34 minecraft:stone
+setblock 34 149 35 minecraft:stone
+setblock 34 149 36 minecraft:stone
+setblock 34 149 37 minecraft:stone
+setblock 34 149 38 minecraft:stone
+setblock 34 149 39 minecraft:stone
+setblock 34 149 40 minecraft:stone
+setblock 34 149 41 minecraft:stone
+setblock 34 149 42 minecraft:stone
+setblock 34 149 43 minecraft:stone
+setblock 34 149 44 minecraft:stone
+setblock 34 149 45 minecraft:stone
+setblock 34 149 46 minecraft:stone
+setblock 34 149 47 minecraft:stone
+setblock 34 149 48 minecraft:stone
+setblock 34 149 49 minecraft:stone
+setblock 34 149 50 minecraft:stone
+setblock 34 149 51 minecraft:stone
+setblock 34 149 52 minecraft:stone
+setblock 34 149 53 minecraft:stone
+setblock 34 149 54 minecraft:stone
+setblock 34 149 55 minecraft:stone
+setblock 34 149 56 minecraft:stone
+setblock 34 149 57 minecraft:stone
+setblock 34 149 58 minecraft:stone
+setblock 34 149 59 minecraft:stone
+setblock 34 149 60 minecraft:stone
+setblock 34 149 61 minecraft:stone
+setblock 34 149 62 minecraft:stone
+setblock 34 149 63 minecraft:stone
+setblock 34 149 64 minecraft:stone
+setblock 35 149 16 minecraft:stone
+setblock 35 149 17 minecraft:stone
+setblock 35 149 18 minecraft:stone
+setblock 35 149 19 minecraft:stone
+setblock 35 149 20 minecraft:stone
+setblock 35 149 21 minecraft:stone
+setblock 35 149 22 minecraft:stone
+setblock 35 149 23 minecraft:stone
+setblock 35 149 24 minecraft:stone
+setblock 35 149 25 minecraft:stone
+setblock 35 149 26 minecraft:stone
+setblock 35 149 27 minecraft:stone
+setblock 35 149 28 minecraft:stone
+setblock 35 149 29 minecraft:stone
+setblock 35 149 30 minecraft:stone
+setblock 35 149 31 minecraft:stone
+setblock 35 149 32 minecraft:stone
+setblock 35 149 33 minecraft:stone
+setblock 35 149 34 minecraft:stone
+setblock 35 149 35 minecraft:stone
+setblock 35 149 36 minecraft:stone
+setblock 35 149 37 minecraft:stone
+setblock 35 149 38 minecraft:stone
+setblock 35 149 39 minecraft:stone
+setblock 35 149 40 minecraft:stone
+setblock 35 149 41 minecraft:stone
+setblock 35 149 42 minecraft:stone
+setblock 35 149 43 minecraft:stone
+setblock 35 149 44 minecraft:stone
+setblock 35 149 45 minecraft:stone
+setblock 35 149 46 minecraft:stone
+setblock 35 149 47 minecraft:stone
+setblock 35 149 48 minecraft:stone
+setblock 35 149 49 minecraft:stone
+setblock 35 149 50 minecraft:stone
+setblock 35 149 51 minecraft:stone
+setblock 35 149 52 minecraft:stone
+setblock 35 149 53 minecraft:stone
+setblock 35 149 54 minecraft:stone
+setblock 35 149 55 minecraft:stone
+setblock 35 149 56 minecraft:stone
+setblock 35 149 57 minecraft:stone
+setblock 35 149 58 minecraft:stone
+setblock 35 149 59 minecraft:stone
+setblock 35 149 60 minecraft:stone
+setblock 35 149 61 minecraft:stone
+setblock 35 149 62 minecraft:stone
+setblock 35 149 63 minecraft:stone
+setblock 35 149 64 minecraft:stone
+setblock 36 149 16 minecraft:stone
+setblock 36 149 17 minecraft:stone
+setblock 36 149 18 minecraft:stone
+setblock 36 149 19 minecraft:stone
+setblock 36 149 20 minecraft:stone
+setblock 36 149 21 minecraft:stone
+setblock 36 149 22 minecraft:stone
+setblock 36 149 23 minecraft:stone
+setblock 36 149 24 minecraft:stone
+setblock 36 149 25 minecraft:stone
+setblock 36 149 26 minecraft:stone
+setblock 36 149 27 minecraft:stone
+setblock 36 149 28 minecraft:stone
+setblock 36 149 29 minecraft:stone
+setblock 36 149 30 minecraft:stone
+setblock 36 149 31 minecraft:stone
+setblock 36 149 32 minecraft:stone
+setblock 36 149 33 minecraft:stone
+setblock 36 149 34 minecraft:stone
+setblock 36 149 35 minecraft:stone
+setblock 36 149 36 minecraft:stone
+setblock 36 149 37 minecraft:stone
+setblock 36 149 38 minecraft:stone
+setblock 36 149 39 minecraft:stone
+setblock 36 149 40 minecraft:stone
+setblock 36 149 41 minecraft:stone
+setblock 36 149 42 minecraft:stone
+setblock 36 149 43 minecraft:stone
+setblock 36 149 44 minecraft:stone
+setblock 36 149 45 minecraft:stone
+setblock 36 149 46 minecraft:stone
+setblock 36 149 47 minecraft:stone
+setblock 36 149 48 minecraft:stone
+setblock 36 149 49 minecraft:stone
+setblock 36 149 50 minecraft:stone
+setblock 36 149 51 minecraft:stone
+setblock 36 149 52 minecraft:stone
+setblock 36 149 53 minecraft:stone
+setblock 36 149 54 minecraft:stone
+setblock 36 149 55 minecraft:stone
+setblock 36 149 56 minecraft:stone
+setblock 36 149 57 minecraft:stone
+setblock 36 149 58 minecraft:stone
+setblock 36 149 59 minecraft:stone
+setblock 36 149 60 minecraft:stone
+setblock 36 149 61 minecraft:stone
+setblock 36 149 62 minecraft:stone
+setblock 36 149 63 minecraft:stone
+setblock 36 149 64 minecraft:stone
+setblock 37 149 16 minecraft:stone
+setblock 37 149 17 minecraft:stone
+setblock 37 149 18 minecraft:stone
+setblock 37 149 19 minecraft:stone
+setblock 37 149 20 minecraft:stone
+setblock 37 149 21 minecraft:stone
+setblock 37 149 22 minecraft:stone
+setblock 37 149 23 minecraft:stone
+setblock 37 149 24 minecraft:stone
+setblock 37 149 25 minecraft:stone
+setblock 37 149 26 minecraft:stone
+setblock 37 149 27 minecraft:stone
+setblock 37 149 28 minecraft:stone
+setblock 37 149 29 minecraft:stone
+setblock 37 149 30 minecraft:stone
+setblock 37 149 31 minecraft:stone
+setblock 37 149 32 minecraft:stone
+setblock 37 149 33 minecraft:stone
+setblock 37 149 34 minecraft:stone
+setblock 37 149 35 minecraft:stone
+setblock 37 149 36 minecraft:stone
+setblock 37 149 37 minecraft:stone
+setblock 37 149 38 minecraft:stone
+setblock 37 149 39 minecraft:stone
+setblock 37 149 40 minecraft:stone
+setblock 37 149 41 minecraft:stone
+setblock 37 149 42 minecraft:stone
+setblock 37 149 43 minecraft:stone
+setblock 37 149 44 minecraft:stone
+setblock 37 149 45 minecraft:stone
+setblock 37 149 46 minecraft:stone
+setblock 37 149 47 minecraft:stone
+setblock 37 149 48 minecraft:stone
+setblock 37 149 49 minecraft:stone
+setblock 37 149 50 minecraft:stone
+setblock 37 149 51 minecraft:stone
+setblock 37 149 52 minecraft:stone
+setblock 37 149 53 minecraft:stone
+setblock 37 149 54 minecraft:stone
+setblock 37 149 55 minecraft:stone
+setblock 37 149 56 minecraft:stone
+setblock 37 149 57 minecraft:stone
+setblock 37 149 58 minecraft:stone
+setblock 37 149 59 minecraft:stone
+setblock 37 149 60 minecraft:stone
+setblock 37 149 61 minecraft:stone
+setblock 37 149 62 minecraft:stone
+setblock 37 149 63 minecraft:stone
+setblock 37 149 64 minecraft:stone
+setblock 38 149 16 minecraft:stone
+setblock 38 149 17 minecraft:stone
+setblock 38 149 18 minecraft:stone
+setblock 38 149 19 minecraft:stone
+setblock 38 149 20 minecraft:stone
+setblock 38 149 21 minecraft:stone
+setblock 38 149 22 minecraft:stone
+setblock 38 149 23 minecraft:stone
+setblock 38 149 24 minecraft:stone
+setblock 38 149 25 minecraft:stone
+setblock 38 149 26 minecraft:stone
+setblock 38 149 27 minecraft:stone
+setblock 38 149 28 minecraft:stone
+setblock 38 149 29 minecraft:stone
+setblock 38 149 30 minecraft:stone
+setblock 38 149 31 minecraft:stone
+setblock 38 149 32 minecraft:stone
+setblock 38 149 33 minecraft:stone
+setblock 38 149 34 minecraft:stone
+setblock 38 149 35 minecraft:stone
+setblock 38 149 36 minecraft:stone
+setblock 38 149 37 minecraft:stone
+setblock 38 149 38 minecraft:stone
+setblock 38 149 39 minecraft:stone
+setblock 38 149 40 minecraft:stone
+setblock 38 149 41 minecraft:stone
+setblock 38 149 42 minecraft:stone
+setblock 38 149 43 minecraft:stone
+setblock 38 149 44 minecraft:stone
+setblock 38 149 45 minecraft:stone
+setblock 38 149 46 minecraft:stone
+setblock 38 149 47 minecraft:stone
+setblock 38 149 48 minecraft:stone
+setblock 38 149 49 minecraft:stone
+setblock 38 149 50 minecraft:stone
+setblock 38 149 51 minecraft:stone
+setblock 38 149 52 minecraft:stone
+setblock 38 149 53 minecraft:stone
+setblock 38 149 54 minecraft:stone
+setblock 38 149 55 minecraft:stone
+setblock 38 149 56 minecraft:stone
+setblock 38 149 57 minecraft:stone
+setblock 38 149 58 minecraft:stone
+setblock 38 149 59 minecraft:stone
+setblock 38 149 60 minecraft:stone
+setblock 38 149 61 minecraft:stone
+setblock 38 149 62 minecraft:stone
+setblock 38 149 63 minecraft:stone
+setblock 38 149 64 minecraft:stone
+setblock 39 149 16 minecraft:stone
+setblock 39 149 17 minecraft:stone
+setblock 39 149 18 minecraft:stone
+setblock 39 149 19 minecraft:stone
+setblock 39 149 20 minecraft:stone
+setblock 39 149 21 minecraft:stone
+setblock 39 149 22 minecraft:stone
+setblock 39 149 23 minecraft:stone
+setblock 39 149 24 minecraft:stone
+setblock 39 149 25 minecraft:stone
+setblock 39 149 26 minecraft:stone
+setblock 39 149 27 minecraft:stone
+setblock 39 149 28 minecraft:stone
+setblock 39 149 29 minecraft:stone
+setblock 39 149 30 minecraft:stone
+setblock 39 149 31 minecraft:stone
+setblock 39 149 32 minecraft:stone
+setblock 39 149 33 minecraft:stone
+setblock 39 149 34 minecraft:stone
+setblock 39 149 35 minecraft:stone
+setblock 39 149 36 minecraft:stone
+setblock 39 149 37 minecraft:stone
+setblock 39 149 38 minecraft:stone
+setblock 39 149 39 minecraft:stone
+setblock 39 149 40 minecraft:stone
+setblock 39 149 41 minecraft:stone
+setblock 39 149 42 minecraft:stone
+setblock 39 149 43 minecraft:stone
+setblock 39 149 44 minecraft:stone
+setblock 39 149 45 minecraft:stone
+setblock 39 149 46 minecraft:stone
+setblock 39 149 47 minecraft:stone
+setblock 39 149 48 minecraft:stone
+setblock 39 149 49 minecraft:stone
+setblock 39 149 50 minecraft:stone
+setblock 39 149 51 minecraft:stone
+setblock 39 149 52 minecraft:stone
+setblock 39 149 53 minecraft:stone
+setblock 39 149 54 minecraft:stone
+setblock 39 149 55 minecraft:stone
+setblock 39 149 56 minecraft:stone
+setblock 39 149 57 minecraft:stone
+setblock 39 149 58 minecraft:stone
+setblock 39 149 59 minecraft:stone
+setblock 39 149 60 minecraft:stone
+setblock 39 149 61 minecraft:stone
+setblock 39 149 62 minecraft:stone
+setblock 39 149 63 minecraft:stone
+setblock 39 149 64 minecraft:stone
+setblock 40 149 16 minecraft:stone
+setblock 40 149 17 minecraft:stone
+setblock 40 149 18 minecraft:stone
+setblock 40 149 19 minecraft:stone
+setblock 40 149 20 minecraft:stone
+setblock 40 149 21 minecraft:stone
+setblock 40 149 22 minecraft:stone
+setblock 40 149 23 minecraft:stone
+setblock 40 149 24 minecraft:stone
+setblock 40 149 25 minecraft:stone
+setblock 40 149 26 minecraft:stone
+setblock 40 149 27 minecraft:stone
+setblock 40 149 28 minecraft:stone
+setblock 40 149 29 minecraft:stone
+setblock 40 149 30 minecraft:stone
+setblock 40 149 31 minecraft:stone
+setblock 40 149 32 minecraft:stone
+setblock 40 149 33 minecraft:stone
+setblock 40 149 34 minecraft:stone
+setblock 40 149 35 minecraft:stone
+setblock 40 149 36 minecraft:stone
+setblock 40 149 37 minecraft:stone
+setblock 40 149 38 minecraft:stone
+setblock 40 149 39 minecraft:stone
+setblock 40 149 40 minecraft:stone
+setblock 40 149 41 minecraft:stone
+setblock 40 149 42 minecraft:stone
+setblock 40 149 43 minecraft:stone
+setblock 40 149 44 minecraft:stone
+setblock 40 149 45 minecraft:stone
+setblock 40 149 46 minecraft:stone
+setblock 40 149 47 minecraft:stone
+setblock 40 149 48 minecraft:stone
+setblock 40 149 49 minecraft:stone
+setblock 40 149 50 minecraft:stone
+setblock 40 149 51 minecraft:stone
+setblock 40 149 52 minecraft:stone
+setblock 40 149 53 minecraft:stone
+setblock 40 149 54 minecraft:stone
+setblock 40 149 55 minecraft:stone
+setblock 40 149 56 minecraft:stone
+setblock 40 149 57 minecraft:stone
+setblock 40 149 58 minecraft:stone
+setblock 40 149 59 minecraft:stone
+setblock 40 149 60 minecraft:stone
+setblock 40 149 61 minecraft:stone
+setblock 40 149 62 minecraft:stone
+setblock 40 149 63 minecraft:stone
+setblock 40 149 64 minecraft:stone
+setblock 41 149 16 minecraft:stone
+setblock 41 149 17 minecraft:stone
+setblock 41 149 18 minecraft:stone
+setblock 41 149 19 minecraft:stone
+setblock 41 149 20 minecraft:stone
+setblock 41 149 21 minecraft:stone
+setblock 41 149 22 minecraft:stone
+setblock 41 149 23 minecraft:stone
+setblock 41 149 24 minecraft:stone
+setblock 41 149 25 minecraft:stone
+setblock 41 149 26 minecraft:stone
+setblock 41 149 27 minecraft:stone
+setblock 41 149 28 minecraft:stone
+setblock 41 149 29 minecraft:stone
+setblock 41 149 30 minecraft:stone
+setblock 41 149 31 minecraft:stone
+setblock 41 149 32 minecraft:stone
+setblock 41 149 33 minecraft:stone
+setblock 41 149 34 minecraft:stone
+setblock 41 149 35 minecraft:stone
+setblock 41 149 36 minecraft:stone
+setblock 41 149 37 minecraft:stone
+setblock 41 149 38 minecraft:stone
+setblock 41 149 39 minecraft:stone
+setblock 41 149 40 minecraft:stone
+setblock 41 149 41 minecraft:stone
+setblock 41 149 42 minecraft:stone
+setblock 41 149 43 minecraft:stone
+setblock 41 149 44 minecraft:stone
+setblock 41 149 45 minecraft:stone
+setblock 41 149 46 minecraft:stone
+setblock 41 149 47 minecraft:stone
+setblock 41 149 48 minecraft:stone
+setblock 41 149 49 minecraft:stone
+setblock 41 149 50 minecraft:stone
+setblock 41 149 51 minecraft:stone
+setblock 41 149 52 minecraft:stone
+setblock 41 149 53 minecraft:stone
+setblock 41 149 54 minecraft:stone
+setblock 41 149 55 minecraft:stone
+setblock 41 149 56 minecraft:stone
+setblock 41 149 57 minecraft:stone
+setblock 41 149 58 minecraft:stone
+setblock 41 149 59 minecraft:stone
+setblock 41 149 60 minecraft:stone
+setblock 41 149 61 minecraft:stone
+setblock 41 149 62 minecraft:stone
+setblock 41 149 63 minecraft:stone
+setblock 41 149 64 minecraft:stone
+setblock 42 149 16 minecraft:stone
+setblock 42 149 17 minecraft:stone
+setblock 42 149 18 minecraft:stone
+setblock 42 149 19 minecraft:stone
+setblock 42 149 20 minecraft:stone
+setblock 42 149 21 minecraft:stone
+setblock 42 149 22 minecraft:stone
+setblock 42 149 23 minecraft:stone
+setblock 42 149 24 minecraft:stone
+setblock 42 149 25 minecraft:stone
+setblock 42 149 26 minecraft:stone
+setblock 42 149 27 minecraft:stone
+setblock 42 149 28 minecraft:stone
+setblock 42 149 29 minecraft:stone
+setblock 42 149 30 minecraft:stone
+setblock 42 149 31 minecraft:stone
+setblock 42 149 32 minecraft:stone
+setblock 42 149 33 minecraft:stone
+setblock 42 149 34 minecraft:stone
+setblock 42 149 35 minecraft:stone
+setblock 42 149 36 minecraft:stone
+setblock 42 149 37 minecraft:stone
+setblock 42 149 38 minecraft:stone
+setblock 42 149 39 minecraft:stone
+setblock 42 149 40 minecraft:stone
+setblock 42 149 41 minecraft:stone
+setblock 42 149 42 minecraft:stone
+setblock 42 149 43 minecraft:stone
+setblock 42 149 44 minecraft:stone
+setblock 42 149 45 minecraft:stone
+setblock 42 149 46 minecraft:stone
+setblock 42 149 47 minecraft:stone
+setblock 42 149 48 minecraft:stone
+setblock 42 149 49 minecraft:stone
+setblock 42 149 50 minecraft:stone
+setblock 42 149 51 minecraft:stone
+setblock 42 149 52 minecraft:stone
+setblock 42 149 53 minecraft:stone
+setblock 42 149 54 minecraft:stone
+setblock 42 149 55 minecraft:stone
+setblock 42 149 56 minecraft:stone
+setblock 42 149 57 minecraft:stone
+setblock 42 149 58 minecraft:stone
+setblock 42 149 59 minecraft:stone
+setblock 42 149 60 minecraft:stone
+setblock 42 149 61 minecraft:stone
+setblock 42 149 62 minecraft:stone
+setblock 42 149 63 minecraft:stone
+setblock 42 149 64 minecraft:stone
+setblock 43 149 16 minecraft:stone
+setblock 43 149 17 minecraft:stone
+setblock 43 149 18 minecraft:stone
+setblock 43 149 19 minecraft:stone
+setblock 43 149 20 minecraft:stone
+setblock 43 149 21 minecraft:stone
+setblock 43 149 22 minecraft:stone
+setblock 43 149 23 minecraft:stone
+setblock 43 149 24 minecraft:stone
+setblock 43 149 25 minecraft:stone
+setblock 43 149 26 minecraft:stone
+setblock 43 149 27 minecraft:stone
+setblock 43 149 28 minecraft:stone
+setblock 43 149 29 minecraft:stone
+setblock 43 149 30 minecraft:stone
+setblock 43 149 31 minecraft:stone
+setblock 43 149 32 minecraft:stone
+setblock 43 149 33 minecraft:stone
+setblock 43 149 34 minecraft:stone
+setblock 43 149 35 minecraft:stone
+setblock 43 149 36 minecraft:stone
+setblock 43 149 37 minecraft:stone
+setblock 43 149 38 minecraft:stone
+setblock 43 149 39 minecraft:stone
+setblock 43 149 40 minecraft:stone
+setblock 43 149 41 minecraft:stone
+setblock 43 149 42 minecraft:stone
+setblock 43 149 43 minecraft:stone
+setblock 43 149 44 minecraft:stone
+setblock 43 149 45 minecraft:stone
+setblock 43 149 46 minecraft:stone
+setblock 43 149 47 minecraft:stone
+setblock 43 149 48 minecraft:stone
+setblock 43 149 49 minecraft:stone
+setblock 43 149 50 minecraft:stone
+setblock 43 149 51 minecraft:stone
+setblock 43 149 52 minecraft:stone
+setblock 43 149 53 minecraft:stone
+setblock 43 149 54 minecraft:stone
+setblock 43 149 55 minecraft:stone
+setblock 43 149 56 minecraft:stone
+setblock 43 149 57 minecraft:stone
+setblock 43 149 58 minecraft:stone
+setblock 43 149 59 minecraft:stone
+setblock 43 149 60 minecraft:stone
+setblock 43 149 61 minecraft:stone
+setblock 43 149 62 minecraft:stone
+setblock 43 149 63 minecraft:stone
+setblock 43 149 64 minecraft:stone
+setblock 44 149 16 minecraft:stone
+setblock 44 149 17 minecraft:stone
+setblock 44 149 18 minecraft:stone
+setblock 44 149 19 minecraft:stone
+setblock 44 149 20 minecraft:stone
+setblock 44 149 21 minecraft:stone
+setblock 44 149 22 minecraft:stone
+setblock 44 149 23 minecraft:stone
+setblock 44 149 24 minecraft:stone
+setblock 44 149 25 minecraft:stone
+setblock 44 149 26 minecraft:stone
+setblock 44 149 27 minecraft:stone
+setblock 44 149 28 minecraft:stone
+setblock 44 149 29 minecraft:stone
+setblock 44 149 30 minecraft:stone
+setblock 44 149 31 minecraft:stone
+setblock 44 149 32 minecraft:stone
+setblock 44 149 33 minecraft:stone
+setblock 44 149 34 minecraft:stone
+setblock 44 149 35 minecraft:stone
+setblock 44 149 36 minecraft:stone
+setblock 44 149 37 minecraft:stone
+setblock 44 149 38 minecraft:stone
+setblock 44 149 39 minecraft:stone
+setblock 44 149 40 minecraft:stone
+setblock 44 149 41 minecraft:stone
+setblock 44 149 42 minecraft:stone
+setblock 44 149 43 minecraft:stone
+setblock 44 149 44 minecraft:stone
+setblock 44 149 45 minecraft:stone
+setblock 44 149 46 minecraft:stone
+setblock 44 149 47 minecraft:stone
+setblock 44 149 48 minecraft:stone
+setblock 44 149 49 minecraft:stone
+setblock 44 149 50 minecraft:stone
+setblock 44 149 51 minecraft:stone
+setblock 44 149 52 minecraft:stone
+setblock 44 149 53 minecraft:stone
+setblock 44 149 54 minecraft:stone
+setblock 44 149 55 minecraft:stone
+setblock 44 149 56 minecraft:stone
+setblock 44 149 57 minecraft:stone
+setblock 44 149 58 minecraft:stone
+setblock 44 149 59 minecraft:stone
+setblock 44 149 60 minecraft:stone
+setblock 44 149 61 minecraft:stone
+setblock 44 149 62 minecraft:stone
+setblock 44 149 63 minecraft:stone
+setblock 44 149 64 minecraft:stone
+setblock 45 149 16 minecraft:stone
+setblock 45 149 17 minecraft:stone
+setblock 45 149 18 minecraft:stone
+setblock 45 149 19 minecraft:stone
+setblock 45 149 20 minecraft:stone
+setblock 45 149 21 minecraft:stone
+setblock 45 149 22 minecraft:stone
+setblock 45 149 23 minecraft:stone
+setblock 45 149 24 minecraft:stone
+setblock 45 149 25 minecraft:stone
+setblock 45 149 26 minecraft:stone
+setblock 45 149 27 minecraft:stone
+setblock 45 149 28 minecraft:stone
+setblock 45 149 29 minecraft:stone
+setblock 45 149 30 minecraft:stone
+setblock 45 149 31 minecraft:stone
+setblock 45 149 32 minecraft:stone
+setblock 45 149 33 minecraft:stone
+setblock 45 149 34 minecraft:stone
+setblock 45 149 35 minecraft:stone
+setblock 45 149 36 minecraft:stone
+setblock 45 149 37 minecraft:stone
+setblock 45 149 38 minecraft:stone
+setblock 45 149 39 minecraft:stone
+setblock 45 149 40 minecraft:stone
+setblock 45 149 41 minecraft:stone
+setblock 45 149 42 minecraft:stone
+setblock 45 149 43 minecraft:stone
+setblock 45 149 44 minecraft:stone
+setblock 45 149 45 minecraft:stone
+setblock 45 149 46 minecraft:stone
+setblock 45 149 47 minecraft:stone
+setblock 45 149 48 minecraft:stone
+setblock 45 149 49 minecraft:stone
+setblock 45 149 50 minecraft:stone
+setblock 45 149 51 minecraft:stone
+setblock 45 149 52 minecraft:stone
+setblock 45 149 53 minecraft:stone
+setblock 45 149 54 minecraft:stone
+setblock 45 149 55 minecraft:stone
+setblock 45 149 56 minecraft:stone
+setblock 45 149 57 minecraft:stone
+setblock 45 149 58 minecraft:stone
+setblock 45 149 59 minecraft:stone
+setblock 45 149 60 minecraft:stone
+setblock 45 149 61 minecraft:stone
+setblock 45 149 62 minecraft:stone
+setblock 45 149 63 minecraft:stone
+setblock 45 149 64 minecraft:stone
+setblock 46 149 16 minecraft:stone
+setblock 46 149 17 minecraft:stone
+setblock 46 149 18 minecraft:stone
+setblock 46 149 19 minecraft:stone
+setblock 46 149 20 minecraft:stone
+setblock 46 149 21 minecraft:stone
+setblock 46 149 22 minecraft:stone
+setblock 46 149 23 minecraft:stone
+setblock 46 149 24 minecraft:stone
+setblock 46 149 25 minecraft:stone
+setblock 46 149 26 minecraft:stone
+setblock 46 149 27 minecraft:stone
+setblock 46 149 28 minecraft:stone
+setblock 46 149 29 minecraft:stone
+setblock 46 149 30 minecraft:stone
+setblock 46 149 31 minecraft:stone
+setblock 46 149 32 minecraft:stone
+setblock 46 149 33 minecraft:stone
+setblock 46 149 34 minecraft:stone
+setblock 46 149 35 minecraft:stone
+setblock 46 149 36 minecraft:stone
+setblock 46 149 37 minecraft:stone
+setblock 46 149 38 minecraft:stone
+setblock 46 149 39 minecraft:stone
+setblock 46 149 40 minecraft:stone
+setblock 46 149 41 minecraft:stone
+setblock 46 149 42 minecraft:stone
+setblock 46 149 43 minecraft:stone
+setblock 46 149 44 minecraft:stone
+setblock 46 149 45 minecraft:stone
+setblock 46 149 46 minecraft:stone
+setblock 46 149 47 minecraft:stone
+setblock 46 149 48 minecraft:stone
+setblock 46 149 49 minecraft:stone
+setblock 46 149 50 minecraft:stone
+setblock 46 149 51 minecraft:stone
+setblock 46 149 52 minecraft:stone
+setblock 46 149 53 minecraft:stone
+setblock 46 149 54 minecraft:stone
+setblock 46 149 55 minecraft:stone
+setblock 46 149 56 minecraft:stone
+setblock 46 149 57 minecraft:stone
+setblock 46 149 58 minecraft:stone
+setblock 46 149 59 minecraft:stone
+setblock 46 149 60 minecraft:stone
+setblock 46 149 61 minecraft:stone
+setblock 46 149 62 minecraft:stone
+setblock 46 149 63 minecraft:stone
+setblock 46 149 64 minecraft:stone
+setblock 47 149 16 minecraft:stone
+setblock 47 149 17 minecraft:stone
+setblock 47 149 18 minecraft:stone
+setblock 47 149 19 minecraft:stone
+setblock 47 149 20 minecraft:stone
+setblock 47 149 21 minecraft:stone
+setblock 47 149 22 minecraft:stone
+setblock 47 149 23 minecraft:stone
+setblock 47 149 24 minecraft:stone
+setblock 47 149 25 minecraft:stone
+setblock 47 149 26 minecraft:stone
+setblock 47 149 27 minecraft:stone
+setblock 47 149 28 minecraft:stone
+setblock 47 149 29 minecraft:stone
+setblock 47 149 30 minecraft:stone
+setblock 47 149 31 minecraft:stone
+setblock 47 149 32 minecraft:stone
+setblock 47 149 33 minecraft:stone
+setblock 47 149 34 minecraft:stone
+setblock 47 149 35 minecraft:stone
+setblock 47 149 36 minecraft:stone
+setblock 47 149 37 minecraft:stone
+setblock 47 149 38 minecraft:stone
+setblock 47 149 39 minecraft:stone
+setblock 47 149 40 minecraft:stone
+setblock 47 149 41 minecraft:stone
+setblock 47 149 42 minecraft:stone
+setblock 47 149 43 minecraft:stone
+setblock 47 149 44 minecraft:stone
+setblock 47 149 45 minecraft:stone
+setblock 47 149 46 minecraft:stone
+setblock 47 149 47 minecraft:stone
+setblock 47 149 48 minecraft:stone
+setblock 47 149 49 minecraft:stone
+setblock 47 149 50 minecraft:stone
+setblock 47 149 51 minecraft:stone
+setblock 47 149 52 minecraft:stone
+setblock 47 149 53 minecraft:stone
+setblock 47 149 54 minecraft:stone
+setblock 47 149 55 minecraft:stone
+setblock 47 149 56 minecraft:stone
+setblock 47 149 57 minecraft:stone
+setblock 47 149 58 minecraft:stone
+setblock 47 149 59 minecraft:stone
+setblock 47 149 60 minecraft:stone
+setblock 47 149 61 minecraft:stone
+setblock 47 149 62 minecraft:stone
+setblock 47 149 63 minecraft:stone
+setblock 47 149 64 minecraft:stone
+setblock 48 149 16 minecraft:stone
+setblock 48 149 17 minecraft:stone
+setblock 48 149 18 minecraft:stone
+setblock 48 149 19 minecraft:stone
+setblock 48 149 20 minecraft:stone
+setblock 48 149 21 minecraft:stone
+setblock 48 149 22 minecraft:stone
+setblock 48 149 23 minecraft:stone
+setblock 48 149 24 minecraft:stone
+setblock 48 149 25 minecraft:stone
+setblock 48 149 26 minecraft:stone
+setblock 48 149 27 minecraft:stone
+setblock 48 149 28 minecraft:stone
+setblock 48 149 29 minecraft:stone
+setblock 48 149 30 minecraft:stone
+setblock 48 149 31 minecraft:stone
+setblock 48 149 32 minecraft:stone
+setblock 48 149 33 minecraft:stone
+setblock 48 149 34 minecraft:stone
+setblock 48 149 35 minecraft:stone
+setblock 48 149 36 minecraft:stone
+setblock 48 149 37 minecraft:stone
+setblock 48 149 38 minecraft:stone
+setblock 48 149 39 minecraft:stone
+setblock 48 149 40 minecraft:stone
+setblock 48 149 41 minecraft:stone
+setblock 48 149 42 minecraft:stone
+setblock 48 149 43 minecraft:stone
+setblock 48 149 44 minecraft:stone
+setblock 48 149 45 minecraft:stone
+setblock 48 149 46 minecraft:stone
+setblock 48 149 47 minecraft:stone
+setblock 48 149 48 minecraft:stone
+setblock 48 149 49 minecraft:stone
+setblock 48 149 50 minecraft:stone
+setblock 48 149 51 minecraft:stone
+setblock 48 149 52 minecraft:stone
+setblock 48 149 53 minecraft:stone
+setblock 48 149 54 minecraft:stone
+setblock 48 149 55 minecraft:stone
+setblock 48 149 56 minecraft:stone
+setblock 48 149 57 minecraft:stone
+setblock 48 149 58 minecraft:stone
+setblock 48 149 59 minecraft:stone
+setblock 48 149 60 minecraft:stone
+setblock 48 149 61 minecraft:stone
+setblock 48 149 62 minecraft:stone
+setblock 48 149 63 minecraft:stone
+setblock 48 149 64 minecraft:stone
+setblock 0 150 64 minecraft:stone
+setblock 0 151 64 minecraft:stone
+setblock 0 152 64 minecraft:stone
+setblock 0 153 64 minecraft:stone
+setblock 0 154 64 minecraft:stone
+setblock 0 155 64 minecraft:stone
+setblock 0 156 64 minecraft:stone
+setblock 0 157 64 minecraft:stone
+setblock 0 158 64 minecraft:stone
+setblock 0 159 64 minecraft:stone
+setblock 0 160 64 minecraft:stone
+setblock 1 150 64 minecraft:stone
+setblock 1 151 64 minecraft:stone
+setblock 1 152 64 minecraft:stone
+setblock 1 153 64 minecraft:stone
+setblock 1 154 64 minecraft:stone
+setblock 1 155 64 minecraft:stone
+setblock 1 156 64 minecraft:stone
+setblock 1 157 64 minecraft:stone
+setblock 1 158 64 minecraft:stone
+setblock 1 159 64 minecraft:stone
+setblock 1 160 64 minecraft:stone
+setblock 2 150 64 minecraft:stone
+setblock 2 151 64 minecraft:stone
+setblock 2 152 64 minecraft:stone
+setblock 2 153 64 minecraft:stone
+setblock 2 154 64 minecraft:stone
+setblock 2 155 64 minecraft:stone
+setblock 2 156 64 minecraft:stone
+setblock 2 157 64 minecraft:stone
+setblock 2 158 64 minecraft:stone
+setblock 2 159 64 minecraft:stone
+setblock 2 160 64 minecraft:stone
+setblock 3 150 64 minecraft:stone
+setblock 3 151 64 minecraft:stone
+setblock 3 152 64 minecraft:stone
+setblock 3 153 64 minecraft:stone
+setblock 3 154 64 minecraft:stone
+setblock 3 155 64 minecraft:stone
+setblock 3 156 64 minecraft:stone
+setblock 3 157 64 minecraft:stone
+setblock 3 158 64 minecraft:stone
+setblock 3 159 64 minecraft:stone
+setblock 3 160 64 minecraft:stone
+setblock 4 150 64 minecraft:stone
+setblock 4 151 64 minecraft:stone
+setblock 4 152 64 minecraft:stone
+setblock 4 153 64 minecraft:stone
+setblock 4 154 64 minecraft:stone
+setblock 4 155 64 minecraft:stone
+setblock 4 156 64 minecraft:stone
+setblock 4 157 64 minecraft:stone
+setblock 4 158 64 minecraft:stone
+setblock 4 159 64 minecraft:stone
+setblock 4 160 64 minecraft:stone
+setblock 5 150 64 minecraft:stone
+setblock 5 151 64 minecraft:stone
+setblock 5 152 64 minecraft:stone
+setblock 5 153 64 minecraft:stone
+setblock 5 154 64 minecraft:stone
+setblock 5 155 64 minecraft:stone
+setblock 5 156 64 minecraft:stone
+setblock 5 157 64 minecraft:stone
+setblock 5 158 64 minecraft:stone
+setblock 5 159 64 minecraft:stone
+setblock 5 160 64 minecraft:stone
+setblock 6 150 64 minecraft:stone
+setblock 6 151 64 minecraft:stone
+setblock 6 152 64 minecraft:stone
+setblock 6 153 64 minecraft:stone
+setblock 6 154 64 minecraft:stone
+setblock 6 155 64 minecraft:stone
+setblock 6 156 64 minecraft:stone
+setblock 6 157 64 minecraft:stone
+setblock 6 158 64 minecraft:stone
+setblock 6 159 64 minecraft:stone
+setblock 6 160 64 minecraft:stone
+setblock 7 150 64 minecraft:stone
+setblock 7 151 64 minecraft:stone
+setblock 7 152 64 minecraft:stone
+setblock 7 153 64 minecraft:stone
+setblock 7 154 64 minecraft:stone
+setblock 7 155 64 minecraft:stone
+setblock 7 156 64 minecraft:stone
+setblock 7 157 64 minecraft:stone
+setblock 7 158 64 minecraft:stone
+setblock 7 159 64 minecraft:stone
+setblock 7 160 64 minecraft:stone
+setblock 8 150 64 minecraft:stone
+setblock 8 151 64 minecraft:stone
+setblock 8 152 64 minecraft:stone
+setblock 8 153 64 minecraft:stone
+setblock 8 154 64 minecraft:stone
+setblock 8 155 64 minecraft:stone
+setblock 8 156 64 minecraft:stone
+setblock 8 157 64 minecraft:stone
+setblock 8 158 64 minecraft:stone
+setblock 8 159 64 minecraft:stone
+setblock 8 160 64 minecraft:stone
+setblock 9 150 64 minecraft:stone
+setblock 9 151 64 minecraft:stone
+setblock 9 152 64 minecraft:stone
+setblock 9 153 64 minecraft:stone
+setblock 9 154 64 minecraft:stone
+setblock 9 155 64 minecraft:stone
+setblock 9 156 64 minecraft:stone
+setblock 9 157 64 minecraft:stone
+setblock 9 158 64 minecraft:stone
+setblock 9 159 64 minecraft:stone
+setblock 9 160 64 minecraft:stone
+setblock 10 150 64 minecraft:stone
+setblock 10 151 64 minecraft:stone
+setblock 10 152 64 minecraft:stone
+setblock 10 153 64 minecraft:stone
+setblock 10 154 64 minecraft:stone
+setblock 10 155 64 minecraft:stone
+setblock 10 156 64 minecraft:stone
+setblock 10 157 64 minecraft:stone
+setblock 10 158 64 minecraft:stone
+setblock 10 159 64 minecraft:stone
+setblock 10 160 64 minecraft:stone
+setblock 11 150 64 minecraft:stone
+setblock 11 151 64 minecraft:stone
+setblock 11 152 64 minecraft:stone
+setblock 11 153 64 minecraft:stone
+setblock 11 154 64 minecraft:stone
+setblock 11 155 64 minecraft:stone
+setblock 11 156 64 minecraft:stone
+setblock 11 157 64 minecraft:stone
+setblock 11 158 64 minecraft:stone
+setblock 11 159 64 minecraft:stone
+setblock 11 160 64 minecraft:stone
+setblock 12 150 64 minecraft:stone
+setblock 12 151 64 minecraft:stone
+setblock 12 152 64 minecraft:stone
+setblock 12 153 64 minecraft:stone
+setblock 12 154 64 minecraft:stone
+setblock 12 155 64 minecraft:stone
+setblock 12 156 64 minecraft:stone
+setblock 12 157 64 minecraft:stone
+setblock 12 158 64 minecraft:stone
+setblock 12 159 64 minecraft:stone
+setblock 12 160 64 minecraft:stone
+setblock 13 150 64 minecraft:stone
+setblock 13 151 64 minecraft:stone
+setblock 13 152 64 minecraft:stone
+setblock 13 153 64 minecraft:stone
+setblock 13 154 64 minecraft:stone
+setblock 13 155 64 minecraft:stone
+setblock 13 156 64 minecraft:stone
+setblock 13 157 64 minecraft:stone
+setblock 13 158 64 minecraft:stone
+setblock 13 159 64 minecraft:stone
+setblock 13 160 64 minecraft:stone
+setblock 14 150 64 minecraft:stone
+setblock 14 151 64 minecraft:stone
+setblock 14 152 64 minecraft:stone
+setblock 14 153 64 minecraft:stone
+setblock 14 154 64 minecraft:stone
+setblock 14 155 64 minecraft:stone
+setblock 14 156 64 minecraft:stone
+setblock 14 157 64 minecraft:stone
+setblock 14 158 64 minecraft:stone
+setblock 14 159 64 minecraft:stone
+setblock 14 160 64 minecraft:stone
+setblock 15 150 64 minecraft:stone
+setblock 15 151 64 minecraft:stone
+setblock 15 152 64 minecraft:stone
+setblock 15 153 64 minecraft:stone
+setblock 15 154 64 minecraft:stone
+setblock 15 155 64 minecraft:stone
+setblock 15 156 64 minecraft:stone
+setblock 15 157 64 minecraft:stone
+setblock 15 158 64 minecraft:stone
+setblock 15 159 64 minecraft:stone
+setblock 15 160 64 minecraft:stone
+setblock 16 150 64 minecraft:stone
+setblock 16 151 64 minecraft:stone
+setblock 16 152 64 minecraft:stone
+setblock 16 153 64 minecraft:stone
+setblock 16 154 64 minecraft:stone
+setblock 16 155 64 minecraft:stone
+setblock 16 156 64 minecraft:stone
+setblock 16 157 64 minecraft:stone
+setblock 16 158 64 minecraft:stone
+setblock 16 159 64 minecraft:stone
+setblock 16 160 64 minecraft:stone
+setblock 17 150 64 minecraft:stone
+setblock 17 151 64 minecraft:stone
+setblock 17 152 64 minecraft:stone
+setblock 17 153 64 minecraft:stone
+setblock 17 154 64 minecraft:stone
+setblock 17 155 64 minecraft:stone
+setblock 17 156 64 minecraft:stone
+setblock 17 157 64 minecraft:stone
+setblock 17 158 64 minecraft:stone
+setblock 17 159 64 minecraft:stone
+setblock 17 160 64 minecraft:stone
+setblock 18 150 64 minecraft:stone
+setblock 18 151 64 minecraft:stone
+setblock 18 152 64 minecraft:stone
+setblock 18 153 64 minecraft:stone
+setblock 18 154 64 minecraft:stone
+setblock 18 155 64 minecraft:stone
+setblock 18 156 64 minecraft:stone
+setblock 18 157 64 minecraft:stone
+setblock 18 158 64 minecraft:stone
+setblock 18 159 64 minecraft:stone
+setblock 18 160 64 minecraft:stone
+setblock 19 150 64 minecraft:stone
+setblock 19 151 64 minecraft:stone
+setblock 19 152 64 minecraft:stone
+setblock 19 153 64 minecraft:stone
+setblock 19 154 64 minecraft:stone
+setblock 19 155 64 minecraft:stone
+setblock 19 156 64 minecraft:stone
+setblock 19 157 64 minecraft:stone
+setblock 19 158 64 minecraft:stone
+setblock 19 159 64 minecraft:stone
+setblock 19 160 64 minecraft:stone
+setblock 20 150 64 minecraft:stone
+setblock 20 151 64 minecraft:stone
+setblock 20 152 64 minecraft:stone
+setblock 20 153 64 minecraft:stone
+setblock 20 154 64 minecraft:stone
+setblock 20 155 64 minecraft:stone
+setblock 20 156 64 minecraft:stone
+setblock 20 157 64 minecraft:stone
+setblock 20 158 64 minecraft:stone
+setblock 20 159 64 minecraft:stone
+setblock 20 160 64 minecraft:stone
+setblock 21 150 64 minecraft:stone
+setblock 21 151 64 minecraft:stone
+setblock 21 152 64 minecraft:stone
+setblock 21 153 64 minecraft:stone
+setblock 21 154 64 minecraft:stone
+setblock 21 155 64 minecraft:stone
+setblock 21 156 64 minecraft:stone
+setblock 21 157 64 minecraft:stone
+setblock 21 158 64 minecraft:stone
+setblock 21 159 64 minecraft:stone
+setblock 21 160 64 minecraft:stone
+setblock 22 150 64 minecraft:stone
+setblock 22 151 64 minecraft:stone
+setblock 22 152 64 minecraft:stone
+setblock 22 153 64 minecraft:stone
+setblock 22 154 64 minecraft:stone
+setblock 22 155 64 minecraft:stone
+setblock 22 156 64 minecraft:stone
+setblock 22 157 64 minecraft:stone
+setblock 22 158 64 minecraft:stone
+setblock 22 159 64 minecraft:stone
+setblock 22 160 64 minecraft:stone
+setblock 23 150 64 minecraft:stone
+setblock 23 151 64 minecraft:stone
+setblock 23 152 64 minecraft:stone
+setblock 23 153 64 minecraft:stone
+setblock 23 154 64 minecraft:stone
+setblock 23 155 64 minecraft:stone
+setblock 23 156 64 minecraft:stone
+setblock 23 157 64 minecraft:stone
+setblock 23 158 64 minecraft:stone
+setblock 23 159 64 minecraft:stone
+setblock 23 160 64 minecraft:stone
+setblock 24 150 64 minecraft:stone
+setblock 24 151 64 minecraft:stone
+setblock 24 152 64 minecraft:stone
+setblock 24 153 64 minecraft:stone
+setblock 24 154 64 minecraft:stone
+setblock 24 155 64 minecraft:stone
+setblock 24 156 64 minecraft:stone
+setblock 24 157 64 minecraft:stone
+setblock 24 158 64 minecraft:stone
+setblock 24 159 64 minecraft:stone
+setblock 24 160 64 minecraft:stone
+setblock 25 150 64 minecraft:stone
+setblock 25 151 64 minecraft:stone
+setblock 25 152 64 minecraft:stone
+setblock 25 153 64 minecraft:stone
+setblock 25 154 64 minecraft:stone
+setblock 25 155 64 minecraft:stone
+setblock 25 156 64 minecraft:stone
+setblock 25 157 64 minecraft:stone
+setblock 25 158 64 minecraft:stone
+setblock 25 159 64 minecraft:stone
+setblock 25 160 64 minecraft:stone
+setblock 26 150 64 minecraft:stone
+setblock 26 151 64 minecraft:stone
+setblock 26 152 64 minecraft:stone
+setblock 26 153 64 minecraft:stone
+setblock 26 154 64 minecraft:stone
+setblock 26 155 64 minecraft:stone
+setblock 26 156 64 minecraft:stone
+setblock 26 157 64 minecraft:stone
+setblock 26 158 64 minecraft:stone
+setblock 26 159 64 minecraft:stone
+setblock 26 160 64 minecraft:stone
+setblock 27 150 64 minecraft:stone
+setblock 27 151 64 minecraft:stone
+setblock 27 152 64 minecraft:stone
+setblock 27 153 64 minecraft:stone
+setblock 27 154 64 minecraft:stone
+setblock 27 155 64 minecraft:stone
+setblock 27 156 64 minecraft:stone
+setblock 27 157 64 minecraft:stone
+setblock 27 158 64 minecraft:stone
+setblock 27 159 64 minecraft:stone
+setblock 27 160 64 minecraft:stone
+setblock 28 150 64 minecraft:stone
+setblock 28 151 64 minecraft:stone
+setblock 28 152 64 minecraft:stone
+setblock 28 153 64 minecraft:stone
+setblock 28 154 64 minecraft:stone
+setblock 28 155 64 minecraft:stone
+setblock 28 156 64 minecraft:stone
+setblock 28 157 64 minecraft:stone
+setblock 28 158 64 minecraft:stone
+setblock 28 159 64 minecraft:stone
+setblock 28 160 64 minecraft:stone
+setblock 29 150 64 minecraft:stone
+setblock 29 151 64 minecraft:stone
+setblock 29 152 64 minecraft:stone
+setblock 29 153 64 minecraft:stone
+setblock 29 154 64 minecraft:stone
+setblock 29 155 64 minecraft:stone
+setblock 29 156 64 minecraft:stone
+setblock 29 157 64 minecraft:stone
+setblock 29 158 64 minecraft:stone
+setblock 29 159 64 minecraft:stone
+setblock 29 160 64 minecraft:stone
+setblock 30 150 64 minecraft:stone
+setblock 30 151 64 minecraft:stone
+setblock 30 152 64 minecraft:stone
+setblock 30 153 64 minecraft:stone
+setblock 30 154 64 minecraft:stone
+setblock 30 155 64 minecraft:stone
+setblock 30 156 64 minecraft:stone
+setblock 30 157 64 minecraft:stone
+setblock 30 158 64 minecraft:stone
+setblock 30 159 64 minecraft:stone
+setblock 30 160 64 minecraft:stone
+setblock 31 150 64 minecraft:stone
+setblock 31 151 64 minecraft:stone
+setblock 31 152 64 minecraft:stone
+setblock 31 153 64 minecraft:stone
+setblock 31 154 64 minecraft:stone
+setblock 31 155 64 minecraft:stone
+setblock 31 156 64 minecraft:stone
+setblock 31 157 64 minecraft:stone
+setblock 31 158 64 minecraft:stone
+setblock 31 159 64 minecraft:stone
+setblock 31 160 64 minecraft:stone
+setblock 32 150 64 minecraft:stone
+setblock 32 151 64 minecraft:stone
+setblock 32 152 64 minecraft:stone
+setblock 32 153 64 minecraft:stone
+setblock 32 154 64 minecraft:stone
+setblock 32 155 64 minecraft:stone
+setblock 32 156 64 minecraft:stone
+setblock 32 157 64 minecraft:stone
+setblock 32 158 64 minecraft:stone
+setblock 32 159 64 minecraft:stone
+setblock 32 160 64 minecraft:stone
+setblock 33 150 64 minecraft:stone
+setblock 33 151 64 minecraft:stone
+setblock 33 152 64 minecraft:stone
+setblock 33 153 64 minecraft:stone
+setblock 33 154 64 minecraft:stone
+setblock 33 155 64 minecraft:stone
+setblock 33 156 64 minecraft:stone
+setblock 33 157 64 minecraft:stone
+setblock 33 158 64 minecraft:stone
+setblock 33 159 64 minecraft:stone
+setblock 33 160 64 minecraft:stone
+setblock 34 150 64 minecraft:stone
+setblock 34 151 64 minecraft:stone
+setblock 34 152 64 minecraft:stone
+setblock 34 153 64 minecraft:stone
+setblock 34 154 64 minecraft:stone
+setblock 34 155 64 minecraft:stone
+setblock 34 156 64 minecraft:stone
+setblock 34 157 64 minecraft:stone
+setblock 34 158 64 minecraft:stone
+setblock 34 159 64 minecraft:stone
+setblock 34 160 64 minecraft:stone
+setblock 35 150 64 minecraft:stone
+setblock 35 151 64 minecraft:stone
+setblock 35 152 64 minecraft:stone
+setblock 35 153 64 minecraft:stone
+setblock 35 154 64 minecraft:stone
+setblock 35 155 64 minecraft:stone
+setblock 35 156 64 minecraft:stone
+setblock 35 157 64 minecraft:stone
+setblock 35 158 64 minecraft:stone
+setblock 35 159 64 minecraft:stone
+setblock 35 160 64 minecraft:stone
+setblock 36 150 64 minecraft:stone
+setblock 36 151 64 minecraft:stone
+setblock 36 152 64 minecraft:stone
+setblock 36 153 64 minecraft:stone
+setblock 36 154 64 minecraft:stone
+setblock 36 155 64 minecraft:stone
+setblock 36 156 64 minecraft:stone
+setblock 36 157 64 minecraft:stone
+setblock 36 158 64 minecraft:stone
+setblock 36 159 64 minecraft:stone
+setblock 36 160 64 minecraft:stone
+setblock 37 150 64 minecraft:stone
+setblock 37 151 64 minecraft:stone
+setblock 37 152 64 minecraft:stone
+setblock 37 153 64 minecraft:stone
+setblock 37 154 64 minecraft:stone
+setblock 37 155 64 minecraft:stone
+setblock 37 156 64 minecraft:stone
+setblock 37 157 64 minecraft:stone
+setblock 37 158 64 minecraft:stone
+setblock 37 159 64 minecraft:stone
+setblock 37 160 64 minecraft:stone
+setblock 38 150 64 minecraft:stone
+setblock 38 151 64 minecraft:stone
+setblock 38 152 64 minecraft:stone
+setblock 38 153 64 minecraft:stone
+setblock 38 154 64 minecraft:stone
+setblock 38 155 64 minecraft:stone
+setblock 38 156 64 minecraft:stone
+setblock 38 157 64 minecraft:stone
+setblock 38 158 64 minecraft:stone
+setblock 38 159 64 minecraft:stone
+setblock 38 160 64 minecraft:stone
+setblock 39 150 64 minecraft:stone
+setblock 39 151 64 minecraft:stone
+setblock 39 152 64 minecraft:stone
+setblock 39 153 64 minecraft:stone
+setblock 39 154 64 minecraft:stone
+setblock 39 155 64 minecraft:stone
+setblock 39 156 64 minecraft:stone
+setblock 39 157 64 minecraft:stone
+setblock 39 158 64 minecraft:stone
+setblock 39 159 64 minecraft:stone
+setblock 39 160 64 minecraft:stone
+setblock 40 150 64 minecraft:stone
+setblock 40 151 64 minecraft:stone
+setblock 40 152 64 minecraft:stone
+setblock 40 153 64 minecraft:stone
+setblock 40 154 64 minecraft:stone
+setblock 40 155 64 minecraft:stone
+setblock 40 156 64 minecraft:stone
+setblock 40 157 64 minecraft:stone
+setblock 40 158 64 minecraft:stone
+setblock 40 159 64 minecraft:stone
+setblock 40 160 64 minecraft:stone
+setblock 41 150 64 minecraft:stone
+setblock 41 151 64 minecraft:stone
+setblock 41 152 64 minecraft:stone
+setblock 41 153 64 minecraft:stone
+setblock 41 154 64 minecraft:stone
+setblock 41 155 64 minecraft:stone
+setblock 41 156 64 minecraft:stone
+setblock 41 157 64 minecraft:stone
+setblock 41 158 64 minecraft:stone
+setblock 41 159 64 minecraft:stone
+setblock 41 160 64 minecraft:stone
+setblock 42 150 64 minecraft:stone
+setblock 42 151 64 minecraft:stone
+setblock 42 152 64 minecraft:stone
+setblock 42 153 64 minecraft:stone
+setblock 42 154 64 minecraft:stone
+setblock 42 155 64 minecraft:stone
+setblock 42 156 64 minecraft:stone
+setblock 42 157 64 minecraft:stone
+setblock 42 158 64 minecraft:stone
+setblock 42 159 64 minecraft:stone
+setblock 42 160 64 minecraft:stone
+setblock 43 150 64 minecraft:stone
+setblock 43 151 64 minecraft:stone
+setblock 43 152 64 minecraft:stone
+setblock 43 153 64 minecraft:stone
+setblock 43 154 64 minecraft:stone
+setblock 43 155 64 minecraft:stone
+setblock 43 156 64 minecraft:stone
+setblock 43 157 64 minecraft:stone
+setblock 43 158 64 minecraft:stone
+setblock 43 159 64 minecraft:stone
+setblock 43 160 64 minecraft:stone
+setblock 44 150 64 minecraft:stone
+setblock 44 151 64 minecraft:stone
+setblock 44 152 64 minecraft:stone
+setblock 44 153 64 minecraft:stone
+setblock 44 154 64 minecraft:stone
+setblock 44 155 64 minecraft:stone
+setblock 44 156 64 minecraft:stone
+setblock 44 157 64 minecraft:stone
+setblock 44 158 64 minecraft:stone
+setblock 44 159 64 minecraft:stone
+setblock 44 160 64 minecraft:stone
+setblock 45 150 64 minecraft:stone
+setblock 45 151 64 minecraft:stone
+setblock 45 152 64 minecraft:stone
+setblock 45 153 64 minecraft:stone
+setblock 45 154 64 minecraft:stone
+setblock 45 155 64 minecraft:stone
+setblock 45 156 64 minecraft:stone
+setblock 45 157 64 minecraft:stone
+setblock 45 158 64 minecraft:stone
+setblock 45 159 64 minecraft:stone
+setblock 45 160 64 minecraft:stone
+setblock 46 150 64 minecraft:stone
+setblock 46 151 64 minecraft:stone
+setblock 46 152 64 minecraft:stone
+setblock 46 153 64 minecraft:stone
+setblock 46 154 64 minecraft:stone
+setblock 46 155 64 minecraft:stone
+setblock 46 156 64 minecraft:stone
+setblock 46 157 64 minecraft:stone
+setblock 46 158 64 minecraft:stone
+setblock 46 159 64 minecraft:stone
+setblock 46 160 64 minecraft:stone
+setblock 47 150 64 minecraft:stone
+setblock 47 151 64 minecraft:stone
+setblock 47 152 64 minecraft:stone
+setblock 47 153 64 minecraft:stone
+setblock 47 154 64 minecraft:stone
+setblock 47 155 64 minecraft:stone
+setblock 47 156 64 minecraft:stone
+setblock 47 157 64 minecraft:stone
+setblock 47 158 64 minecraft:stone
+setblock 47 159 64 minecraft:stone
+setblock 47 160 64 minecraft:stone
+setblock 48 150 64 minecraft:stone
+setblock 48 151 64 minecraft:stone
+setblock 48 152 64 minecraft:stone
+setblock 48 153 64 minecraft:stone
+setblock 48 154 64 minecraft:stone
+setblock 48 155 64 minecraft:stone
+setblock 48 156 64 minecraft:stone
+setblock 48 157 64 minecraft:stone
+setblock 48 158 64 minecraft:stone
+setblock 48 159 64 minecraft:stone
+setblock 48 160 64 minecraft:stone
+summon ItemFrame 1 151 63 {TileX:1,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 1 153 63 {TileX:1,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 1 155 63 {TileX:1,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 1 157 63 {TileX:1,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 1 159 63 {TileX:1,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 2 151 63 {TileX:2,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 2 153 63 {TileX:2,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 2 155 63 {TileX:2,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 2 157 63 {TileX:2,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 2 159 63 {TileX:2,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 3 151 63 {TileX:3,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 3 153 63 {TileX:3,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 3 155 63 {TileX:3,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 3 157 63 {TileX:3,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 3 159 63 {TileX:3,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 4 151 63 {TileX:4,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 4 153 63 {TileX:4,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 4 155 63 {TileX:4,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 4 157 63 {TileX:4,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 4 159 63 {TileX:4,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 5 151 63 {TileX:5,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 5 153 63 {TileX:5,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 5 155 63 {TileX:5,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 5 157 63 {TileX:5,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 5 159 63 {TileX:5,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 6 151 63 {TileX:6,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 6 153 63 {TileX:6,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 6 155 63 {TileX:6,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 6 157 63 {TileX:6,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 6 159 63 {TileX:6,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 7 151 63 {TileX:7,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 7 153 63 {TileX:7,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 7 155 63 {TileX:7,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 7 157 63 {TileX:7,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 7 159 63 {TileX:7,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 8 151 63 {TileX:8,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 8 153 63 {TileX:8,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 8 155 63 {TileX:8,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 8 157 63 {TileX:8,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 8 159 63 {TileX:8,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 9 151 63 {TileX:9,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 9 153 63 {TileX:9,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 9 155 63 {TileX:9,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 9 157 63 {TileX:9,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 9 159 63 {TileX:9,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 10 151 63 {TileX:10,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 10 153 63 {TileX:10,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 10 155 63 {TileX:10,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 10 157 63 {TileX:10,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 10 159 63 {TileX:10,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 11 151 63 {TileX:11,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 11 153 63 {TileX:11,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 11 155 63 {TileX:11,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 11 157 63 {TileX:11,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 11 159 63 {TileX:11,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 12 151 63 {TileX:12,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 12 153 63 {TileX:12,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 12 155 63 {TileX:12,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 12 157 63 {TileX:12,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 12 159 63 {TileX:12,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 13 151 63 {TileX:13,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 13 153 63 {TileX:13,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 13 155 63 {TileX:13,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 13 157 63 {TileX:13,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 13 159 63 {TileX:13,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 14 151 63 {TileX:14,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 14 153 63 {TileX:14,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 14 155 63 {TileX:14,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 14 157 63 {TileX:14,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 14 159 63 {TileX:14,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 15 151 63 {TileX:15,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 15 153 63 {TileX:15,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 15 155 63 {TileX:15,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 15 157 63 {TileX:15,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 15 159 63 {TileX:15,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 16 151 63 {TileX:16,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 16 153 63 {TileX:16,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 16 155 63 {TileX:16,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 16 157 63 {TileX:16,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 16 159 63 {TileX:16,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 17 151 63 {TileX:17,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 17 153 63 {TileX:17,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 17 155 63 {TileX:17,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 17 157 63 {TileX:17,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 17 159 63 {TileX:17,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 18 151 63 {TileX:18,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 18 153 63 {TileX:18,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 18 155 63 {TileX:18,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 18 157 63 {TileX:18,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 18 159 63 {TileX:18,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 19 151 63 {TileX:19,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 19 153 63 {TileX:19,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 19 155 63 {TileX:19,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 19 157 63 {TileX:19,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 19 159 63 {TileX:19,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 20 151 63 {TileX:20,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 20 153 63 {TileX:20,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 20 155 63 {TileX:20,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 20 157 63 {TileX:20,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 20 159 63 {TileX:20,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 21 151 63 {TileX:21,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 21 153 63 {TileX:21,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 21 155 63 {TileX:21,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 21 157 63 {TileX:21,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 21 159 63 {TileX:21,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 22 151 63 {TileX:22,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 22 153 63 {TileX:22,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 22 155 63 {TileX:22,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 22 157 63 {TileX:22,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 22 159 63 {TileX:22,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 23 151 63 {TileX:23,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 23 153 63 {TileX:23,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 23 155 63 {TileX:23,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 23 157 63 {TileX:23,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 23 159 63 {TileX:23,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 24 151 63 {TileX:24,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 24 153 63 {TileX:24,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 24 155 63 {TileX:24,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 24 157 63 {TileX:24,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 24 159 63 {TileX:24,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 25 151 63 {TileX:25,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 25 153 63 {TileX:25,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 25 155 63 {TileX:25,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 25 157 63 {TileX:25,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 25 159 63 {TileX:25,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 26 151 63 {TileX:26,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 26 153 63 {TileX:26,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 26 155 63 {TileX:26,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 26 157 63 {TileX:26,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 26 159 63 {TileX:26,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 27 151 63 {TileX:27,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 27 153 63 {TileX:27,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 27 155 63 {TileX:27,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 27 157 63 {TileX:27,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 27 159 63 {TileX:27,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 28 151 63 {TileX:28,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 28 153 63 {TileX:28,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 28 155 63 {TileX:28,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 28 157 63 {TileX:28,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 28 159 63 {TileX:28,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 29 151 63 {TileX:29,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 29 153 63 {TileX:29,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 29 155 63 {TileX:29,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 29 157 63 {TileX:29,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 29 159 63 {TileX:29,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 30 151 63 {TileX:30,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 30 153 63 {TileX:30,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 30 155 63 {TileX:30,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 30 157 63 {TileX:30,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 30 159 63 {TileX:30,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 31 151 63 {TileX:31,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 31 153 63 {TileX:31,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 31 155 63 {TileX:31,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 31 157 63 {TileX:31,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 31 159 63 {TileX:31,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 32 151 63 {TileX:32,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 32 153 63 {TileX:32,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 32 155 63 {TileX:32,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 32 157 63 {TileX:32,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 32 159 63 {TileX:32,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 33 151 63 {TileX:33,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 33 153 63 {TileX:33,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 33 155 63 {TileX:33,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 33 157 63 {TileX:33,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 33 159 63 {TileX:33,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 34 151 63 {TileX:34,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 34 153 63 {TileX:34,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 34 155 63 {TileX:34,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 34 157 63 {TileX:34,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 34 159 63 {TileX:34,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 35 151 63 {TileX:35,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 35 153 63 {TileX:35,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 35 155 63 {TileX:35,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 35 157 63 {TileX:35,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 35 159 63 {TileX:35,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 36 151 63 {TileX:36,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 36 153 63 {TileX:36,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 36 155 63 {TileX:36,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 36 157 63 {TileX:36,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 36 159 63 {TileX:36,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 37 151 63 {TileX:37,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 37 153 63 {TileX:37,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 37 155 63 {TileX:37,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 37 157 63 {TileX:37,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 37 159 63 {TileX:37,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 38 151 63 {TileX:38,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 38 153 63 {TileX:38,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 38 155 63 {TileX:38,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 38 157 63 {TileX:38,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 38 159 63 {TileX:38,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 39 151 63 {TileX:39,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 39 153 63 {TileX:39,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 39 155 63 {TileX:39,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 39 157 63 {TileX:39,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 39 159 63 {TileX:39,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 40 151 63 {TileX:40,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 40 153 63 {TileX:40,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 40 155 63 {TileX:40,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 40 157 63 {TileX:40,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 40 159 63 {TileX:40,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 41 151 63 {TileX:41,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 41 153 63 {TileX:41,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 41 155 63 {TileX:41,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 41 157 63 {TileX:41,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 41 159 63 {TileX:41,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 42 151 63 {TileX:42,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 42 153 63 {TileX:42,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 42 155 63 {TileX:42,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 42 157 63 {TileX:42,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 42 159 63 {TileX:42,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 43 151 63 {TileX:43,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 43 153 63 {TileX:43,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 43 155 63 {TileX:43,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 43 157 63 {TileX:43,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 43 159 63 {TileX:43,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 44 151 63 {TileX:44,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 44 153 63 {TileX:44,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 44 155 63 {TileX:44,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 44 157 63 {TileX:44,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 44 159 63 {TileX:44,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 45 151 63 {TileX:45,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 45 153 63 {TileX:45,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 45 155 63 {TileX:45,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 45 157 63 {TileX:45,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 45 159 63 {TileX:45,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+summon ItemFrame 46 151 63 {TileX:46,TileY:151,TileZ:64,Direction:2b,Item:{id:267s,Count:1b,Damage:0s}}
+summon ItemFrame 46 153 63 {TileX:46,TileY:153,TileZ:64,Direction:2b,Item:{id:340s,Count:1b,Damage:0s}}
+summon ItemFrame 46 155 63 {TileX:46,TileY:155,TileZ:64,Direction:2b,Item:{id:391s,Count:1b,Damage:0s}}
+summon ItemFrame 46 157 63 {TileX:46,TileY:157,TileZ:64,Direction:2b,Item:{id:280s,Count:1b,Damage:0s}}
+summon ItemFrame 46 159 63 {TileX:46,TileY:159,TileZ:64,Direction:2b,Item:{id:297s,Count:1b,Damage:0s}}
+summon ItemFrame 47 151 63 {TileX:47,TileY:151,TileZ:64,Direction:2b,Item:{id:276s,Count:1b,Damage:0s}}
+summon ItemFrame 47 153 63 {TileX:47,TileY:153,TileZ:64,Direction:2b,Item:{id:261s,Count:1b,Damage:0s}}
+summon ItemFrame 47 155 63 {TileX:47,TileY:155,TileZ:64,Direction:2b,Item:{id:260s,Count:1b,Damage:0s}}
+summon ItemFrame 47 157 63 {TileX:47,TileY:157,TileZ:64,Direction:2b,Item:{id:322s,Count:1b,Damage:0s}}
+summon ItemFrame 47 159 63 {TileX:47,TileY:159,TileZ:64,Direction:2b,Item:{id:257s,Count:1b,Damage:0s}}
+setblock 2 150 44 minecraft:chest 2
+setblock 4 150 44 minecraft:chest 2
+setblock 6 150 44 minecraft:chest 2
+setblock 8 150 44 minecraft:chest 2
+setblock 10 150 44 minecraft:chest 2
+setblock 12 150 44 minecraft:chest 2
+setblock 14 150 44 minecraft:chest 2
+setblock 16 150 44 minecraft:chest 2
+setblock 18 150 44 minecraft:chest 2
+setblock 20 150 44 minecraft:chest 2
+setblock 22 150 44 minecraft:chest 2
+setblock 24 150 44 minecraft:chest 2
+setblock 26 150 44 minecraft:chest 2
+setblock 28 150 44 minecraft:chest 2
+setblock 30 150 44 minecraft:chest 2
+setblock 32 150 44 minecraft:chest 2
+setblock 34 150 44 minecraft:chest 2
+setblock 36 150 44 minecraft:chest 2
+setblock 38 150 44 minecraft:chest 2
+setblock 40 150 44 minecraft:chest 2
+setblock 42 150 44 minecraft:chest 2
+setblock 44 150 44 minecraft:chest 2
+setblock 46 150 44 minecraft:chest 2
+setblock 2 150 46 minecraft:chest 2
+setblock 4 150 46 minecraft:chest 2
+setblock 6 150 46 minecraft:chest 2
+setblock 8 150 46 minecraft:chest 2
+setblock 10 150 46 minecraft:chest 2
+setblock 12 150 46 minecraft:chest 2
+setblock 14 150 46 minecraft:chest 2
+setblock 16 150 46 minecraft:chest 2
+setblock 18 150 46 minecraft:chest 2
+setblock 20 150 46 minecraft:chest 2
+setblock 22 150 46 minecraft:chest 2
+setblock 24 150 46 minecraft:chest 2
+setblock 26 150 46 minecraft:chest 2
+setblock 28 150 46 minecraft:chest 2
+setblock 30 150 46 minecraft:chest 2
+setblock 32 150 46 minecraft:chest 2
+setblock 34 150 46 minecraft:chest 2
+setblock 36 150 46 minecraft:chest 2
+setblock 38 150 46 minecraft:chest 2
+setblock 40 150 46 minecraft:chest 2
+setblock 42 150 46 minecraft:chest 2
+setblock 44 150 46 minecraft:chest 2
+setblock 46 150 46 minecraft:chest 2
+setblock 2 150 48 minecraft:chest 2
+setblock 4 150 48 minecraft:chest 2
+setblock 6 150 48 minecraft:chest 2
+setblock 8 150 48 minecraft:chest 2
+setblock 10 150 48 minecraft:chest 2
+setblock 12 150 48 minecraft:chest 2
+setblock 14 150 48 minecraft:chest 2
+setblock 16 150 48 minecraft:chest 2
+setblock 18 150 48 minecraft:chest 2
+setblock 20 150 48 minecraft:chest 2
+setblock 22 150 48 minecraft:chest 2
+setblock 24 150 48 minecraft:chest 2
+setblock 26 150 48 minecraft:chest 2
+setblock 28 150 48 minecraft:chest 2
+setblock 30 150 48 minecraft:chest 2
+setblock 32 150 48 minecraft:chest 2
+setblock 34 150 48 minecraft:chest 2
+setblock 36 150 48 minecraft:chest 2
+setblock 38 150 48 minecraft:chest 2
+setblock 40 150 48 minecraft:chest 2
+setblock 42 150 48 minecraft:chest 2
+setblock 44 150 48 minecraft:chest 2
+setblock 46 150 48 minecraft:chest 2
+setblock 2 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 2",Text3:"",Text4:""}
+setblock 4 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 4",Text3:"",Text4:""}
+setblock 6 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 6",Text3:"",Text4:""}
+setblock 8 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 8",Text3:"",Text4:""}
+setblock 10 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 10",Text3:"",Text4:""}
+setblock 12 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 12",Text3:"",Text4:""}
+setblock 14 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 14",Text3:"",Text4:""}
+setblock 16 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 16",Text3:"",Text4:""}
+setblock 18 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 18",Text3:"",Text4:""}
+setblock 20 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 20",Text3:"",Text4:""}
+setblock 22 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 22",Text3:"",Text4:""}
+setblock 24 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 24",Text3:"",Text4:""}
+setblock 26 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 26",Text3:"",Text4:""}
+setblock 28 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 28",Text3:"",Text4:""}
+setblock 30 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 30",Text3:"",Text4:""}
+setblock 32 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 32",Text3:"",Text4:""}
+setblock 34 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 34",Text3:"",Text4:""}
+setblock 36 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 36",Text3:"",Text4:""}
+setblock 38 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 38",Text3:"",Text4:""}
+setblock 40 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 40",Text3:"",Text4:""}
+setblock 42 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 42",Text3:"",Text4:""}
+setblock 44 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 44",Text3:"",Text4:""}
+setblock 46 150 50 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 46",Text3:"",Text4:""}
+setblock 2 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 2",Text3:"",Text4:""}
+setblock 4 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 4",Text3:"",Text4:""}
+setblock 6 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 6",Text3:"",Text4:""}
+setblock 8 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 8",Text3:"",Text4:""}
+setblock 10 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 10",Text3:"",Text4:""}
+setblock 12 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 12",Text3:"",Text4:""}
+setblock 14 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 14",Text3:"",Text4:""}
+setblock 16 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 16",Text3:"",Text4:""}
+setblock 18 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 18",Text3:"",Text4:""}
+setblock 20 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 20",Text3:"",Text4:""}
+setblock 22 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 22",Text3:"",Text4:""}
+setblock 24 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 24",Text3:"",Text4:""}
+setblock 26 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 26",Text3:"",Text4:""}
+setblock 28 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 28",Text3:"",Text4:""}
+setblock 30 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 30",Text3:"",Text4:""}
+setblock 32 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 32",Text3:"",Text4:""}
+setblock 34 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 34",Text3:"",Text4:""}
+setblock 36 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 36",Text3:"",Text4:""}
+setblock 38 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 38",Text3:"",Text4:""}
+setblock 40 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 40",Text3:"",Text4:""}
+setblock 42 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 42",Text3:"",Text4:""}
+setblock 44 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 44",Text3:"",Text4:""}
+setblock 46 150 52 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 46",Text3:"",Text4:""}
+setblock 2 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 2",Text3:"",Text4:""}
+setblock 4 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 4",Text3:"",Text4:""}
+setblock 6 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 6",Text3:"",Text4:""}
+setblock 8 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 8",Text3:"",Text4:""}
+setblock 10 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 10",Text3:"",Text4:""}
+setblock 12 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 12",Text3:"",Text4:""}
+setblock 14 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 14",Text3:"",Text4:""}
+setblock 16 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 16",Text3:"",Text4:""}
+setblock 18 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 18",Text3:"",Text4:""}
+setblock 20 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 20",Text3:"",Text4:""}
+setblock 22 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 22",Text3:"",Text4:""}
+setblock 24 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 24",Text3:"",Text4:""}
+setblock 26 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 26",Text3:"",Text4:""}
+setblock 28 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 28",Text3:"",Text4:""}
+setblock 30 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 30",Text3:"",Text4:""}
+setblock 32 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 32",Text3:"",Text4:""}
+setblock 34 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 34",Text3:"",Text4:""}
+setblock 36 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 36",Text3:"",Text4:""}
+setblock 38 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 38",Text3:"",Text4:""}
+setblock 40 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 40",Text3:"",Text4:""}
+setblock 42 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 42",Text3:"",Text4:""}
+setblock 44 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 44",Text3:"",Text4:""}
+setblock 46 150 54 minecraft:standing_sign 8 replace {Text1:"sleep",Text2:"sign 46",Text3:"",Text4:""}
+setblock 2 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 3 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 4 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 5 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 6 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 7 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 8 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 9 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 10 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 11 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 12 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 13 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 14 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 15 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 16 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 17 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 18 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 19 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 20 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 21 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 22 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 23 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 24 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 25 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 26 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 27 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 28 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 29 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 30 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 31 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 32 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 33 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 34 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 35 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 36 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 37 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 38 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 39 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 40 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 41 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 42 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 43 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 44 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 45 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 46 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
+setblock 47 150 56 minecraft:skull 1 replace {SkullType:0b,Rot:8b}
