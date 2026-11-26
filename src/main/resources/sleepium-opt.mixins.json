@@ -67,6 +67,7 @@
     "ReactorFullMixin",
     "ReactorMainDrainMixin",
     "ReactorExecutorMixin",
+    "ReactorBlockingMixin",
     "ReactorTickMixin",
     "ReactorChunkLoadMixin",
     "ReactorReadJournalMixin",
