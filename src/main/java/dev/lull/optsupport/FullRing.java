@@ -51,6 +51,13 @@ public final class FullRing {
 
     /** main thread only */
     public static boolean idle;
+    /**
+     * main thread: how deep it is inside managedBlock (waiting for a chunk future). There the ring has no limit: the chunk
+     * waited for may need a FULL step that is in the ring. The idle flag alone did not show it when the wait happened
+     * inside a task the idle loop ran (a chunk's post-processing; a mod reading a farther chunk there, as Sable's
+     * physics does): the window and the deadline held the step and the server waited for it for good (issue #15).
+     */
+    public static int blocking;
     /** main thread: the deadline of the next tick while idle */
     public static long deadlineNanos;
     private static double cwnd = 16;
@@ -139,12 +146,13 @@ public final class FullRing {
     /** main thread: run one FULL task if allowed; true if one ran */
     public static boolean runOne() {
         if (SIZE.get() == 0) return false;
-        if (idle && !mayRun(true)) return false;
+        boolean limited = idle && blocking == 0;
+        if (limited && !mayRun(true)) return false;
         for (int i = 0; i < LEVELS; i++) {
             Runnable r = QUEUES[i].poll();
             if (r != null) {
                 SIZE.decrementAndGet();
-                if (idle) allowance--;
+                if (limited) allowance--;
                 RAN.increment();
                 MainReactor.found("FULL ring");
                 long t = System.nanoTime();

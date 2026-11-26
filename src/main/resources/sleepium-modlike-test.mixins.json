@@ -6,7 +6,8 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "ModLikeSheepMixin",
-    "ModLikeCropMixin"
+    "ModLikeCropMixin",
+    "FarChunkPostProcessMixin"
   ],
   "injectors": {
     "defaultRequire": 1
