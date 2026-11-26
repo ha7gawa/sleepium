@@ -43,7 +43,7 @@ import org.lwjgl.opengl.GL15;
 public final class EntityCache {
     private EntityCache() {}
 
-    public static final boolean ON = Boolean.getBoolean("sleep.opt.entityCache");
+    public static final boolean ON = !"false".equals(System.getProperty("sleep.opt.entityCache"));   // on (alpha, 11-26); -Dsleep.opt.entityCache=false: off
     private static final int STRIDE = 32;
 
     /** one object's recording */

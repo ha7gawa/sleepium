@@ -14,7 +14,7 @@ public class Sleepium {
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
-        LOGGER.info("[sleep] Sleepium {} for 1.12.2 (lab)", Tags.VERSION);
+        LOGGER.info("[sleep] Sleepium {} for 1.12.2 (alpha)", Tags.VERSION);
         if (event.getSide().isClient()) {
             dev.lull.sleepium.bench.ClientBench.register();
             net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(dev.lull.sleepium.render.ClientEvents.class);

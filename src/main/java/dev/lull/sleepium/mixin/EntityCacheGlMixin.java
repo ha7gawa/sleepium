@@ -45,7 +45,9 @@ public abstract class EntityCacheGlMixin {
         EntityCache.unsupported("texture environment");
     }
 
-    @Inject(method = {"enableTexGenCoord", "texGen"}, at = @At("HEAD"))
+    // every overload spelled out: in production the refmap maps a bare name to one overload only
+    @Inject(method = {"enableTexGenCoord", "texGen(Lnet/minecraft/client/renderer/GlStateManager$TexGen;I)V",
+            "texGen(Lnet/minecraft/client/renderer/GlStateManager$TexGen;ILjava/nio/FloatBuffer;)V"}, at = @At("HEAD"))
     private static void sleep$texGen(CallbackInfo ci) {
         EntityCache.unsupported("texgen");
     }

@@ -93,9 +93,6 @@ minecraft {
         args << '-Dmixin.checks.interfaces=true'
         args << '-Dmixin.debug.export=true'
     }
-    if (propertyBool('is_coremod')) {
-        args << "-Dfml.coreMods.load=${propertyString('coremod_plugin_class_name')}"   // a dev run finds no coremod manifest
-    }
     extraRunJvmArguments.addAll(args)
     extraRunJvmArguments.addAll(propertyStringList('extra_jvm_args'))
 
@@ -167,6 +164,10 @@ if (propertyBool('use_mixins')) {
                 if (task.debug) {
                     task.jvmArgs("-javaagent:${configurations.mixinAgent.singleFile.absolutePath}")
                 }
+                // a dev run finds no coremod manifest: the coremod named on the command line. Not in the obfuscated runs (a
+                // player's game: the manifest in mods/; named there too, FML tries it before the jar is on the class path
+                // and launchwrapper then refuses the class for good)
+                if (!taskName.startsWith('runObf') && propertyBool('is_coremod')) task.jvmArgs("-Dfml.coreMods.load=${propertyString('coremod_plugin_class_name')}")
             }
         }
     }
