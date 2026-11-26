@@ -28,7 +28,10 @@ public abstract class PartBatchTileScopeMixin {
     @Inject(method = "render(Lnet/minecraft/tileentity/TileEntity;DDDFIF)V", at = @At("RETURN"))
     private void sleep$end(TileEntity te, double x, double y, double z, float pt, int stage, float alpha, CallbackInfo ci) {
         if (!PartBatch.ON && !EntityCache.ON) return;
-        EntityCache.end(te.getClass().getSimpleName());
+        EntityCache.end(te.getClass().getSimpleName(), !EntityCache.endingRecording() ? null : ptP -> {
+            net.minecraft.client.renderer.tileentity.TileEntitySpecialRenderer<TileEntity> r = ((TileEntityRendererDispatcher) (Object) this).getRenderer(te);
+            if (r != null) r.render(te, x, y, z, ptP, stage, alpha);
+        });
         PartBatch.end();
     }
 }

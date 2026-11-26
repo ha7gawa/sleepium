@@ -60,6 +60,16 @@ public abstract class EntityCacheGlMixin {
         if (EntityCache.ON) net.minecraft.client.renderer.SleepGlState.onPopAttrib();
     }
 
+    @Inject(method = "depthMask", at = @At("HEAD"), cancellable = true)
+    private static void sleep$dryDepth(boolean on, CallbackInfo ci) {
+        if (EntityCache.dry) ci.cancel();   // a probe's dry run writes nothing
+    }
+
+    @Inject(method = "colorMask", at = @At("HEAD"), cancellable = true)
+    private static void sleep$dryColor(boolean r, boolean g, boolean b, boolean a, CallbackInfo ci) {
+        if (EntityCache.dry) ci.cancel();
+    }
+
     @Inject(method = "glTexParameteri", at = @At("HEAD"))
     private static void sleep$texParamI(int target, int pname, int value, CallbackInfo ci) {
         if (EntityCache.ON) net.minecraft.client.renderer.SleepGlState.onTexParameter(target, pname, value);

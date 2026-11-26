@@ -48,8 +48,7 @@ public final class EntityCache {
 
     /** one object's recording */
     static final class Rec {
-        int stage;                 // 0 none yet, 1 one capture, 2 ready, -1 left to vanilla
-        int mismatches;
+        int stage;                 // 0 none, 2 ready
         byte[] verts;              // STRIDE bytes per vertex, positions relative to the anchor
         int vertCount;
         List<int[]> sigs = new ArrayList<>();
@@ -57,16 +56,27 @@ public final class EntityCache {
         int segs;
         double ax, ay, az;         // the anchor: where the object is (absolute)
         float lightX, lightY;      // the lightmap coordinates it was drawn with (its light)
-        long seenFrame;
-        int seenPass;
+        long seenFrame, vanillaFrame;
+        int seenPass, vanillaPass;
+        // validity (as 1.20.1's RenderCache): the state hash once a tick, renewal, probes, skipped while animated
+        long state, stateNow, hashTick = Long.MIN_VALUE, refreshAt, probedAt = Long.MIN_VALUE / 2, skipUntil = Long.MIN_VALUE;
+        long[] fieldsAt;
+        int[] start;               // the state the drawing began in (normalized): what it inherits from what came before
         String cls;
+    }
+
+    /** the object drawn again for a probe (another partial tick), its output captured, nothing written to the screen */
+    public interface Probe {
+        void draw(float partialTicks);
     }
 
     private static final Map<Object, Rec> RECS = new IdentityHashMap<>();
     private static long frame;
     private static boolean dirty;
-    public static long hits, captures, ready, animated, unsupported;
+    public static long hits, captures, recorded, sameAfterChange, animated, unsupported, refreshes, probes;
     private static final Map<String, Integer> WHY = new HashMap<>();
+    private static final int VOLATILE_TICKS = 40, PROBE_EVERY = 200, REFRESH = Math.max(1, Integer.getInteger("sleep.rcache.refresh", 20));
+    private static final boolean LEARN = !"false".equals(System.getProperty("sleep.rcache.learnFields"));
 
     // ------------------------------------------------------------------ capture state
 
@@ -76,15 +86,28 @@ public final class EntityCache {
     private static boolean capBad;
     private static double capX, capY, capZ, capAbsX, capAbsY, capAbsZ;
     private static float capLightX, capLightY;
+    private static long capTick;
     private static ByteBuffer cb = ByteBuffer.allocate(1 << 16).order(ByteOrder.LITTLE_ENDIAN);
     private static int cVerts;
     private static final List<int[]> cSigs = new ArrayList<>();
     private static int[] cFirst = new int[16], cCount = new int[16], cMode = new int[16];
     private static int cSegs;
     private static int partDepth;      // inside a model part tree already captured
+    /** a probe's dry run: GL's colour and depth writes held off (GlStateManager.colorMask / depthMask ignored meanwhile) */
+    public static boolean dry;
 
     public static boolean capturing() {
         return cap != null && !capBad;
+    }
+
+    /** the object being recorded ends now (not a nested one): end() wants its probe */
+    public static boolean endingRecording() {
+        return cap != null && capDepth == 0;
+    }
+
+    private static long tick() {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
+        return mc.world == null ? 0 : mc.world.getTotalWorldTime();
     }
 
     /**
@@ -98,22 +121,26 @@ public final class EntityCache {
             if (!allowed) unsupported("a renderer inside not the game's");
             return false;
         }
-        if (!allowed) return false;
-        if (!SleepGlState.init()) return false;
+        if (!allowed || !StateHash.available() || !SleepGlState.init()) return false;
+        long tick = tick();
         Rec r = RECS.get(key);
         if (r == null) RECS.put(key, r = new Rec());
         r.seenFrame = frame;
         r.seenPass = pass;
-        if (r.stage == 2) {
-            double ax = x + camX, ay = y + camY, az = z + camZ;
-            if (ax == r.ax && ay == r.ay && az == r.az && r.lightX == OpenGlHelper.lastBrightnessX && r.lightY == OpenGlHelper.lastBrightnessY) {
-                hits++;
-                return true;
-            }
-            r.stage = 0;   // moved or its light changed: record again
-            dirty = true;
+        if (r.skipUntil > tick) return false;   // animated / unsupported a while ago: the vanilla way for now
+        if (r.hashTick != tick) {   // the whole state, once per tick (packets and ticks change it)
+            r.stateNow = StateHash.of(key);
+            r.hashTick = tick;
         }
-        if (r.stage < 0) return false;
+        double ax = x + camX, ay = y + camY, az = z + camZ;
+        if (r.stage == 2 && ax == r.ax && ay == r.ay && az == r.az && r.lightX == OpenGlHelper.lastBrightnessX && r.lightY == OpenGlHelper.lastBrightnessY
+                && r.state == r.stateNow && tick < r.refreshAt) {
+            hits++;
+            return true;
+        }
+        if (r.stage == 2 && tick >= r.refreshAt) refreshes++;
+        r.vanillaFrame = frame;   // drawn by vanilla this frame (the pass's replay leaves it out)
+        r.vanillaPass = pass;
         cap = r;
         capKey = key;
         capDepth = 0;
@@ -121,72 +148,200 @@ public final class EntityCache {
         capX = x;
         capY = y;
         capZ = z;
-        capAbsX = x + camX;
-        capAbsY = y + camY;
-        capAbsZ = z + camZ;
+        capAbsX = ax;
+        capAbsY = ay;
+        capAbsZ = az;
         capLightX = OpenGlHelper.lastBrightnessX;
         capLightY = OpenGlHelper.lastBrightnessY;
+        capTick = tick;
+        startCapture();
+        return false;
+    }
+
+    private static int[] cStart;
+
+    private static void startCapture() {
+        cStart = SleepGlState.normalized(SleepGlState.snapshot());
         cb.clear();
         cVerts = 0;
         cSigs.clear();
         cSegs = 0;
         partDepth = 0;
-        return false;
     }
 
-    public static void end(String cls) {
+    /** the object's drawing ended (probe: draws it again for the probes; null: no probes possible) */
+    public static void end(String cls, Probe probe) {
         if (!ON || cap == null) return;
         if (capDepth > 0) {
             capDepth--;
             return;
         }
         Rec r = cap;
-        cap = null;
+        Object key = capKey;
+        long tick = capTick;
         r.cls = cls;
         captures++;
         if (capBad) {
-            r.stage = -1;
+            cap = null;
+            drop(r, tick);
             unsupported++;
             return;
         }
-        byte[] v = Arrays.copyOf(cb.array(), cVerts * STRIDE);
-        if (r.stage == 1 && r.ax == capAbsX && r.ay == capAbsY && r.az == capAbsZ && r.lightX == capLightX && r.lightY == capLightY && same(r, v)) {
-            r.stage = 2;
-            ready++;
+        Rec now = snapshotCapture();
+        boolean sameOut = r.stage == 2 && r.ax == capAbsX && r.ay == capAbsY && r.az == capAbsZ && r.lightX == capLightX && r.lightY == capLightY && same(r, now, false);
+        if (LEARN && r.stage == 2 && r.state != r.stateNow && r.fieldsAt != null) {   // only the state changed: does it draw something else?
+            long[] f = StateHash.fields(key);
+            if (sameOut) {
+                StateHash.unchanged(key, r.fieldsAt, f);
+                sameAfterChange++;
+            } else StateHash.changedOutput(key, r.fieldsAt, f);
+        }
+        boolean changed = !sameOut;
+        if (changed && r.stage == 2) why("changed " + cls + ": " + (r.ax != capAbsX || r.ay != capAbsY || r.az != capAbsZ ? "moved"
+                : r.lightX != capLightX || r.lightY != capLightY ? "light" : r.vertCount != cVerts ? "vertices" : r.segs != cSegs ? "pieces" : diffWhere(r, now)));
+        if ((changed || tick - r.probedAt >= PROBE_EVERY) && probe != null) {
+            r.probedAt = tick;
+            if (animated(key, probe, now)) {
+                cap = null;
+                drop(r, tick);
+                animated++;
+                why("animated: " + cls);
+                return;
+            }
+        }
+        cap = null;
+        if (changed) {
+            r.verts = now.verts;
+            r.vertCount = now.vertCount;
+            r.sigs = now.sigs;
+            r.segFirst = now.segFirst;
+            r.segCount = now.segCount;
+            r.segMode = now.segMode;
+            r.segs = now.segs;
+            r.start = now.start;
+            r.ax = capAbsX;
+            r.ay = capAbsY;
+            r.az = capAbsZ;
+            r.lightX = capLightX;
+            r.lightY = capLightY;
             dirty = true;
-            return;
+            recorded++;
         }
-        if (r.stage == 1 && ++r.mismatches >= 3) {
-            r.stage = -1;
-            animated++;
-            why("moves: " + cls);
-            return;
-        }
-        r.stage = 1;
-        r.verts = v;
-        r.vertCount = cVerts;
-        r.sigs = new ArrayList<>(cSigs);
-        r.segFirst = Arrays.copyOf(cFirst, cSegs);
-        r.segCount = Arrays.copyOf(cCount, cSegs);
-        r.segMode = Arrays.copyOf(cMode, cSegs);
-        r.segs = cSegs;
-        r.ax = capAbsX;
-        r.ay = capAbsY;
-        r.az = capAbsZ;
-        r.lightX = capLightX;
-        r.lightY = capLightY;
+        r.stage = 2;
+        r.state = r.stateNow;
+        if (LEARN) r.fieldsAt = StateHash.fields(key);
+        // safety net for what no key covers: recorded again after REFRESH..2*REFRESH ticks, spread over objects
+        r.refreshAt = tick + REFRESH + Math.floorMod(System.identityHashCode(key), REFRESH);
     }
 
-    /** the new capture against the last one: the same pieces, states and vertices (positions within float noise) */
-    private static boolean same(Rec r, byte[] v) {
-        if (r.vertCount != cVerts || r.segs != cSegs) return false;
-        for (int i = 0; i < cSegs; i++)
-            if (r.segFirst[i] != cFirst[i] || r.segCount[i] != cCount[i] || r.segMode[i] != cMode[i] || !Arrays.equals(r.sigs.get(i), cSigs.get(i))) return false;
-        ByteBuffer a = ByteBuffer.wrap(r.verts).order(ByteOrder.LITTLE_ENDIAN), b = ByteBuffer.wrap(v).order(ByteOrder.LITTLE_ENDIAN);
-        for (int i = 0; i < cVerts; i++) {
+    private static void drop(Rec r, long tick) {
+        r.skipUntil = tick + VOLATILE_TICKS;
+        if (r.stage == 2) dirty = true;
+        r.stage = 0;
+    }
+
+    /** the capture so far as a recording */
+    private static Rec snapshotCapture() {
+        Rec n = new Rec();
+        n.verts = Arrays.copyOf(cb.array(), cVerts * STRIDE);
+        n.vertCount = cVerts;
+        n.sigs = new ArrayList<>(cSigs);
+        n.segFirst = Arrays.copyOf(cFirst, cSegs);
+        n.segCount = Arrays.copyOf(cCount, cSegs);
+        n.segMode = Arrays.copyOf(cMode, cSegs);
+        n.segs = cSegs;
+        n.start = cStart;
+        return n;
+    }
+
+    /**
+     * Probes (1.20.1's): the object drawn again dry with another partial tick, with the camera turned, with its tick
+     * count moved on; any difference from the capture = it animates (drawn the vanilla way for a while).
+     */
+    private static boolean animated(Object key, Probe probe, Rec main) {
+        net.minecraft.client.renderer.entity.RenderManager rm = net.minecraft.client.Minecraft.getMinecraft().getRenderManager();
+        float pt = net.minecraft.client.Minecraft.getMinecraft().getRenderPartialTicks();
+        if (!dryEquals(probe, pt < 0.5f ? pt + 0.5f : pt - 0.5f, main)) return probeWhy("partial tick", main);
+        float vy = rm.playerViewY, vx = rm.playerViewX;
+        rm.playerViewY = vy + 75;
+        rm.playerViewX = vx + 23;
+        boolean same;
+        try {
+            same = dryEquals(probe, pt, main);
+        } finally {
+            rm.playerViewY = vy;
+            rm.playerViewX = vx;
+        }
+        if (!same) return probeWhy("camera", main);
+        if (key instanceof net.minecraft.entity.Entity) {
+            StateHash.addTicks(key, 7);
+            try {
+                same = dryEquals(probe, pt, main);
+            } finally {
+                StateHash.addTicks(key, -7);
+            }
+        }
+        return !same && probeWhy("ticks", main);
+    }
+
+    private static boolean probeWhy(String probe, Rec main) {
+        Rec now = snapshotCapture();
+        why("probe " + probe + ": " + (main.vertCount != now.vertCount ? "vertices " + main.vertCount + "->" + now.vertCount : main.segs != now.segs ? "pieces" : diffWhere(main, now)));
+        return true;
+    }
+
+    private static boolean dryEquals(Probe probe, float pt, Rec main) {
+        probes++;
+        startCapture();
+        capBad = false;
+        boolean depth = SleepGlState.depthMask();
+        int color = SleepGlState.colorMask();
+        GlStateManager.depthMask(false);
+        GlStateManager.colorMask(false, false, false, false);
+        dry = true;
+        try {
+            probe.draw(pt);
+        } finally {
+            dry = false;
+            GlStateManager.depthMask(depth);
+            GlStateManager.colorMask((color & 1) != 0, (color & 2) != 0, (color & 4) != 0, (color & 8) != 0);
+        }
+        return !capBad && same(main, snapshotCapture(), true);
+    }
+
+    /** where two captures of the same size differ first: a state index or a vertex attribute offset */
+    private static String diffWhere(Rec r, Rec c) {
+        for (int i = 0; i < c.segs; i++) {
+            if (r.segFirst[i] != c.segFirst[i] || r.segCount[i] != c.segCount[i] || r.segMode[i] != c.segMode[i]) return "piece layout";
+            int[] a = r.sigs.get(i), b = c.sigs.get(i);
+            for (int k = 0; k < a.length; k++) if (a[k] != b[k]) return "state[" + k + "] " + a[k] + "->" + b[k];
+        }
+        ByteBuffer a = ByteBuffer.wrap(r.verts).order(ByteOrder.LITTLE_ENDIAN), b = ByteBuffer.wrap(c.verts).order(ByteOrder.LITTLE_ENDIAN);
+        for (int i = 0; i < c.vertCount; i++) {
+            int o = i * STRIDE;
+            for (int k = 0; k < 3; k++) if (Math.abs(a.getFloat(o + k * 4) - b.getFloat(o + k * 4)) > 1e-4f) return "position " + a.getFloat(o + k * 4) + "->" + b.getFloat(o + k * 4);
+            for (int k = 12; k < STRIDE; k++) if (r.verts[o + k] != c.verts[o + k]) return "byte " + k;
+        }
+        return "?";
+    }
+
+    /** two captures: the same pieces, states and vertices (positions within float noise); dry: the write masks not compared */
+    private static boolean same(Rec r, Rec c, boolean dryRun) {
+        if (r.vertCount != c.vertCount || r.segs != c.segs) return false;
+        for (int i = 0; i < c.segs; i++) {
+            if (r.segFirst[i] != c.segFirst[i] || r.segCount[i] != c.segCount[i] || r.segMode[i] != c.segMode[i]) return false;
+            int[] a = r.sigs.get(i), b = c.sigs.get(i);
+            // a state both drawings only inherited from what was drawn before them (culling for the chest, rescaled normals
+            // for an item frame's item: their renderers never set it) flips with the order neighbours are recorded in -
+            // vanilla's own order-dependence: not a change, the recording keeps its first one
+            for (int k = 0; k < a.length; k++)
+                if (a[k] != b[k] && !(dryRun && (k == 18 || k == 29)) && !(r.start != null && c.start != null && a[k] == r.start[k] && b[k] == c.start[k])) return false;
+        }
+        ByteBuffer a = ByteBuffer.wrap(r.verts).order(ByteOrder.LITTLE_ENDIAN), b = ByteBuffer.wrap(c.verts).order(ByteOrder.LITTLE_ENDIAN);
+        for (int i = 0; i < c.vertCount; i++) {
             int o = i * STRIDE;
             for (int k = 0; k < 3; k++) if (Math.abs(a.getFloat(o + k * 4) - b.getFloat(o + k * 4)) > 1e-4f) return false;
-            for (int k = 12; k < STRIDE; k++) if (r.verts[o + k] != v[o + k]) return false;
+            for (int k = 12; k < STRIDE; k++) if (r.verts[o + k] != c.verts[o + k]) return false;
         }
         return true;
     }
@@ -205,7 +360,7 @@ public final class EntityCache {
     // ------------------------------------------------------------------ capture: pieces
 
     private static void piece(int mode, int verts) {
-        int[] sig = SleepGlState.snapshot();
+        int[] sig = SleepGlState.normalized(SleepGlState.snapshot());
         if (sig[30] != 0) {   // drawn with another texture unit active: not what replay sets
             unsupported("active texture unit");
             return;
@@ -499,7 +654,7 @@ public final class EntityCache {
     private static double ox, oy, oz;
     private static IntBuffer firstBuf = GLAllocation.createDirectIntBuffer(4096), countBuf = GLAllocation.createDirectIntBuffer(4096);
     private static final java.nio.FloatBuffer MAT = GLAllocation.createDirectFloatBuffer(16);
-    public static long groupDraws;
+    public static long groupDraws, rebuilds, rebuildNanos;
 
     /** the frame's entity pass begins */
     public static void passStart(int pass) {
@@ -582,7 +737,12 @@ public final class EntityCache {
     /** the entity pass ends: the cached objects seen in it, a multi-draw per GL state */
     public static void passEnd(int pass, double camX, double camY, double camZ) {
         if (!ON || hits == 0 && !dirty) return;
-        if (dirty) rebuild();
+        if (dirty) {
+            long t0 = System.nanoTime();
+            rebuild();
+            rebuilds++;
+            rebuildNanos += System.nanoTime() - t0;
+        }
         if (GROUPS.isEmpty()) return;
         int[] before = SleepGlState.snapshot();
         GL11.glPushMatrix();
@@ -594,7 +754,7 @@ public final class EntityCache {
             int n = 0;
             for (int i = 0; i < g.recs.size(); i++) {
                 Rec r = g.recs.get(i);
-                if (r.stage != 2 || r.seenFrame != frame || r.seenPass != pass || g.count[i] == 0) continue;
+                if (r.stage != 2 || r.seenFrame != frame || r.seenPass != pass || g.count[i] == 0 || r.vanillaFrame == frame && r.vanillaPass == pass) continue;
                 if (n == firstBuf.capacity()) {
                     firstBuf = grow(firstBuf);
                     countBuf = grow(countBuf);
@@ -662,9 +822,10 @@ public final class EntityCache {
     }
 
     public static String report() {
-        StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT, "entity cache: %d hits, %d captures, %d ready, %d moving, %d unsupported, %d groups, %d group draws",
-                hits, captures, ready, animated, unsupported, GROUPS.size(), groupDraws));
-        WHY.entrySet().stream().sorted((x, y) -> y.getValue() - x.getValue()).limit(8).forEach(e -> b.append("; ").append(e.getKey()).append(' ').append(e.getValue()));
+        StringBuilder b = new StringBuilder(String.format(java.util.Locale.ROOT,
+                "entity cache: %d hits, %d captures, %d recorded, %d same after a state change, %d refreshes, %d probes, %d animated, %d unsupported, %d groups, %d group draws, %d fields learned, %d rebuilds %.1f ms each",
+                hits, captures, recorded, sameAfterChange, refreshes, probes, animated, unsupported, GROUPS.size(), groupDraws, StateHash.learned, rebuilds, rebuildNanos / 1e6 / Math.max(1, rebuilds)));
+        WHY.entrySet().stream().sorted((x, y) -> y.getValue() - x.getValue()).limit(14).forEach(e -> b.append("; ").append(e.getKey()).append(' ').append(e.getValue()));
         return b.toString();
     }
 }

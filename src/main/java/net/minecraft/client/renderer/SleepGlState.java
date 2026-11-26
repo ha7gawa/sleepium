@@ -197,6 +197,32 @@ public final class SleepGlState {
         return o;
     }
 
+    public static boolean depthMask() {
+        return depth.maskEnabled;
+    }
+
+    public static int colorMask() {
+        return (mask.red ? 1 : 0) | (mask.green ? 2 : 0) | (mask.blue ? 4 : 0) | (mask.alpha ? 8 : 0);
+    }
+
+    /**
+     * the state as it matters for drawing: parameters of a switched-off feature zeroed (a blend function while blending
+     * is off, the alpha function without the alpha test, ...) - they are inherited from whatever was drawn before and do
+     * not change the picture. For keys and comparisons only: restoring uses the raw snapshot.
+     */
+    public static int[] normalized(int[] s) {
+        int[] o = s.clone();
+        if (o[6] == 0) o[7] = o[8] = 0;
+        if (o[9] == 0) o[10] = o[11] = 0;
+        if (o[12] == 0) o[13] = o[14] = o[15] = o[16] = 0;
+        if (o[17] == 0) o[19] = 0;
+        if (o[20] == 0) o[21] = 0;
+        if (o[22] == 0) o[23] = o[24] = 0;
+        if (o[0] == 0) o[1] = o[31] = o[32] = 0;
+        if (o[3] == 0) o[4] = o[5] = o[6] = o[7] = o[8] = o[25] = o[26] = 0;   // no lighting: lights, colour material and normal handling do not matter
+        return o;
+    }
+
     /** the current colour (glColor) GL really has */
     public static float[] color() {
         return realColor.clone();
@@ -225,18 +251,18 @@ public final class SleepGlState {
         gl(s[3] != 0, 2896);
         gl(s[4] != 0, 16384);
         gl(s[5] != 0, 16385);
-        org.lwjgl.opengl.GL11.glColorMaterial(s[7], s[8]);
+        if (s[6] != 0) org.lwjgl.opengl.GL11.glColorMaterial(s[7], s[8]);
         gl(s[6] != 0, 2903);
-        org.lwjgl.opengl.GL11.glAlphaFunc(s[10], Float.intBitsToFloat(s[11]));
+        if (s[9] != 0) org.lwjgl.opengl.GL11.glAlphaFunc(s[10], Float.intBitsToFloat(s[11]));
         gl(s[9] != 0, 3008);
-        OpenGlHelper.glBlendFunc(s[13], s[14], s[15], s[16]);
+        if (s[12] != 0) OpenGlHelper.glBlendFunc(s[13], s[14], s[15], s[16]);
         gl(s[12] != 0, 3042);
-        org.lwjgl.opengl.GL11.glDepthFunc(s[19]);
+        if (s[17] != 0) org.lwjgl.opengl.GL11.glDepthFunc(s[19]);
         org.lwjgl.opengl.GL11.glDepthMask(s[18] != 0);
         gl(s[17] != 0, 2929);
-        org.lwjgl.opengl.GL11.glCullFace(s[21]);
+        if (s[20] != 0) org.lwjgl.opengl.GL11.glCullFace(s[21]);
         gl(s[20] != 0, 2884);
-        org.lwjgl.opengl.GL11.glPolygonOffset(Float.intBitsToFloat(s[23]), Float.intBitsToFloat(s[24]));
+        if (s[22] != 0) org.lwjgl.opengl.GL11.glPolygonOffset(Float.intBitsToFloat(s[23]), Float.intBitsToFloat(s[24]));
         gl(s[22] != 0, 32823);
         gl(s[25] != 0, 2977);
         gl(s[26] != 0, 32826);
@@ -289,7 +315,7 @@ public final class SleepGlState {
         set(s[17] != 0, GlStateManager::enableDepth, GlStateManager::disableDepth);
         if (cull.mode != s[21]) {
             cull.mode = s[21];
-            org.lwjgl.opengl.GL11.glCullFace(s[21]);
+            if (s[20] != 0) org.lwjgl.opengl.GL11.glCullFace(s[21]);
         }
         set(s[20] != 0, GlStateManager::enableCull, GlStateManager::disableCull);
         GlStateManager.doPolygonOffset(Float.intBitsToFloat(s[23]), Float.intBitsToFloat(s[24]));

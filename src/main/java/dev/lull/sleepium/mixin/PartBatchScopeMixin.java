@@ -37,7 +37,13 @@ public abstract class PartBatchScopeMixin {
     @Inject(method = "renderEntity(Lnet/minecraft/entity/Entity;DDDFFZ)V", at = @At("RETURN"))
     private void sleep$end(Entity e, double x, double y, double z, float yaw, float pt, boolean d, CallbackInfo ci) {
         if (!PartBatch.ON && !EntityCache.ON) return;
-        EntityCache.end(e.getClass().getSimpleName());
+        EntityCache.end(e.getClass().getSimpleName(), !EntityCache.endingRecording() ? null : ptP -> {
+            RenderManager rm = (RenderManager) (Object) this;
+            net.minecraft.client.renderer.entity.Render<Entity> r = rm.getEntityRenderObject(e);
+            if (r == null) return;
+            r.doRender(e, x, y, z, yaw, ptP);
+            if (!renderOutlines) r.doRenderShadowAndFire(e, x, y, z, yaw, ptP);
+        });
         PartBatch.end();
     }
 }

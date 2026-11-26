@@ -67,6 +67,24 @@ public final class ClientBench {
         last = now;
     }
 
+    /** -Dsleep.bench.cmdFile=<file>: lines "<seconds into the window> <command>" */
+    static final List<String[]> CMDS = new ArrayList<>();
+    static int cmdAt;
+
+    static {
+        String f = System.getProperty("sleep.bench.cmdFile");
+        if (f != null) try {
+            for (String l : java.nio.file.Files.readAllLines(java.nio.file.Paths.get(f), StandardCharsets.UTF_8)) {
+                l = l.trim();
+                if (l.isEmpty() || l.startsWith("#")) continue;
+                int sp = l.indexOf(' ');
+                CMDS.add(new String[] {l.substring(0, sp), l.substring(sp + 1)});
+            }
+        } catch (java.io.IOException ex) {
+            throw new IllegalStateException(ex);
+        }
+    }
+
     static void run(IntegratedServer srv, EntityPlayerMP p, String c) {
         srv.getCommandManager().executeCommand(p, c);
     }
@@ -149,6 +167,13 @@ public final class ClientBench {
                 }
             }
             case 4 -> {
+                if (cmdAt < CMDS.size() && now - t0 >= (long) (Double.parseDouble(CMDS.get(cmdAt)[0]) * 1e9)) {   // -Dsleep.bench.cmdFile: changes during the window
+                    String c = CMDS.get(cmdAt++)[1];
+                    IntegratedServer srv = mc.getIntegratedServer();
+                    java.util.UUID id = mc.player.getUniqueID();
+                    srv.addScheduledTask(() -> run(srv, srv.getPlayerList().getPlayerByUUID(id), c));
+                    Sleepium.LOGGER.info("[sleepbench] command at " + (now - t0) / 1_000_000 + " ms: " + c);
+                }
                 if (now - t0 > SECS * 1_000_000_000L) {
                     state = 5;
                     long[] f = Arrays.copyOf(FRAMES, n);
