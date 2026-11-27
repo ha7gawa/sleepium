@@ -8,7 +8,10 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
 /** Applies the foreign test mixins only with -Dsleep.foreignTest=true. */
 public final class ForeignPlugin implements IMixinConfigPlugin {
-    @Override public boolean shouldApplyMixin(String target, String mixin) { return Boolean.getBoolean("sleep.foreignTest"); }
+    @Override public boolean shouldApplyMixin(String target, String mixin) {
+        if (mixin.endsWith("ForeignChunkGenOverwriteMixin")) return Boolean.getBoolean("sleep.test.overwriteChunkGen");   // (issue #16)
+        return Boolean.getBoolean("sleep.foreignTest");
+    }
     @Override public void onLoad(String mixinPackage) {}
     @Override public String getRefMapperConfig() { return null; }
     @Override public void acceptTargets(Set<String> mine, Set<String> others) {}

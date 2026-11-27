@@ -6,7 +6,8 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "sleepium.refmap.json",
   "mixins": [
-    "ForeignFurnaceMixin"
+    "ForeignFurnaceMixin",
+    "ForeignChunkGenOverwriteMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -39,14 +39,14 @@ public abstract class MainReactorServerMixin implements MainReactor.Server {
         return sleep$queueArray;
     }
 
-    @Inject(method = "waitUntilNextTick", at = @At("HEAD"))
-    private void sleep$idleOn(CallbackInfo ci) {
+    @com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod(method = "waitUntilNextTick")
+    private void sleep$idle(com.llamalad7.mixinextras.injector.wrapoperation.Operation<Void> original) {
         MainReactor.idle = true;
-    }
-
-    @Inject(method = "waitUntilNextTick", at = @At("RETURN"))
-    private void sleep$idleOff(CallbackInfo ci) {
-        MainReactor.idle = false;
+        try {
+            original.call();
+        } finally {
+            MainReactor.idle = false;
+        }
     }
 
     /**
