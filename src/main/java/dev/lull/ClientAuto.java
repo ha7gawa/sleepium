@@ -675,6 +675,23 @@ public final class ClientAuto {
         return d != null && (!mc.levelRenderer.hasRenderedAllSections() || d.getToBatchCount() > 0);
     }
 
+    private static void blockEvent(Minecraft mc, String cmd) {
+        String[] p = cmd.split("\\s+");
+        if (p.length < 6 || mc.level == null) return;
+        net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(Integer.parseInt(p[1]), Integer.parseInt(p[2]), Integer.parseInt(p[3]));
+        int id = Integer.parseInt(p[4]), param = Integer.parseInt(p[5]);
+        IntegratedServer srv = mc.getSingleplayerServer();
+        if (srv != null) {
+            net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim = mc.level.dimension();
+            srv.execute(() -> {
+                net.minecraft.server.level.ServerLevel sl = srv.getLevel(dim);
+                if (sl != null) sl.blockEvent(pos, sl.getBlockState(pos).getBlock(), id, param);
+            });
+        } else {
+            mc.level.blockEvent(pos, mc.level.getBlockState(pos).getBlock(), id, param);
+        }
+    }
+
     private static void command(Minecraft mc, String cmd) {
         IntegratedServer server = mc.getSingleplayerServer();
         if (server == null && mc.player != null && mc.getConnection() != null) {   // a remote server: a chat command
@@ -755,6 +772,7 @@ public final class ClientAuto {
                 else if ("!close".equals(c[1])) Minecraft.getInstance().setScreen(null);
                 else if ("!sleepium".equals(c[1])) Minecraft.getInstance().setScreen(new dev.lull.ui.SleepScreen(null));   // (the settings screen, for a shot)
                 else if (((String) c[1]).startsWith("!hud")) dev.lull.ui.HudLayoutScreen.test((String) c[1]);   // the HUD's layout screen driven (open, drag, wheel, keys)
+                else if (((String) c[1]).startsWith("!blockevent ")) blockEvent(Minecraft.getInstance(), (String) c[1]);
                 else command(Minecraft.getInstance(), (String) c[1]);
             }
         }
