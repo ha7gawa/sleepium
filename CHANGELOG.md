@@ -4,6 +4,21 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.15 - 2026-11-27
+
+- **Fixed: chest opening/closing animations and mob animations inside spawners could freeze or jitter with the render cache.**
+  Chests, ender chests, double chests and spawners keep their animation state inside nested sub-objects (`ChestLidController`,
+  `BaseSpawner`, and on 1.21.1 `TrialSpawnerData` / `VaultClientData`), which `StateHash` fingerprinted by object identity,
+  so closed chests and stationary spawners could stay cached through open/close and spin starts until the periodic refresh;
+  double chests also combined openness with their neighbour half, and `SpawnerRenderer` rendering its display entity
+  re-entered `RenderCache` on the shared recorder/probe. `RenderCache` now includes lid openness (both halves of double
+  chests) and spawner / trial-spawner / vault spin in its block-entity key (plus `ChestLidController` and `BaseSpawner` in
+  `EntityFp` for modded block entities and `MinecartSpawner`), and bypasses nested cache recordings while an outer recording
+  or probe is active. Both versions.
+- Verified with byte-for-byte render-cache verification (`-Dlab.rcache.verify=true`) on built production clients for both
+  1.20.1 Forge (SRG) and 1.21.1 NeoForge: `ChestRenderer`, `SpawnerRenderer`, `TrialSpawnerRenderer`, and `VaultRenderer`
+  all dropped to 0 mismatches (down from 14,617 / 14,349 before the fix) while closed chests keep full render-cache hits.
+
 ## 1.4.14 - 2026-11-27
 
 - **Fixed: entering the End could crash with Fabric Biome API (Sinytra Connector)** ([#17](https://github.com/ha7gawa/sleepium/issues/17)).
