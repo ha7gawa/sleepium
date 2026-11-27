@@ -1,6 +1,7 @@
 {
   "homepage": "https://modrinth.com/mod/sleepium",
   "1.21.1": {
+    "1.4.14": "Fixed an End crash with Fabric Biome API / Connector (#17) and world-generation races alongside mods overwriting chunk generation like ByePregen (#16).",
     "1.4.13": "Fixed a server freeze while new chunks load when a mod reads a farther chunk then (Sable; issue #15).",
     "1.4.12": "The HUD where you want it: drag its boxes anywhere, a box of its own for any widget, any size from 25 % to 400 %.",
     "1.4.11": "New terrain faster while flying or running: still water and static blocks skip their post-processing (exact); 140 -> 206 chunks/s to a flying player (1.20.1).",
@@ -47,12 +48,13 @@
     "1.0.0": "The first public release."
   },
   "promos": {
-    "1.21.1-latest": "1.4.13",
-    "1.21.1-recommended": "1.4.13",
-    "1.20.1-latest": "1.4.13",
-    "1.20.1-recommended": "1.4.13"
+    "1.21.1-latest": "1.4.14",
+    "1.21.1-recommended": "1.4.14",
+    "1.20.1-latest": "1.4.14",
+    "1.20.1-recommended": "1.4.14"
   },
   "1.20.1": {
+    "1.4.14": "Fixed an End crash with Fabric Biome API / Connector (#17) and world-generation races alongside mods overwriting chunk generation like ByePregen (#16).",
     "1.4.13": "Fixed a server freeze while new chunks load when a mod reads a farther chunk then (Sable; issue #15).",
     "1.4.12": "The HUD where you want it: drag its boxes anywhere, a box of its own for any widget, any size from 25 % to 400 %.",
     "1.4.11": "New terrain faster while flying or running: still water and static blocks skip their post-processing (exact); 140 -> 206 chunks/s to a flying player (1.20.1).",

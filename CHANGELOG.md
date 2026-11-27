@@ -4,6 +4,25 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.14 - 2026-11-27
+
+- **Fixed: entering the End could crash with Fabric Biome API (Sinytra Connector)** ([#17](https://github.com/ha7gawa/sleepium/issues/17)).
+  `WorldgenColumnMemoMixin` cancelled `NoiseChunk.cachedClimateSampler` at its start, so Fabric Biome API's return
+  injection never ran to set the sampler's seed (`MultiNoiseSampler doesn't have a seed set`). Sleepium now swaps
+  only the `NoiseRouter` argument (and leaves it untouched when nothing is rewritten), letting vanilla's body and
+  every return injection run normally. Both versions.
+- **Fixed: world-generation crashes or deadlocks alongside mods that overwrite chunk generation (ByePregen)** ([#16](https://github.com/ha7gawa/sleepium/issues/16)).
+  When another mod overwrote `ChunkStatus#generate` (1.20.1) or `ChunkMap#applyStep` (1.21.1), `ParallelWorldgenMixin`
+  gave way to it, dropping the 3x3 chunk locks for feature placement, while `WorldgenReactorMixin` / `GenGraph` still
+  applied and ran neighbouring chunks' features concurrently without locking. `WorldgenReactorMixin` and `GenGraph`
+  now give way automatically whenever `ParallelWorldgenMixin` gives way, keeping feature placement serialized. Also
+  hardened `FullRing` and `MainReactor` idle/blocking flags with `try`/`finally` and lifted `FullRing` limits during
+  server shutdown. Both versions.
+- Checked: no world-generation speed regression (flying bot at 120 blocks/s: 1.20.1 205.9 vs 206.2 chunks/s, 1.21.1
+  view 16 308.4 vs 308.2 chunks/s), exactness and production client starts on both versions.
+- Workarounds for 1.4.13 and older in `config/sleepium.properties`: `lab.opt.WorldgenColumnMemoMixin=false` (#17);
+  `lab.opt.WorldgenReactor=false` and `lab.opt.ParallelWorldgenMixin=false` (#16).
+
 ## 1.4.13 - 2026-11-26
 
 - **Fixed: a dedicated server could freeze for good while new chunks were loading** ([#15](https://github.com/ha7gawa/sleepium/issues/15)).
