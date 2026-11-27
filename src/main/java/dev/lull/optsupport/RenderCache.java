@@ -517,6 +517,41 @@ public final class RenderCache {
         if (recordDepth > 0) RECORDER.unsupported = true;
     }
 
+    private static final net.minecraft.core.BlockPos.MutableBlockPos BE_NEIGHBOR = new net.minecraft.core.BlockPos.MutableBlockPos();
+
+    /**
+     * RenderCacheBlockEntityMixin: key for a block entity — its block state plus animation state held in nested
+     * sub-objects or paired blocks that StateHash's shallow reference fingerprint cannot see (chests' ChestLidController
+     * and double-chest neighbour, spawners' BaseSpawner spin).
+     */
+    public static long beKey(net.minecraft.world.level.block.entity.BlockEntity be, boolean onRenderThread) {
+        net.minecraft.world.level.block.state.BlockState state = be.getBlockState();
+        long k = System.identityHashCode(state);
+        if (be instanceof net.minecraft.world.level.block.entity.LidBlockEntity lid) {
+            k = mixKey(k, Float.floatToRawIntBits(lid.getOpenNess(0f)), Float.floatToRawIntBits(lid.getOpenNess(1f)));
+            if (state.hasProperty(net.minecraft.world.level.block.ChestBlock.TYPE)
+                    && state.getValue(net.minecraft.world.level.block.ChestBlock.TYPE) != net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+                net.minecraft.world.level.Level level = be.getLevel();
+                if (level != null) {
+                    net.minecraft.core.Direction dir = net.minecraft.world.level.block.ChestBlock.getConnectedDirection(state);
+                    net.minecraft.world.level.block.entity.BlockEntity other = level.getBlockEntity(
+                            onRenderThread ? BE_NEIGHBOR.setWithOffset(be.getBlockPos(), dir) : be.getBlockPos().relative(dir));
+                    if (other instanceof net.minecraft.world.level.block.entity.LidBlockEntity o)
+                        k = mixKey(k, Float.floatToRawIntBits(o.getOpenNess(0f)), Float.floatToRawIntBits(o.getOpenNess(1f)));
+                }
+            }
+        } else if (be instanceof net.minecraft.world.level.block.entity.SpawnerBlockEntity sp) {
+            net.minecraft.world.level.BaseSpawner s = sp.getSpawner();
+            k = mixKey(k, Double.doubleToRawLongBits(s.getoSpin()), Double.doubleToRawLongBits(s.getSpin()));
+        }
+        return k;
+    }
+
+    private static long mixKey(long h, long a, long b) {
+        h = (h ^ a) * 0x100000001B3L + (a >>> 29);
+        return (h ^ b) * 0x100000001B3L + (b >>> 29);
+    }
+
     /** a recording or a probe of the cache is drawing now (its output not the frame's: a debug reading the bones skips it -
      *  10-20, the bone recorder: a probe's draw of the player, the shared bones still a foe's, had read as 143-degree snaps) */
     public static boolean recording() {
@@ -566,6 +601,13 @@ public final class RenderCache {
         }
         // where a renderer drawing past its recorder ends up: the source itself, or the frame's one behind a wrapper
         boolean worker = !com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread();
+        if (!worker && recordDepth > 0) {
+            // nested render inside an outer recording/probe (e.g. SpawnerRenderer -> EntityRenderDispatcher.render):
+            // never re-enter record0 (shared static RECORDER/PROBE) and never replay a stale inner cache during a probe
+            vanilla++;
+            d.draw(pose, buffers, pt);
+            return;
+        }
         if (!worker) real = buffers instanceof MultiBufferSource.BufferSource bs ? bs : Minecraft.getInstance().renderBuffers().bufferSource();
         long tick = level.getGameTime();
         long[] cs = BY_CLASS.computeIfAbsent(rendererClass, RenderCache::classCounters);
