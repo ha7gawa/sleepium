@@ -34,12 +34,12 @@ public abstract class RenderCacheBlockEntityMixin {
     private static void draw(BlockEntityRenderer r, BlockEntity be, float pt, PoseStack pose, MultiBufferSource buffers, int light, int overlay, Operation<Void> original) {
         if (!com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()) {
             RenderCache.render(be, r.getClass(), (p, b, t) -> original.call(r, be, t, p, b, light, overlay), pt, pose, buffers, light, overlay, 0f,
-                    System.identityHashCode(be.getBlockState()), null);
+                    RenderCache.beKey(be, false), null);
             return;
         }
         var d = dev.lull.optsupport.RenderCacheDraws.enterBe(r, be, light, overlay, original);   // no lambda per call
         try {
-            RenderCache.render(be, r.getClass(), d, pt, pose, buffers, light, overlay, 0f, System.identityHashCode(be.getBlockState()), null);
+            RenderCache.render(be, r.getClass(), d, pt, pose, buffers, light, overlay, 0f, RenderCache.beKey(be, true), null);
         } finally {
             dev.lull.optsupport.RenderCacheDraws.exitBe(d);
         }
