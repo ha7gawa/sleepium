@@ -24,6 +24,7 @@ public abstract class ReactorTickMixin {
 
     @Inject(method = "tickServer", at = @At("HEAD"))
     private void sleep$start(BooleanSupplier hasTimeLeft, CallbackInfo ci) {
+        FullRing.shuttingDown = false;
         sleep$tickStart = System.nanoTime();
     }
 
@@ -35,5 +36,18 @@ public abstract class ReactorTickMixin {
     @Inject(method = "waitUntilNextTick", at = @At("HEAD"))
     private void sleep$deadline(CallbackInfo ci) {
         FullRing.deadlineNanos = this.nextTickTimeNanos;
+    }
+
+    @Inject(method = "stopServer", at = @At("HEAD"))
+    private void sleep$stopOn(CallbackInfo ci) {
+        FullRing.shuttingDown = true;
+        FullRing.idle = false;
+        FullRing.blocking = 0;
+        dev.lull.optsupport.MainReactor.idle = false;
+    }
+
+    @Inject(method = "stopServer", at = @At("RETURN"))
+    private void sleep$stopOff(CallbackInfo ci) {
+        FullRing.shuttingDown = false;
     }
 }

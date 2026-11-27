@@ -37,6 +37,11 @@ public final class MixinYield {
         return true;
     }
 
+    /** Quietly checks whether {@code mixinClassName} on {@code targetClassName} would give way to another mod. */
+    public static boolean wouldYield(String targetClassName, String mixinClassName) {
+        return conflict(targetClassName, mixinClassName) != null;
+    }
+
     /** the same question without a trace (needsYielded's providers: the plugin may never ask about them - a flag is off) */
     private static String conflict(String targetClassName, String mixinClassName) {
         if (Boolean.getBoolean("lab.yield.off")) return null;   // (tests: the conflict itself, nothing of ours gives way)
