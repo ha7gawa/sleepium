@@ -1,5 +1,7 @@
 package dev.lull.opt;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.lull.optsupport.FullRing;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -13,14 +15,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(targets = "net.minecraft.server.level.ServerChunkCache$MainThreadExecutor")
 public abstract class ReactorExecutorMixin {
     /** the main thread waits for a chunk future: FullRing runs without limits meanwhile (issue #15) */
-    @Inject(method = "managedBlock", at = @At("HEAD"))
-    private void sleep$blockOn(java.util.function.BooleanSupplier done, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+    @WrapMethod(method = "managedBlock")
+    private void sleep$block(java.util.function.BooleanSupplier done, Operation<Void> original) {
         FullRing.blocking++;
-    }
-
-    @Inject(method = "managedBlock", at = @At("RETURN"))
-    private void sleep$blockOff(java.util.function.BooleanSupplier done, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
-        FullRing.blocking--;
+        try {
+            original.call(done);
+        } finally {
+            FullRing.blocking--;
+        }
     }
 
     @Inject(method = "pollTask", at = @At("HEAD"), cancellable = true)

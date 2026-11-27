@@ -33,6 +33,21 @@ public final class ColumnMemo {
 
     /** per router (one per level): its six climate functions with the column marks */
     private static final Map<NoiseRouter, DensityFunction[]> ROUTERS = new IdentityHashMap<>();
+    /** per router: a copy with the marked climate functions, or the router itself when none were marked */
+    private static final Map<NoiseRouter, NoiseRouter> ROUTER_WRAPPED = new IdentityHashMap<>();
+
+    public static synchronized NoiseRouter router(NoiseRouter r) {
+        NoiseRouter cached = ROUTER_WRAPPED.get(r);
+        if (cached != null) return cached;
+        DensityFunction[] f = climate(r);
+        boolean same = f[0] == r.temperature() && f[1] == r.vegetation() && f[2] == r.continents()
+                && f[3] == r.erosion() && f[4] == r.depth() && f[5] == r.ridges();
+        NoiseRouter out = same ? r : new NoiseRouter(r.barrierNoise(), r.fluidLevelFloodednessNoise(), r.fluidLevelSpreadNoise(), r.lavaNoise(),
+                f[0], f[1], f[2], f[3], f[4], f[5],
+                r.initialDensityWithoutJaggedness(), r.finalDensity(), r.veinToggle(), r.veinRidged(), r.veinGap());
+        ROUTER_WRAPPED.put(r, out);
+        return out;
+    }
 
     public static synchronized DensityFunction[] climate(NoiseRouter r) {
         DensityFunction[] out = ROUTERS.get(r);

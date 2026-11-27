@@ -40,6 +40,38 @@ public final class ModLikeState {
 
     private static int ticks;
 
+    private static final java.util.ArrayList<long[]> ACTIVE_FEATURES = new java.util.ArrayList<>();
+    private static long featureCalls, featureOverlaps;
+
+    public static void enterFeatures(int cx, int cz) {
+        synchronized (ACTIVE_FEATURES) {
+            featureCalls++;
+            for (long[] a : ACTIVE_FEATURES) {
+                if (Math.abs(a[0] - cx) <= 2 && Math.abs(a[1] - cz) <= 2) {
+                    if (++featureOverlaps <= 5) {
+                        System.out.println("[sleep/test] OVERLAPPING FEATURES WITHOUT LOCK: (" + cx + "," + cz + ") vs (" + a[0] + "," + a[1] + ") total=" + featureOverlaps);
+                    }
+                }
+            }
+            ACTIVE_FEATURES.add(new long[] {cx, cz});
+            if (featureCalls == 1 || featureCalls % 100 == 0) {
+                System.out.println("[sleep/test] overwriteChunkGen: features=" + featureCalls + " overlaps=" + featureOverlaps);
+            }
+        }
+    }
+
+    public static void leaveFeatures(int cx, int cz) {
+        synchronized (ACTIVE_FEATURES) {
+            for (int i = ACTIVE_FEATURES.size() - 1; i >= 0; i--) {
+                long[] a = ACTIVE_FEATURES.get(i);
+                if (a[0] == cx && a[1] == cz) {
+                    ACTIVE_FEATURES.remove(i);
+                    return;
+                }
+            }
+        }
+    }
+
     public static void register() {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post e) -> {
             server = Thread.currentThread();

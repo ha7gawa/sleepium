@@ -21,9 +21,23 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
         if (!sleep$decide(targetClassName, mixinClassName)) return false;
         boolean gaveWay = dev.lull.optsupport.MixinYield.yields(targetClassName, mixinClassName)
-                || dev.lull.optsupport.MixinYield.needsYielded(mixinClassName) || sleep$givesWayToC2me(mixinClassName);
+                || dev.lull.optsupport.MixinYield.needsYielded(mixinClassName) || sleep$givesWayToC2me(mixinClassName)
+                || sleep$needsParallelGen(mixinClassName);
         if (gaveWay) dev.lull.optsupport.HookFlags.gaveWay(mixinClassName);   // (the parallel runs' guards say why only for these)
         return !gaveWay;
+    }
+
+    /**
+     * GenGraph and WorldgenReactor remove vanilla's worldgen mailbox actor; neighbouring chunks' FEATURES then stay apart
+     * only through ParallelGen's 3x3 claims (ParallelWorldgenMixin). If another mod overwrites ChunkMap#applyStep and
+     * ParallelWorldgenMixin yields to it, GenGraph* and WorldgenReactorMixin must yield too so FEATURES stay serialized (issue #16).
+     */
+    private static boolean sleep$needsParallelGen(String mixinClassName) {
+        String simple = mixinClassName.substring(mixinClassName.lastIndexOf('.') + 1);
+        if (!simple.equals("WorldgenReactorMixin") && !simple.startsWith("GenGraph")) return false;
+        if (!dev.lull.optsupport.MixinYield.wouldYield("net.minecraft.server.level.ChunkMap", "dev.lull.opt.ParallelWorldgenMixin")) return false;
+        System.out.println("[sleep/opt] " + simple + " not applied: it needs ParallelWorldgenMixin's FEATURES claims, which gave way to another mod");
+        return true;
     }
 
     /**
@@ -207,7 +221,8 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (simple.startsWith("WorldgenShare"))
             on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenShare");
         // 11-21 noise allocation (lab-nalloc): the NoiseChunk halves of their flags
-        if (simple.equals("WorldgenMapMemoChunkMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenMapMemoMixin");
+        if (simple.equals("WorldgenMapMemoChunkMixin"))
+            on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.WorldgenMapMemoMixin") || Boolean.getBoolean("lab.opt.WorldgenShare");
         if (simple.equals("NoiseSlicePoolChunkMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseSlicePoolMixin");
         // 11-21 lab-fill: the interpolator half of the lazy interpolation flag
         if (simple.equals("NoiseLazyInterpolatorMixin")) on = Boolean.getBoolean("lab.opt.all") || Boolean.getBoolean("lab.opt.NoiseLazyInterpMixin");
