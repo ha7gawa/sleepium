@@ -103,6 +103,10 @@ public final class EntityFp {
         if (r instanceof net.minecraft.world.level.levelgen.LegacyRandomSource) return ((java.util.concurrent.atomic.AtomicLong) LEGACY_SEED.get(r)).get() * 31 + 7;
         if (r instanceof net.minecraft.world.level.levelgen.SingleThreadedRandomSource) return (long) SINGLE_SEED.get(r) * 31 + 11;
         if (r instanceof Boolean || r instanceof Number || r instanceof String || r instanceof Enum<?>) return r.hashCode() * 31L + 3;
+        if (r instanceof net.minecraft.world.level.block.entity.ChestLidController lid)
+            return mix(Float.floatToRawIntBits(lid.getOpenness(0f)), Float.floatToRawIntBits(lid.getOpenness(1f)));
+        if (r instanceof net.minecraft.world.level.BaseSpawner sp)
+            return mix(bits(sp.getoSpin()), bits(sp.getSpin()));
         return dev.lull.FieldDiff.fingerprint(r);
     }
 
