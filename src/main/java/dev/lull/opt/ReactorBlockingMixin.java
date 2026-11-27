@@ -1,11 +1,11 @@
 package dev.lull.opt;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.lull.optsupport.FullRing;
 import net.minecraft.util.thread.BlockableEventLoop;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.Unique;
 
 /**
  * WorldgenReactor (1.20.1: ServerChunkCache's main-thread executor does not override managedBlock - the hook is in
@@ -14,16 +14,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(BlockableEventLoop.class)
 public abstract class ReactorBlockingMixin {
-    @Inject(method = "managedBlock", at = @At("HEAD"))
-    private void sleep$blockOn(java.util.function.BooleanSupplier done, CallbackInfo ci) {
-        if (sleep$chunkExecutor()) FullRing.blocking++;
+    @WrapMethod(method = "managedBlock")
+    private void sleep$block(java.util.function.BooleanSupplier done, Operation<Void> original) {
+        if (!sleep$chunkExecutor()) {
+            original.call(done);
+            return;
+        }
+        FullRing.blocking++;
+        try {
+            original.call(done);
+        } finally {
+            FullRing.blocking--;
+        }
     }
 
-    @Inject(method = "managedBlock", at = @At("RETURN"))
-    private void sleep$blockOff(java.util.function.BooleanSupplier done, CallbackInfo ci) {
-        if (sleep$chunkExecutor()) FullRing.blocking--;
-    }
-
+    @Unique
     private boolean sleep$chunkExecutor() {
         return this.getClass().getName().endsWith("ServerChunkCache$MainThreadExecutor") || this.getClass().getSimpleName().equals("MainThreadExecutor")
                 || dev.lull.Names.official(this.getClass().getName()).endsWith("ServerChunkCache$MainThreadExecutor");

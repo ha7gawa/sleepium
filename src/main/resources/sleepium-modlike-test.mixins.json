@@ -8,7 +8,10 @@
   "mixins": [
     "ModLikeSheepMixin",
     "ModLikeCropMixin",
-  "FarChunkPostProcessMixin"
+    "FarChunkPostProcessMixin",
+    "SamplerSeedMixin",
+    "SamplerReturnMixin",
+    "SamplerCheckMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -40,7 +40,7 @@ public final class MixinTouch {
      * other mods' mixins) counts as foreign when its mixins are applied, -Dsleep.foreignTest=true.
      */
     private static boolean ours(String config) {
-        if (config.startsWith("sleepium-foreign-test")) return !Boolean.getBoolean("sleep.foreignTest");
+        if (config.startsWith("sleepium-foreign-test")) return !Boolean.getBoolean("sleep.foreignTest") && !Boolean.getBoolean("sleep.test.overwriteChunkGen");
         if (config.startsWith("sleepium-modlike-test")) return !Boolean.getBoolean("sleep.test.modlike");   // (testmods.modlike: mods' mixins with unsafe state)
         return config.startsWith("sleepium") || config.startsWith("probe");
     }
@@ -274,7 +274,7 @@ public final class MixinTouch {
             for (var info : mods.getModFiles()) {
                 var file = info.getFile();
                 String modId = info.getMods().isEmpty() ? info.moduleName() : info.getMods().get(0).getModId();
-                for (String name : mixinConfigs(file)) {
+                for (String name : "sleepium".equals(modId) ? ourConfigs(file) : mixinConfigs(file)) {
                     CONFIG_MOD.put(name, modId);
                     indexingConfig = name;
                     if (Boolean.getBoolean("sleep.mixinIndex.debug")) System.out.println("[sleep/opt] mixin index: " + info.moduleName() + " " + name + " -> " + file.findResource(name));

@@ -51,6 +51,8 @@ public final class FullRing {
 
     /** main thread only */
     public static boolean idle;
+    /** main thread: true during stopServer(), so FULL steps are never held back while shutting down (issue #16) */
+    public static boolean shuttingDown;
     /**
      * main thread: how deep it is inside managedBlock (waiting for a chunk future). There the ring has no limit: the chunk
      * waited for may need a FULL step that is in the ring. The idle flag alone did not show it when the wait happened
@@ -140,13 +142,13 @@ public final class FullRing {
 
     /** main thread, idle: would runOne() run something now? (so the reactor does not sleep past work it may do) */
     public static boolean pending() {
-        return SIZE.get() > 0 && mayRun(false);
+        return SIZE.get() > 0 && (shuttingDown || mayRun(false));
     }
 
     /** main thread: run one FULL task if allowed; true if one ran */
     public static boolean runOne() {
         if (SIZE.get() == 0) return false;
-        boolean limited = idle && blocking == 0;
+        boolean limited = !shuttingDown && idle && blocking == 0;
         if (limited && !mayRun(true)) return false;
         for (int i = 0; i < LEVELS; i++) {
             Runnable r = QUEUES[i].poll();
