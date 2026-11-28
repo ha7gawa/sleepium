@@ -40,7 +40,8 @@ public final class MixinTouch {
      * other mods' mixins) counts as foreign when its mixins are applied, -Dsleep.foreignTest=true.
      */
     private static boolean ours(String config) {
-        if (config.startsWith("sleepium-foreign-test")) return !Boolean.getBoolean("sleep.foreignTest") && !Boolean.getBoolean("sleep.test.overwriteChunkGen");
+        if (config.startsWith("sleepium-foreign-test")) return !Boolean.getBoolean("sleep.foreignTest")
+                && !Boolean.getBoolean("sleep.test.overwriteChunkGen") && !Boolean.getBoolean("sleep.test.touchIoWorker");
         if (config.startsWith("sleepium-modlike-test")) return !Boolean.getBoolean("sleep.test.modlike");   // (testmods.modlike: mods' mixins with unsafe state)
         return config.startsWith("sleepium") || config.startsWith("probe");
     }

@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 public final class ForeignPlugin implements IMixinConfigPlugin {
     @Override public boolean shouldApplyMixin(String target, String mixin) {
         if (mixin.endsWith("ForeignChunkGenOverwriteMixin")) return Boolean.getBoolean("sleep.test.overwriteChunkGen");   // (issue #16)
+        if (mixin.endsWith("ForeignIoWorkerTouchMixin")) return Boolean.getBoolean("sleep.test.touchIoWorker");   // (issue #18)
         return Boolean.getBoolean("sleep.foreignTest");
     }
     @Override public void onLoad(String mixinPackage) {}
