@@ -45,7 +45,7 @@ public abstract class StoredRingMixin {
         if (!sleep$checked) {
             synchronized (this) {
                 if (!sleep$checked) {
-                    if ("chunk".equals(sleep$name)) {
+                    if ("chunk".equals(sleep$name) && (Object) this instanceof dev.lull.optsupport.ChunkIoWriter.Worker) {
                         IOWorker self = (IOWorker) (Object) this;
                         sleep$ring = new StoredRing(sleep$folder, (pos, tag) -> {
                             sleep$bypass.set(Boolean.TRUE);

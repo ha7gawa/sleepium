@@ -47,13 +47,44 @@ public final class ChunkIo {
     /**
      * A store whose region record is already made (StoredRing's release: the held bytes go to the IOWorker as they are,
      * no decode and encode again). Stored through IOWorker.store like a tag, the pending entry holds it until the writer
-     * takes its bytes; loads and scans of the entry read the bytes. Never written or read as a tag.
+     * takes its bytes; loads and scans of the entry read the bytes.
+     *
+     * <p>Fail-safe (issue #18): if anything outside ChunkIoWorkerMixin serializes, copies, or visits this carrier as a
+     * plain CompoundTag, decode {@link #record} instead of emitting an empty root compound.
      */
     public static final class Encoded extends CompoundTag {
         public final byte[] record;
 
         public Encoded(byte[] record) {
             this.record = record;
+        }
+
+        private CompoundTag decodeOrThrow() {
+            try {
+                return decode(record);
+            } catch (IOException e) {
+                throw new java.io.UncheckedIOException("ChunkIo.Encoded failed to decode region record", e);
+            }
+        }
+
+        @Override
+        public void write(java.io.DataOutput output) throws IOException {
+            decode(record).write(output);
+        }
+
+        @Override
+        public CompoundTag copy() {
+            return decodeOrThrow();
+        }
+
+        @Override
+        public StreamTagVisitor.ValueResult accept(StreamTagVisitor visitor) {
+            return decodeOrThrow().accept(visitor);
+        }
+
+        @Override
+        public void accept(net.minecraft.nbt.TagVisitor visitor) {
+            decodeOrThrow().accept(visitor);
         }
     }
 

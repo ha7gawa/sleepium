@@ -22,21 +22,34 @@ public final class OptMixinPlugin implements IMixinConfigPlugin {
         if (!sleep$decide(targetClassName, mixinClassName)) return false;
         boolean gaveWay = dev.lull.optsupport.MixinYield.yields(targetClassName, mixinClassName)
                 || dev.lull.optsupport.MixinYield.needsYielded(mixinClassName) || sleep$givesWayToC2me(mixinClassName)
-                || sleep$needsParallelGen(mixinClassName);
+                || sleep$needsCompanion(mixinClassName);
         if (gaveWay) dev.lull.optsupport.HookFlags.gaveWay(mixinClassName);   // (the parallel runs' guards say why only for these)
         return !gaveWay;
     }
 
     /**
-     * WorldgenReactorMixin removes vanilla's worldgen mailbox actor; neighbouring chunks' FEATURES then stay apart only
-     * through ParallelGen's 3x3 claims (ParallelWorldgenMixin). If another mod overwrites ChunkStatus#generate (ByePregen,
-     * issue #16) and ParallelWorldgenMixin yields to it, WorldgenReactorMixin must yield too so FEATURES stay serialized.
+     * Companion mixins whose consumer/producer dependency is not carried by an added interface:
+     * - WorldgenReactorMixin removes vanilla's worldgen mailbox actor and needs ParallelWorldgenMixin's 3x3 FEATURES claims (issue #16);
+     * - ChunkIoRegionMixin modifies RegionFile open/header syncing for ChunkIoWorkerMixin and must yield if it gave way (issue #18);
+     * - BlockMeshMemoMixin relies on BlockMeshDirtyMixin's setSectionDirty/clearAll/frame hooks for invalidation and eviction.
      */
-    private static boolean sleep$needsParallelGen(String mixinClassName) {
-        if (!mixinClassName.endsWith(".WorldgenReactorMixin")) return false;
-        if (!dev.lull.optsupport.MixinYield.wouldYield("net.minecraft.world.level.chunk.ChunkStatus", "dev.lull.opt.ParallelWorldgenMixin")) return false;
-        System.out.println("[sleep/opt] WorldgenReactorMixin not applied: it needs ParallelWorldgenMixin's FEATURES claims, which gave way to another mod");
-        return true;
+    private static boolean sleep$needsCompanion(String mixinClassName) {
+        if (mixinClassName.endsWith(".WorldgenReactorMixin")) {
+            if (!dev.lull.optsupport.MixinYield.wouldYield("net.minecraft.world.level.chunk.ChunkStatus", "dev.lull.opt.ParallelWorldgenMixin")) return false;
+            System.out.println("[sleep/opt] WorldgenReactorMixin not applied: it needs ParallelWorldgenMixin's FEATURES claims, which gave way to another mod");
+            return true;
+        }
+        if (mixinClassName.endsWith(".ChunkIoRegionMixin")) {
+            if (!dev.lull.optsupport.MixinYield.isUnavailable("net.minecraft.world.level.chunk.storage.IOWorker", "dev.lull.opt.ChunkIoWorkerMixin")) return false;
+            System.out.println("[sleep/opt] ChunkIoRegionMixin not applied: it needs ChunkIoWorkerMixin, which gave way to another mod");
+            return true;
+        }
+        if (mixinClassName.endsWith(".BlockMeshMemoMixin")) {
+            if (!dev.lull.optsupport.MixinYield.wouldYield("net.minecraft.client.renderer.LevelRenderer", "dev.lull.opt.BlockMeshDirtyMixin")) return false;
+            System.out.println("[sleep/opt] BlockMeshMemoMixin not applied: it needs BlockMeshDirtyMixin's section-dirty marks, which gave way to another mod");
+            return true;
+        }
+        return false;
     }
 
     /**
