@@ -7,7 +7,8 @@
   "refmap": "sleepium.refmap.json",
   "mixins": [
     "ForeignFurnaceMixin",
-    "ForeignChunkGenOverwriteMixin"
+    "ForeignChunkGenOverwriteMixin",
+    "ForeignIoWorkerTouchMixin"
   ],
   "injectors": {
     "defaultRequire": 1
