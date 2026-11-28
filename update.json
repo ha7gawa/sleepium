@@ -1,6 +1,7 @@
 {
   "homepage": "https://modrinth.com/mod/sleepium",
   "1.21.1": {
+    "1.4.16": "Fixed StoredRing writing empty chunk NBT when ChunkIoWorkerMixin yields to mods like FastChunkGen (#18), plus companion yields for ChunkIoRegionMixin and BlockMeshMemoMixin.",
     "1.4.15": "Fixed chest / double-chest opening/closing and spawner / trial-spawner / vault animation jitter in RenderCache.",
     "1.4.14": "Fixed an End crash with Fabric Biome API / Connector (#17) and world-generation races alongside mods overwriting chunk generation like ByePregen (#16).",
     "1.4.13": "Fixed a server freeze while new chunks load when a mod reads a farther chunk then (Sable; issue #15).",
@@ -49,12 +50,13 @@
     "1.0.0": "The first public release."
   },
   "promos": {
-    "1.21.1-latest": "1.4.15",
-    "1.21.1-recommended": "1.4.15",
-    "1.20.1-latest": "1.4.15",
-    "1.20.1-recommended": "1.4.15"
+    "1.21.1-latest": "1.4.16",
+    "1.21.1-recommended": "1.4.16",
+    "1.20.1-latest": "1.4.16",
+    "1.20.1-recommended": "1.4.16"
   },
   "1.20.1": {
+    "1.4.16": "Fixed StoredRing writing empty chunk NBT when ChunkIoWorkerMixin yields to mods like FastChunkGen (#18), plus companion yields for ChunkIoRegionMixin and BlockMeshMemoMixin.",
     "1.4.15": "Fixed chest / double-chest opening/closing and spawner / trial-spawner / vault animation jitter in RenderCache.",
     "1.4.14": "Fixed an End crash with Fabric Biome API / Connector (#17) and world-generation races alongside mods overwriting chunk generation like ByePregen (#16).",
     "1.4.13": "Fixed a server freeze while new chunks load when a mod reads a farther chunk then (Sable; issue #15).",

@@ -4,6 +4,26 @@ Versions follow [Semantic Versioning](https://semver.org): a patch release fixes
 release changes the API (`dev.lull.api`) or the settings in a way that needs attention. Jars are named
 `sleepium-<version>+mc<minecraft version>-<loader>.jar` (before 1.1.0 without the loader).
 
+## 1.4.16 - 2026-11-28
+
+- **Fixed: `StoredRing` wrote empty chunk NBT (`0a 00 00 00`) on disk when `ChunkIoWorkerMixin` yielded to another IO mod (FastChunkGen)** ([#18](https://github.com/ha7gawa/sleepium/issues/18)).
+  When another mod changed `IOWorker#loadAsync` (such as FastChunkGen's `MixinStorageIoWorker`), `ChunkIoWorkerMixin` gave
+  way to it, while `StoredRingMixin` still applied and passed `ChunkIo.Encoded` carriers to vanilla/modded `IOWorker.store()`,
+  which serialized them as empty root compounds (`missing level data` / `No key Level`). `StoredRingMixin` now checks for
+  `ChunkIoWriter.Worker`, so `MixinYield.needsYielded()` automatically yields it whenever `ChunkIoWorkerMixin` yields
+  (directly or transitively), backed by a runtime guard. As a fail-safe, `ChunkIo.Encoded` also overrides `write()`,
+  `copy()`, and `accept()` to decode its region record if anything outside `ChunkIoWorkerMixin` ever serializes, copies,
+  or scans it as a plain `CompoundTag` (zero overhead on the normal `ChunkIoWorkerMixin` path). Both versions.
+- **Fixed: companion mixins staying active when their paired mixin yielded** (from [#18](https://github.com/ha7gawa/sleepium/issues/18) logs).
+  `ChunkIoRegionMixin` now yields whenever `ChunkIoWorkerMixin` is unavailable, and `BlockMeshMemoMixin` now yields
+  whenever `BlockMeshDirtyMixin` yields (e.g. alongside Embeddium/Sodium overwriting `LevelRenderer#setSectionDirty`),
+  preventing stale block-mesh entries and uncollected off-heap cache buffers. Both versions.
+- Verified with a foreign `IOWorker#loadAsync` test probe on both 1.20.1 Forge (SRG) and 1.21.1 NeoForge: before the fix,
+  all 1,818 `StoredRing`-released records landed on disk as empty `0a 00 00 00` compounds; after the fix, `StoredRingMixin`
+  and `ChunkIoRegionMixin` yield cleanly with 0 empty records on disk (2,832 / 2,147 valid chunks), while normal `ChunkIo` +
+  `StoredRing` passes full verification (`0 differ, 0 missing`).
+- Workaround for 1.4.15 and older in `config/sleepium.properties`: `lab.opt.StoredRingMixin=false`.
+
 ## 1.4.15 - 2026-11-27
 
 - **Fixed: chest opening/closing animations and mob animations inside spawners could freeze or jitter with the render cache.**
