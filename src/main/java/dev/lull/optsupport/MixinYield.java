@@ -42,6 +42,11 @@ public final class MixinYield {
         return conflict(targetClassName, mixinClassName) != null;
     }
 
+    /** True when {@code mixinClassName} would give way directly or because an interface provider it needs gave way. */
+    public static boolean isUnavailable(String targetClassName, String mixinClassName) {
+        return wouldYield(targetClassName, mixinClassName) || unavailableProviders().contains(mixinClassName);
+    }
+
     /** the same question without a trace (needsYielded's providers: the plugin may never ask about them - a flag is off) */
     private static String conflict(String targetClassName, String mixinClassName) {
         if (Boolean.getBoolean("lab.yield.off")) return null;   // (tests: the conflict itself, nothing of ours gives way)

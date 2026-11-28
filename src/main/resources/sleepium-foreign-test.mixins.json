@@ -8,7 +8,8 @@
     "ForeignFurnaceMixin",
     "ForeignPostWrapMixin",
     "ForeignTrackedMixin",
-    "ForeignChunkGenOverwriteMixin"
+    "ForeignChunkGenOverwriteMixin",
+    "ForeignIoWorkerTouchMixin"
   ],
   "injectors": {
     "defaultRequire": 1

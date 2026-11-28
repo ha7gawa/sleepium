@@ -36,7 +36,7 @@ public abstract class StoredRingMixin {
         if (!sleep$checked) {
             synchronized (this) {
                 if (!sleep$checked) {
-                    if ("chunk".equals(storage.info().type())) {
+                    if ("chunk".equals(storage.info().type()) && (Object) this instanceof dev.lull.optsupport.ChunkIoWriter.Worker) {
                         IOWorker self = (IOWorker) (Object) this;
                         sleep$ring = new StoredRing(storage.info().dimension().location() + "/chunk", (pos, tag) -> {
                             sleep$bypass.set(Boolean.TRUE);
